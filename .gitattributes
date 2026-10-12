@@ -1,0 +1,32 @@
+# Нормализация окончаний строк: в репозитории всегда LF.
+* text=auto
+
+# Shell-скрипты обязаны иметь LF даже при checkout на Windows —
+# с CRLF bash не сможет выполнить shebang.
+*.sh text eol=lf
+
+*.dart text
+*.md text
+*.yaml text
+*.yml text
+*.json text
+*.editorconfig text
+.gitignore text
+.gitattributes text
+LICENSE text
+
+# Windows-специфика: этим файлам нужен CRLF в рабочем дереве.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Бинарные файлы — без нормализации и без текстовых diff.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.exe binary
+*.dll binary
+*.zip binary
+*.gz binary
