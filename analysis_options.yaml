@@ -13,5 +13,6 @@ analyzer:
     - "**/*.g.dart"
     - "build/**"
     - windows/**
+    - android/**
   errors:
     invalid_annotation_target: ignore

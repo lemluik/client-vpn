@@ -5,7 +5,14 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
 
-class XrayProcessManager {
+import 'proxy_config.dart';
+import 'system_proxy.dart';
+import 'vpn_config.dart';
+import 'vpn_core.dart';
+
+/// Ядро на десктопе: процесс xray с локальным http/socks inbound
+/// плюс системный прокси, который на этот inbound переключается.
+class DesktopCore implements VpnCore {
   /// Эталонная версия Xray-core, под которую собран клиент.
   static const version = '26.3.27';
 
@@ -19,14 +26,26 @@ class XrayProcessManager {
       StreamController<String>.broadcast();
   final StreamController<bool> _statusController =
       StreamController<bool>.broadcast();
-  String? _configPath;
 
+  ProxyEndpoint? _proxy;
+
+  @override
   Stream<String> get logs => _logController.stream;
-  Stream<bool> get statusChanges => _statusController.stream;
-  bool get isRunning => _process != null;
-  String? get currentConfigPath => _configPath;
 
-  Future<String> findXrayExecutable() async {
+  @override
+  Stream<bool> get statusChanges => _statusController.stream;
+
+  @override
+  bool get isRunning => _process != null;
+
+  @override
+  String? get endpointLabel {
+    final proxy = _proxy;
+    if (proxy == null) return null;
+    return '${proxy.protocol} 127.0.0.1:${proxy.port}';
+  }
+
+  Future<String> _findXrayExecutable() async {
     final exeDir = p.dirname(Platform.resolvedExecutable);
 
     for (final candidate in [
@@ -56,31 +75,68 @@ class XrayProcessManager {
     }
   }
 
-  Future<String> testConfig(String configPath) async {
-    final xrayPath = await findXrayExecutable();
+  @override
+  Future<void> validate(VpnConfig config) async {
+    final path = config.path;
+    if (path == null) {
+      throw Exception('На этой платформе конфиг нужно выбрать файлом.');
+    }
+
+    final xrayPath = await _findXrayExecutable();
     final result = await Process.run(
       xrayPath,
-      ['run', '-test', '-config', configPath],
+      ['run', '-test', '-config', path],
       workingDirectory: p.dirname(xrayPath),
     );
 
-    final output =
-        '${result.stdout.toString().trim()}\n${result.stderr.toString().trim()}';
     if (result.exitCode != 0) {
+      final out = '${result.stdout}'.trim();
+      final err = '${result.stderr}'.trim();
       throw Exception(
-        'Валидация не пройдена (код ${result.exitCode}):\n$output',
+        'Валидация не пройдена (код ${result.exitCode}):\n$out\n$err',
       );
     }
-    return output;
+
+    final proxy = parseProxyInbound(config.json);
+    if (proxy == null) {
+      throw Exception(
+        'В конфиге нет inbound с протоколом http или socks — '
+        'включить системный прокси нельзя.',
+      );
+    }
+    _proxy = proxy;
   }
 
-  Future<void> start(String configPath) async {
+  @override
+  Future<void> start(VpnConfig config) async {
+    final proxy = _proxy;
     if (_process != null) {
       throw Exception('Xray уже запущен');
     }
+    if (proxy == null) {
+      throw Exception('Конфиг не проверен');
+    }
+    final path = config.path!;
 
-    final xrayPath = await findXrayExecutable();
-    _configPath = configPath;
+    await SystemProxy.enable(
+      '127.0.0.1',
+      proxy.port,
+      socks: proxy.protocol == 'socks',
+    );
+    _logController.add(
+      'Системный прокси: ${proxy.protocol} 127.0.0.1:${proxy.port}',
+    );
+
+    try {
+      await _spawn(path);
+    } catch (e) {
+      await SystemProxy.disable();
+      rethrow;
+    }
+  }
+
+  Future<void> _spawn(String configPath) async {
+    final xrayPath = await _findXrayExecutable();
 
     _logController.add('Запуск: ${p.basename(xrayPath)}');
     _logController.add('Конфиг: ${p.basename(configPath)}');
@@ -106,10 +162,11 @@ class XrayProcessManager {
     });
 
     unawaited(
-      _process!.exitCode.then((code) {
+      _process!.exitCode.then((code) async {
         _logController.add('Xray остановлен (код: $code)');
         _process = null;
-        _configPath = null;
+        await SystemProxy.disable();
+        _logController.add('Системный прокси отключён (Xray остановлен)');
         _statusController.add(false);
       }),
     );
@@ -118,8 +175,13 @@ class XrayProcessManager {
     _logController.add('Xray запущен (PID: ${_process!.pid})');
   }
 
+  @override
   Future<void> stop() async {
-    if (_process == null) return;
+    if (_process == null) {
+      await SystemProxy.disable();
+      _statusController.add(false);
+      return;
+    }
 
     _logController.add('Остановка Xray...');
     _process!.kill(ProcessSignal.sigterm);
@@ -132,11 +194,15 @@ class XrayProcessManager {
     }
 
     _process = null;
-    _configPath = null;
+    await SystemProxy.disable();
     _statusController.add(false);
-    _logController.add('Xray остановлен');
+    _logController.add('Xray остановлен, системный прокси отключён');
   }
 
+  @override
+  Future<void> recoverAfterCrash() => SystemProxy.cleanupAfterCrash();
+
+  @override
   Future<void> dispose() async {
     await stop();
     await _logController.close();

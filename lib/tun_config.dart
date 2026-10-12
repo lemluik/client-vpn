@@ -1,0 +1,108 @@
+import 'dart:convert';
+
+/// Протоколы, которые действительно уводят трафик на сервер.
+/// `freedom` и `blackhole` к ним не относятся: если такой outbound окажется
+/// первым, весь трафик пойдёт напрямую — на Android это тихая утечка.
+const Set<String> proxyProtocols = {
+  'vless',
+  'vmess',
+  'trojan',
+  'shadowsocks',
+  'socks',
+  'http',
+  'wireguard',
+};
+
+/// Туннельный inbound, который ядро получает вместо локального прокси.
+/// Дескриптор устройства ядро берёт из переменной окружения `xray.tun.fd`
+/// (см. proxy/tun/tun_android.go в Xray-core 26.3.27).
+Map<String, dynamic> tunInbound({String name = 'tun0', int mtu = 1500}) => {
+      'protocol': 'tun',
+      'settings': {'name': name, 'MTU': mtu},
+      'sniffing': {
+        'enabled': true,
+        'destOverride': ['http', 'tls'],
+      },
+      'tag': 'tun-in',
+    };
+
+/// Перестраивает конфиг пользователя под Android.
+///
+/// Локальные http/socks inbound на мобильной платформе бесполезны — вместо них
+/// подставляется tun. Исходящие серверы берутся из конфига как есть, но
+/// обязательно добавляется завершающее правило маршрутизации на прокси:
+/// без него трафик без правил ушёл бы в outbound по умолчанию, которым
+/// может оказаться `freedom`.
+///
+/// Бросает [FormatException], если документ не читается, и [Exception]
+/// с текстом для пользователя, если в конфиге нет прокси.
+String buildTunConfig(String userJson) {
+  final decoded = jsonDecode(userJson);
+  if (decoded is! Map) {
+    throw const FormatException('Конфиг должен быть JSON-объектом');
+  }
+
+  final outbounds = decoded['outbounds'];
+  if (outbounds is! List || outbounds.isEmpty) {
+    throw const FormatException('В конфиге нет секции outbounds');
+  }
+
+  final index = _proxyIndex(outbounds);
+  final proxy = outbounds[index] as Map;
+  final tag = _tagOf(proxy);
+
+  return jsonEncode({
+    'log': {'loglevel': 'warning'},
+    'inbounds': [tunInbound()],
+    'outbounds': _withTag(outbounds, index, tag),
+    'routing': _routing(decoded['routing'], tag),
+  });
+}
+
+int _proxyIndex(List<dynamic> outbounds) {
+  for (var i = 0; i < outbounds.length; i++) {
+    final outbound = outbounds[i];
+    if (outbound is Map && proxyProtocols.contains(outbound['protocol'])) {
+      return i;
+    }
+  }
+  throw Exception(
+    'В конфиге нет исходящего прокси-сервера — '
+    'подключение подняло бы трафик напрямую.',
+  );
+}
+
+String _tagOf(Map<dynamic, dynamic> outbound) {
+  final tag = outbound['tag'];
+  return tag is String && tag.isNotEmpty ? tag : 'cvpn-proxy';
+}
+
+/// Возвращает список outbound с гарантированно непустым тегом у прокси.
+List<dynamic> _withTag(List<dynamic> outbounds, int index, String tag) {
+  return [
+    for (var i = 0; i < outbounds.length; i++)
+      if (i == index) {...outbounds[i] as Map, 'tag': tag} else outbounds[i],
+  ];
+}
+
+/// Правила пользователя плюс завершающее «всё в прокси».
+///
+/// `domainStrategy` принудительно `AsIs`: ядро не должно резолвить домены
+/// на устройстве — это обошло бы туннель и раскрыло DNS.
+Map<String, dynamic> _routing(dynamic userRouting, String proxyTag) {
+  final routing = userRouting is Map
+      ? Map<String, dynamic>.from(userRouting.cast<String, dynamic>())
+      : <String, dynamic>{};
+
+  final rules = routing['rules'];
+  routing['domainStrategy'] = 'AsIs';
+  routing['rules'] = [
+    if (rules is List) ...rules,
+    {
+      'type': 'field',
+      'network': 'tcp,udp',
+      'outboundTag': proxyTag,
+    },
+  ];
+  return routing;
+}

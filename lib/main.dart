@@ -1,35 +1,36 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
 
-import 'proxy_config.dart';
-import 'system_proxy.dart';
-import 'xray_process.dart';
+import 'vpn_config.dart';
+import 'vpn_core.dart';
+
+/// Окно и системный прокси существуют только на десктопе: на Android
+/// подключение поднимает VpnService, а window_manager там не зарегистрирован.
+final bool isDesktop =
+    Platform.isWindows || Platform.isMacOS || Platform.isLinux;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await windowManager.ensureInitialized();
 
-  // Без этого окно закрывается сразу, не дожидаясь onWindowClose,
-  // и xray.exe остаётся сиротой при включённом системном прокси.
-  await windowManager.setPreventClose(true);
+  if (isDesktop) {
+    await windowManager.ensureInitialized();
 
-  await windowManager.waitUntilReadyToShow(
-    const WindowOptions(
-      minimumSize: Size(560, 700),
-      title: 'КлиентВПН',
-    ),
-    () async {
-      await windowManager.show();
-      await windowManager.focus();
-    },
-  );
+    // Без этого окно закрывается сразу, не дожидаясь onWindowClose,
+    // и ядро остаётся сиротой при включённом системном прокси.
+    await windowManager.setPreventClose(true);
 
-  await SystemProxy.cleanupAfterCrash();
+    await windowManager.waitUntilReadyToShow(
+      const WindowOptions(minimumSize: Size(560, 700), title: 'КлиентВПН'),
+      () async {
+        await windowManager.show();
+        await windowManager.focus();
+      },
+    );
+  }
+
   runApp(const ClientVpnApp());
 }
 
@@ -59,61 +60,47 @@ class MainScreen extends StatefulWidget {
 }
 
 class _MainScreenState extends State<MainScreen> with WindowListener {
-  final XrayProcessManager _xray = XrayProcessManager();
+  final VpnCore _core = createVpnCore();
   final List<String> _logLines = [];
   final ScrollController _logScroll = ScrollController();
 
-  String? _configPath;
-  String? _configName;
+  VpnConfig? _config;
   bool _isValid = false;
   bool _isConnected = false;
   bool _isConnecting = false;
   String? _validationError;
-  ProxyEndpoint? _proxy;
   StreamSubscription<String>? _logSub;
   StreamSubscription<bool>? _statusSub;
 
   @override
   void initState() {
     super.initState();
-    windowManager.addListener(this);
-    _loadSavedConfig();
-    _logSub = _xray.logs.listen(_addLog);
-    _statusSub = _xray.statusChanges.listen((running) async {
-      if (!running) {
-        await SystemProxy.disable();
-        if (mounted) _addLog('Системный прокси отключён (Xray остановлен)');
-      }
+    if (isDesktop) {
+      windowManager.addListener(this);
+      unawaited(_core.recoverAfterCrash());
+    }
+    _logSub = _core.logs.listen(_addLog);
+    _statusSub = _core.statusChanges.listen((running) {
       if (!mounted) return;
       setState(() {
         _isConnected = running;
         _isConnecting = false;
       });
     });
+    unawaited(_loadSavedConfig());
   }
 
   @override
   void onWindowClose() async {
-    await _shutdown();
+    await _core.stop();
     await windowManager.destroy();
   }
 
-  Future<void> _shutdown() async {
-    await _xray.stop();
-    await SystemProxy.disable();
-  }
-
   Future<void> _loadSavedConfig() async {
-    final prefs = await SharedPreferences.getInstance();
-    final path = prefs.getString('config_path');
-    if (path != null && await File(path).exists()) {
-      if (!mounted) return;
-      setState(() {
-        _configPath = path;
-        _configName = path.split(Platform.pathSeparator).last;
-      });
-      await _validateConfig(path);
-    }
+    final config = await loadSavedVpnConfig();
+    if (config == null || !mounted) return;
+    setState(() => _config = config);
+    await _validateConfig(config);
   }
 
   void _addLog(String line) {
@@ -136,63 +123,34 @@ class _MainScreenState extends State<MainScreen> with WindowListener {
   }
 
   Future<void> _pickConfig() async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['json'],
-      allowMultiple: false,
-    );
+    final config = await pickVpnConfig();
+    if (config == null) return;
 
-    if (result == null || result.files.isEmpty) return;
-    final path = result.files.single.path;
-    if (path == null) return;
-
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('config_path', path);
-
+    await saveVpnConfig(config);
     if (!mounted) return;
     setState(() {
-      _configPath = path;
-      _configName = path.split(Platform.pathSeparator).last;
+      _config = config;
       _isValid = false;
       _validationError = null;
-      _proxy = null;
     });
 
-    await _validateConfig(path);
+    await _validateConfig(config);
   }
 
-  Future<void> _validateConfig(String path) async {
+  Future<void> _validateConfig(VpnConfig config) async {
     setState(() {
       _isConnecting = true;
       _validationError = null;
     });
 
     try {
-      await _xray.testConfig(path);
-      final proxy = parseProxyInbound(await File(path).readAsString());
+      await _core.validate(config);
       if (!mounted) return;
-
-      if (proxy == null) {
-        setState(() {
-          _isValid = false;
-          _proxy = null;
-          _validationError =
-              'В конфиге нет inbound с протоколом http или socks — '
-              'включить системный прокси нельзя.';
-          _isConnecting = false;
-        });
-        _addLog('Ошибка: не найден http/socks inbound');
-        return;
-      }
-
       setState(() {
         _isValid = true;
-        _proxy = proxy;
         _isConnecting = false;
       });
-      _addLog(
-        'Конфиг валиден, прокси: ${proxy.protocol} 127.0.0.1:${proxy.port}',
-      );
+      _addLog('Конфиг валиден: ${config.name}');
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -205,24 +163,16 @@ class _MainScreenState extends State<MainScreen> with WindowListener {
   }
 
   Future<void> _connect() async {
-    final proxy = _proxy;
-    if (_configPath == null || !_isValid || proxy == null) return;
+    final config = _config;
+    if (config == null || !_isValid) return;
 
     setState(() => _isConnecting = true);
     _addLog('Подключение...');
 
     try {
-      await SystemProxy.enable(
-        '127.0.0.1',
-        proxy.port,
-        socks: proxy.protocol == 'socks',
-      );
-      _addLog('Системный прокси: ${proxy.protocol} 127.0.0.1:${proxy.port}');
-
-      await _xray.start(_configPath!);
+      await _core.start(config);
     } catch (e) {
       _addLog('Ошибка подключения: $e');
-      await SystemProxy.disable();
       if (!mounted) return;
       setState(() => _isConnecting = false);
     }
@@ -230,9 +180,7 @@ class _MainScreenState extends State<MainScreen> with WindowListener {
 
   Future<void> _disconnect() async {
     _addLog('Отключение...');
-    await _xray.stop();
-    await SystemProxy.disable();
-    _addLog('Системный прокси отключён');
+    await _core.stop();
     if (!mounted) return;
     setState(() {
       _isConnected = false;
@@ -242,21 +190,18 @@ class _MainScreenState extends State<MainScreen> with WindowListener {
 
   @override
   void dispose() {
-    windowManager.removeListener(this);
+    if (isDesktop) windowManager.removeListener(this);
     _logSub?.cancel();
     _statusSub?.cancel();
     _logScroll.dispose();
-    unawaited(_xray.dispose());
+    unawaited(_core.dispose());
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('КлиентВПН v0.1.0'),
-        centerTitle: true,
-      ),
+      appBar: AppBar(title: const Text('КлиентВПН v0.2.0'), centerTitle: true),
       body: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
@@ -276,6 +221,7 @@ class _MainScreenState extends State<MainScreen> with WindowListener {
   }
 
   Widget _buildConfigSection() {
+    final config = _config;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -301,10 +247,10 @@ class _MainScreenState extends State<MainScreen> with WindowListener {
                 ],
               ],
             ),
-            if (_configName != null) ...[
+            if (config != null) ...[
               const SizedBox(height: 12),
               Text(
-                'Файл: $_configName',
+                'Файл: ${config.name}',
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
             ],
@@ -345,9 +291,8 @@ class _MainScreenState extends State<MainScreen> with WindowListener {
     return SizedBox(
       height: 56,
       child: FilledButton.icon(
-        onPressed: (_configPath != null && _isValid && !_isConnecting)
-            ? _connect
-            : null,
+        onPressed:
+            (_config != null && _isValid && !_isConnecting) ? _connect : null,
         icon: _isConnecting
             ? const SizedBox(
                 width: 20,
@@ -366,6 +311,7 @@ class _MainScreenState extends State<MainScreen> with WindowListener {
   Widget _buildStatusSection() {
     final status = _isConnected ? 'Подключён' : 'Отключён';
     final color = _isConnected ? Colors.green : Colors.grey;
+    final endpoint = _core.endpointLabel;
 
     return Card(
       child: Padding(
@@ -378,11 +324,13 @@ class _MainScreenState extends State<MainScreen> with WindowListener {
               'Статус: $status',
               style: Theme.of(context).textTheme.titleMedium,
             ),
-            if (_proxy != null && _isConnected) ...[
+            if (endpoint != null && _isConnected) ...[
               const Spacer(),
-              Text(
-                '${_proxy!.protocol} 127.0.0.1:${_proxy!.port}',
-                style: Theme.of(context).textTheme.bodySmall,
+              Flexible(
+                child: Text(
+                  endpoint,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
               ),
             ],
           ],
@@ -399,10 +347,7 @@ class _MainScreenState extends State<MainScreen> with WindowListener {
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-              child: Text(
-                'Лог',
-                style: Theme.of(context).textTheme.titleSmall,
-              ),
+              child: Text('Лог', style: Theme.of(context).textTheme.titleSmall),
             ),
             const Divider(height: 1),
             Expanded(
