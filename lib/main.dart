@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
@@ -7,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
 
+import 'proxy_config.dart';
 import 'system_proxy.dart';
 import 'xray_process.dart';
 
@@ -69,7 +69,7 @@ class _MainScreenState extends State<MainScreen> with WindowListener {
   bool _isConnected = false;
   bool _isConnecting = false;
   String? _validationError;
-  ({String protocol, int port})? _proxy;
+  ProxyEndpoint? _proxy;
   StreamSubscription<String>? _logSub;
   StreamSubscription<bool>? _statusSub;
 
@@ -169,7 +169,8 @@ class _MainScreenState extends State<MainScreen> with WindowListener {
 
     try {
       await _xray.testConfig(path);
-      final proxy = await _extractProxy(path);
+      final proxy = parseProxyInbound(await File(path).readAsString());
+      if (!mounted) return;
 
       if (proxy == null) {
         setState(() {
@@ -189,8 +190,11 @@ class _MainScreenState extends State<MainScreen> with WindowListener {
         _proxy = proxy;
         _isConnecting = false;
       });
-      _addLog('Конфиг валиден, прокси: ${proxy.protocol} 127.0.0.1:${proxy.port}');
+      _addLog(
+        'Конфиг валиден, прокси: ${proxy.protocol} 127.0.0.1:${proxy.port}',
+      );
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _isValid = false;
         _validationError = e.toString();
@@ -199,31 +203,6 @@ class _MainScreenState extends State<MainScreen> with WindowListener {
       _addLog('Ошибка валидации: $e');
     }
   }
-
-  Future<({String protocol, int port})?> _extractProxy(String configPath) async {
-    final config = jsonDecode(await File(configPath).readAsString())
-        as Map<String, dynamic>;
-    final inbounds = config['inbounds'] as List<dynamic>?;
-    if (inbounds == null) return null;
-
-    for (final inbound in inbounds) {
-      final ib = inbound as Map<String, dynamic>;
-      final protocol = ib['protocol'];
-      if (protocol != 'http' && protocol != 'socks') continue;
-
-      final port = _parsePort(ib['port']);
-      if (port == null) continue;
-
-      return (protocol: protocol as String, port: port);
-    }
-    return null;
-  }
-
-  static int? _parsePort(dynamic raw) => switch (raw) {
-        final int value => value,
-        final String value => int.tryParse(value.trim()),
-        _ => null,
-      };
 
   Future<void> _connect() async {
     final proxy = _proxy;

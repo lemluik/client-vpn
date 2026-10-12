@@ -41,14 +41,14 @@ class XrayProcessManager {
     }
 
     throw Exception(
-        'xray.exe не найден. Скачайте его: bash scripts/download_xray.sh');
+      'xray.exe не найден. Скачайте его: bash scripts/download_xray.sh',
+    );
   }
 
   Future<void> _verifyChecksum(File file) async {
     final actual = '${await sha256.bind(file.openRead()).first}';
     if (actual != _expectedSha256) {
-      throw Exception(
-          'Проверка целостности xray.exe не пройдена.\n'
+      throw Exception('Проверка целостности xray.exe не пройдена.\n'
           'Ожидался SHA2-256 $_expectedSha256\n'
           'Получен  SHA2-256 $actual\n'
           'Файл повреждён или подменён — запуск отменён. '
@@ -67,7 +67,9 @@ class XrayProcessManager {
     final output =
         '${result.stdout.toString().trim()}\n${result.stderr.toString().trim()}';
     if (result.exitCode != 0) {
-      throw Exception('Валидация не пройдена (код ${result.exitCode}):\n$output');
+      throw Exception(
+        'Валидация не пройдена (код ${result.exitCode}):\n$output',
+      );
     }
     return output;
   }
@@ -103,12 +105,14 @@ class XrayProcessManager {
       if (line.isNotEmpty) _logController.add('[ERR] $line');
     });
 
-    unawaited(_process!.exitCode.then((code) {
-      _logController.add('Xray остановлен (код: $code)');
-      _process = null;
-      _configPath = null;
-      _statusController.add(false);
-    }));
+    unawaited(
+      _process!.exitCode.then((code) {
+        _logController.add('Xray остановлен (код: $code)');
+        _process = null;
+        _configPath = null;
+        _statusController.add(false);
+      }),
+    );
 
     _statusController.add(true);
     _logController.add('Xray запущен (PID: ${_process!.pid})');

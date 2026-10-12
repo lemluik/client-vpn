@@ -12,5 +12,6 @@ analyzer:
   exclude:
     - "**/*.g.dart"
     - "build/**"
+    - windows/**
   errors:
     invalid_annotation_target: ignore

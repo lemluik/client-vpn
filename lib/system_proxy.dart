@@ -83,10 +83,14 @@ class SystemProxy {
 
   static Future<void> _writeString(String name, String value) async {
     final result = await Process.run('reg', [
-      'add', _regPath,
-      '/v', name,
-      '/t', 'REG_SZ',
-      '/d', value,
+      'add',
+      _regPath,
+      '/v',
+      name,
+      '/t',
+      'REG_SZ',
+      '/d',
+      value,
       '/f',
     ]);
     if (result.exitCode != 0) {
@@ -96,10 +100,14 @@ class SystemProxy {
 
   static Future<void> _writeDword(String name, int value) async {
     final result = await Process.run('reg', [
-      'add', _regPath,
-      '/v', name,
-      '/t', 'REG_DWORD',
-      '/d', '$value',
+      'add',
+      _regPath,
+      '/v',
+      name,
+      '/t',
+      'REG_DWORD',
+      '/d',
+      '$value',
       '/f',
     ]);
     if (result.exitCode != 0) {
@@ -114,8 +122,10 @@ class SystemProxy {
 
   static Future<bool> get isEnabled async {
     final result = await Process.run('reg', [
-      'query', _regPath,
-      '/v', 'ProxyEnable',
+      'query',
+      _regPath,
+      '/v',
+      'ProxyEnable',
     ]);
     if (result.exitCode != 0) return false;
 
@@ -131,8 +141,10 @@ class SystemProxy {
 
   static Future<String?> getProxyServer() async {
     final result = await Process.run('reg', [
-      'query', _regPath,
-      '/v', 'ProxyServer',
+      'query',
+      _regPath,
+      '/v',
+      'ProxyServer',
     ]);
     if (result.exitCode != 0) return null;
 
