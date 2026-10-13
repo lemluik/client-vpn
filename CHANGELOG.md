@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.1] - 2026-10-13
+
+Windows-only fixes; the Android build is unchanged.
+
+### Fixed
+
+- The window opened at the 1280x720 template default, which `Win32Window::Create`
+  multiplies by the monitor DPI factor — about 1600x900 physical pixels on a
+  125% display, roughly 2.5x wider than intended. Both `windows/runner/main.cpp`
+  and `WindowOptions.size` in `lib/main.dart` now say 500x700, and the window is
+  centered with a 500x700 minimum size
+- The primary button showed «ПОДКЛЮЧЕНИЕ...» with a spinner while the config was
+  still being validated. Validation now has its own `_isValidating` flag and the
+  button reads «ПРОВЕРКА...»
+
+### Dependencies
+
+- `window_manager` 0.4.3 -> 0.5.2 (verified: AOT build, analyzer, 23 tests and a
+  live window geometry check; 0.6.0 is a breaking release that needs Flutter
+  3.47 / Dart 3.13 and the `window_manager/legacy.dart` import)
+- `flutter_lints` 5.0.0 -> 6.0.0
+
 ## [0.2.0] - 2026-10-13
 
 Android support (R2). Windows behaviour is unchanged.
