@@ -207,7 +207,7 @@ class _MainScreenState extends State<MainScreen> with WindowListener {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('КлиентВПН v0.2.0'), centerTitle: true),
+      appBar: AppBar(title: const Text('КлиентВПН v0.2.1'), centerTitle: true),
       body: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
