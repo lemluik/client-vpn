@@ -5,7 +5,7 @@
   </p>
   <p align="center">
     <a href="LICENSE">
-      <img src="https://img.shields.io/badge/license-GPL--3.0-blue.svg" alt="License: GPL-3.0">
+      <img src="https://img.shields.io/badge/license-MPL--2.0-blue.svg" alt="License: MPL-2.0">
     </a>
     <a href="https://github.com/lemluik/client-vpn/releases">
       <img src="https://img.shields.io/github/v/release/lemluik/client-vpn" alt="Release">
@@ -219,7 +219,8 @@ client-vpn/
 │   └── dependabot.yml         # обновления зависимостей
 ├── analysis_options.yaml      # Dart lint rules
 ├── pubspec.yaml               # Flutter dependencies
-├── LICENSE                    # GPL-3.0
+├── LICENSE                    # MPL-2.0
+├── NOTICE                     # Лицензии сторонних компонентов
 ├── README.md                  # Этот файл
 ├── CONTRIBUTING.md            # Как контрибьютить
 ├── CODE_OF_CONDUCT.md         # Кодекс поведения
@@ -259,9 +260,13 @@ client-vpn/
 
 ## Лицензия
 
-**GPL-3.0** — см. [LICENSE](LICENSE)
+**MPL-2.0** — см. [LICENSE](LICENSE). Лицензия совпадает с лицензией ядра Xray-core, поэтому
+копилефт остаётся файл-уровневым: публикуются изменённые MPL-файлы, а остальной код можно
+использовать и в закрытых сборках.
 
-Xray-core распространяется под **MPL-2.0** (Copyright XTLS/Xray-core authors).
+Xray-core распространяется под **MPL-2.0** (Copyright XTLS/Xray-core authors), бинарники ядра
+мы не изменяем. Полный список сторонних компонентов с версиями и текстами уведомлений —
+в [NOTICE](NOTICE).
 
 ## Участие
 
