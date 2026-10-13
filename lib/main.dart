@@ -73,6 +73,7 @@ class _MainScreenState extends State<MainScreen> with WindowListener {
   bool _isValid = false;
   bool _isConnected = false;
   bool _isConnecting = false;
+  bool _isValidating = false;
   String? _validationError;
   StreamSubscription<String>? _logSub;
   StreamSubscription<bool>? _statusSub;
@@ -144,7 +145,7 @@ class _MainScreenState extends State<MainScreen> with WindowListener {
 
   Future<void> _validateConfig(VpnConfig config) async {
     setState(() {
-      _isConnecting = true;
+      _isValidating = true;
       _validationError = null;
     });
 
@@ -153,7 +154,7 @@ class _MainScreenState extends State<MainScreen> with WindowListener {
       if (!mounted) return;
       setState(() {
         _isValid = true;
-        _isConnecting = false;
+        _isValidating = false;
       });
       _addLog('Конфиг валиден: ${config.name}');
     } catch (e) {
@@ -161,7 +162,7 @@ class _MainScreenState extends State<MainScreen> with WindowListener {
       setState(() {
         _isValid = false;
         _validationError = e.toString();
-        _isConnecting = false;
+        _isValidating = false;
       });
       _addLog('Ошибка валидации: $e');
     }
@@ -293,12 +294,13 @@ class _MainScreenState extends State<MainScreen> with WindowListener {
       );
     }
 
+    final busy = _isConnecting || _isValidating;
+
     return SizedBox(
       height: 56,
       child: FilledButton.icon(
-        onPressed:
-            (_config != null && _isValid && !_isConnecting) ? _connect : null,
-        icon: _isConnecting
+        onPressed: (_config != null && _isValid && !busy) ? _connect : null,
+        icon: busy
             ? const SizedBox(
                 width: 20,
                 height: 20,
@@ -306,7 +308,11 @@ class _MainScreenState extends State<MainScreen> with WindowListener {
               )
             : const Icon(Icons.power_settings_new),
         label: Text(
-          _isConnecting ? 'ПОДКЛЮЧЕНИЕ...' : 'ПОДКЛЮЧИТЬ',
+          _isValidating
+              ? 'ПРОВЕРКА...'
+              : _isConnecting
+                  ? 'ПОДКЛЮЧЕНИЕ...'
+                  : 'ПОДКЛЮЧИТЬ',
           style: const TextStyle(fontSize: 18),
         ),
       ),
