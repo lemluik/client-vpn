@@ -23,7 +23,12 @@ void main() async {
     await windowManager.setPreventClose(true);
 
     await windowManager.waitUntilReadyToShow(
-      const WindowOptions(minimumSize: Size(560, 700), title: 'КлиентВПН'),
+      const WindowOptions(
+        size: Size(500, 700),
+        center: true,
+        minimumSize: Size(500, 700),
+        title: 'КлиентВПН',
+      ),
       () async {
         await windowManager.show();
         await windowManager.focus();
