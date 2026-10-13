@@ -1,0 +1,598 @@
+import 'package:flutter/material.dart';
+
+import 'app_state.dart';
+import 'log_screen.dart';
+import 'profile_store.dart';
+import 'provider.dart';
+
+/// Главный экран: состояние туннеля, список подключений и добавление новых.
+///
+/// Журнал и способ входа сырым файлом убраны отсюда: первый экран отвечает на
+/// вопрос «подключено ли», а не «что пишет ядро».
+class HomeScreen extends StatefulWidget {
+  const HomeScreen({required this.state, super.key});
+
+  final AppState state;
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  AppState get _state => widget.state;
+
+  @override
+  void initState() {
+    super.initState();
+    _state.addListener(_onChange);
+  }
+
+  @override
+  void dispose() {
+    _state.removeListener(_onChange);
+    super.dispose();
+  }
+
+  void _onChange() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final empty = _state.profiles.isEmpty;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('КлиентВПН'),
+        centerTitle: true,
+        actions: [
+          if (!empty && _state.activeProvider != null)
+            IconButton(
+              tooltip: 'Обновить подписку',
+              icon: const Icon(Icons.refresh),
+              onPressed: _state.isBusy ? null : _refreshActive,
+            ),
+          IconButton(
+            tooltip: 'Журнал',
+            icon: const Icon(Icons.article_outlined),
+            onPressed: _openLog,
+          ),
+          const SizedBox(width: 4),
+        ],
+      ),
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (_state.failure != null) ...[
+                _FailureCard(failure: _state.failure!),
+                const SizedBox(height: 16),
+              ],
+              Expanded(
+                child:
+                    empty ? _EmptyState(onAdd: _showAddSheet) : _profileList(),
+              ),
+              const SizedBox(height: 16),
+              _StateButton(state: _state, onPressed: empty ? null : _toggle),
+              const SizedBox(height: 12),
+              _StatusLine(state: _state),
+            ],
+          ),
+        ),
+      ),
+      floatingActionButton: empty
+          ? null
+          : FloatingActionButton.extended(
+              onPressed: _state.isBusy ? null : _showAddSheet,
+              icon: const Icon(Icons.add),
+              label: const Text('Добавить'),
+            ),
+    );
+  }
+
+  Widget _profileList() {
+    final active = _state.activeProfile;
+
+    return ListView.separated(
+      padding: const EdgeInsets.only(bottom: 72),
+      itemCount: _state.profiles.length,
+      separatorBuilder: (context, index) => const SizedBox(height: 8),
+      itemBuilder: (context, index) {
+        final profile = _state.profiles[index];
+        return _ProfileCard(
+          profile: profile,
+          provider: _state.activeProvider?.id == profile.providerId
+              ? _state.activeProvider
+              : null,
+          selected: profile.id == active?.id,
+          onSelect: () => _select(profile.id),
+          onRename: () => _rename(profile),
+          onRemove: () => _remove(profile),
+        );
+      },
+    );
+  }
+
+  Future<void> _toggle() async {
+    if (_state.isConnected) {
+      await _state.disconnect();
+      return;
+    }
+    await _state.connect();
+  }
+
+  Future<void> _select(String id) async {
+    if (_state.isConnected) {
+      final leave = await _confirm(
+        'Сменить подключение?',
+        'Туннель будет отключён, а затем поднят заново из нового профиля.',
+      );
+      if (!leave) return;
+      await _state.disconnect();
+    }
+    await _state.select(id);
+  }
+
+  Future<void> _refreshActive() async {
+    final error = await _state.refreshActive();
+    _notify(error ?? 'Подписка обновлена');
+  }
+
+  Future<void> _rename(StoredProfile profile) async {
+    final controller = TextEditingController(text: profile.name);
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Название подключения'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(hintText: 'Например: рабочий'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Отмена'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, controller.text),
+            child: const Text('Сохранить'),
+          ),
+        ],
+      ),
+    );
+    if (name == null || name.trim().isEmpty) return;
+    await _state.rename(profile.id, name);
+  }
+
+  Future<void> _remove(StoredProfile profile) async {
+    final confirmed = await _confirm(
+      'Удалить «${profile.name}»?',
+      'Подключение и сохранённый кэш подписки будут удалены.',
+    );
+    if (!confirmed) return;
+    await _state.remove(profile.id);
+  }
+
+  Future<bool> _confirm(String title, String text) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: Text(text),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Отмена'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Продолжить'),
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
+  }
+
+  void _openLog() {
+    Navigator.push(
+      context,
+      MaterialPageRoute<void>(builder: (context) => LogScreen(state: _state)),
+    );
+  }
+
+  void _notify(String text) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(text)));
+  }
+
+  /// Нижняя панель добавления: способ входа выбирается на месте, контекст
+  /// главного экрана не теряется.
+  Future<void> _showAddSheet() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(24, 0, 24, 8),
+                child: Text(
+                  'Добавьте подключение любого провайдера',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.link),
+                title: const Text('Ссылка или подписка'),
+                subtitle:
+                    const Text('Вставьте ключ, список ключей или подписку'),
+                onTap: () async {
+                  Navigator.pop(context);
+                  await _addFromText();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.rss_feed),
+                title: const Text('Подписка по адресу'),
+                subtitle:
+                    const Text('Обновляется сама по интервалу провайдера'),
+                onTap: () async {
+                  Navigator.pop(context);
+                  await _addSubscription();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.file_open),
+                title: const Text('Файл config.json'),
+                subtitle: const Text('Для опытных: полный конфиг ядра'),
+                onTap: () async {
+                  Navigator.pop(context);
+                  final error = await _state.addFile();
+                  _notify(error ?? 'Файл добавлен');
+                },
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _addFromText() async {
+    final controller = TextEditingController();
+    final text = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Ссылка или подписка'),
+        content: SizedBox(
+          width: 460,
+          child: TextField(
+            controller: controller,
+            maxLines: 6,
+            autofocus: true,
+            decoration: const InputDecoration(
+              hintText: 'vless://… или несколько строк, или подписка в base64',
+              border: OutlineInputBorder(),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Отмена'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, controller.text),
+            child: const Text('Добавить'),
+          ),
+        ],
+      ),
+    );
+    if (text == null) return;
+
+    final error = await _state.addFromText(text);
+    _notify(error ?? 'Подключение добавлено');
+  }
+
+  Future<void> _addSubscription() async {
+    final controller = TextEditingController();
+    final url = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Подписка по адресу'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          keyboardType: TextInputType.url,
+          decoration: const InputDecoration(
+            hintText: 'https://провайдер.example/подписка',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Отмена'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, controller.text),
+            child: const Text('Получить'),
+          ),
+        ],
+      ),
+    );
+    if (url == null) return;
+
+    final error = await _state.addSubscription(url);
+    _notify(error ?? 'Подписка добавлена');
+  }
+}
+
+class _FailureCard extends StatelessWidget {
+  const _FailureCard({required this.failure});
+
+  final Failure failure;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+
+    return Card(
+      color: colors.errorContainer,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Icon(Icons.error_outline, color: colors.onErrorContainer),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    failure.message,
+                    style: TextStyle(
+                      color: colors.onErrorContainer,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    failure.action,
+                    style: TextStyle(color: colors.onErrorContainer),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _EmptyState extends StatelessWidget {
+  const _EmptyState({required this.onAdd});
+
+  final Future<void> Function() onAdd;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 420),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.vpn_key_outlined,
+              size: 72,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+            const SizedBox(height: 20),
+            Text(
+              'Быстрый доступ в интернет',
+              style: Theme.of(context).textTheme.headlineSmall,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Добавьте ключ от вашего провайдера или адрес подписки — '
+              'клиент сам соберёт подключение. Своих серверов у клиента нет, '
+              'он работает с любым провайдером.',
+              style: Theme.of(context).textTheme.bodyMedium,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 28),
+            SizedBox(
+              height: 52,
+              child: FilledButton.icon(
+                onPressed: onAdd,
+                icon: const Icon(Icons.add),
+                label: const Text(
+                  'Добавить подключение',
+                  style: TextStyle(fontSize: 16),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ProfileCard extends StatelessWidget {
+  const _ProfileCard({
+    required this.profile,
+    required this.selected,
+    required this.onSelect,
+    required this.onRename,
+    required this.onRemove,
+    this.provider,
+  });
+
+  final StoredProfile profile;
+  final Provider? provider;
+  final bool selected;
+  final VoidCallback onSelect;
+  final VoidCallback onRename;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      color: selected ? Theme.of(context).colorScheme.secondaryContainer : null,
+      child: ListTile(
+        onTap: onSelect,
+        leading: Icon(_iconOf(profile.kind)),
+        title: Text(
+          profile.name.isEmpty ? 'Без названия' : profile.name,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        subtitle: Text(_subtitleOf(profile, provider)),
+        trailing: PopupMenuButton<String>(
+          tooltip: 'Действия',
+          onSelected: (value) {
+            if (value == 'rename') onRename();
+            if (value == 'remove') onRemove();
+          },
+          itemBuilder: (context) => const [
+            PopupMenuItem(value: 'rename', child: Text('Переименовать')),
+            PopupMenuItem(value: 'remove', child: Text('Удалить')),
+          ],
+        ),
+      ),
+    );
+  }
+
+  IconData _iconOf(ProfileKind kind) => switch (kind) {
+        ProfileKind.links => Icons.key_outlined,
+        ProfileKind.subscription => Icons.rss_feed,
+        ProfileKind.file => Icons.description_outlined,
+      };
+
+  String _subtitleOf(StoredProfile profile, Provider? provider) {
+    final count = profile.links.length;
+    final usage = provider?.usage;
+    final left = usage?.remaining;
+
+    return switch (profile.kind) {
+      ProfileKind.file => 'Файл ядра',
+      ProfileKind.links => count == 1 ? 'Один профиль' : '$count профилей',
+      ProfileKind.subscription => left == null
+          ? (count == 1
+              ? 'Подписка · один профиль'
+              : 'Подписка · $count профилей')
+          : 'Подписка · осталось ${_megabytes(left)} МБ',
+    };
+  }
+
+  String _megabytes(int bytes) => (bytes / (1024 * 1024)).toStringAsFixed(0);
+}
+
+class _StateButton extends StatelessWidget {
+  const _StateButton({required this.state, required this.onPressed});
+
+  final AppState state;
+  final Future<void> Function()? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final connecting = state.state == TunnelState.connecting;
+    final connected = state.isConnected;
+    final colors = Theme.of(context).colorScheme;
+
+    final label = switch (state.state) {
+      TunnelState.connecting => 'ПОДКЛЮЧЕНИЕ…',
+      TunnelState.on => 'ОТКЛЮЧИТЬ',
+      TunnelState.failure => 'ПОДКЛЮЧИТЬ СНОВА',
+      TunnelState.off => 'ПОДКЛЮЧИТЬ',
+    };
+
+    return SizedBox(
+      height: 64,
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 220),
+        child: FilledButton.icon(
+          key: ValueKey(state.state),
+          onPressed: state.canConnect || connected ? onPressed : null,
+          style: FilledButton.styleFrom(
+            backgroundColor: connected ? colors.errorContainer : null,
+            foregroundColor: connected ? colors.onErrorContainer : null,
+          ),
+          icon: connecting
+              ? const SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : Icon(
+                  connected ? Icons.power_settings_new : Icons.shield_outlined,
+                ),
+          label: Text(label, style: const TextStyle(fontSize: 18)),
+        ),
+      ),
+    );
+  }
+}
+
+class _StatusLine extends StatelessWidget {
+  const _StatusLine({required this.state});
+
+  final AppState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final (text, color, icon) = switch (state.state) {
+      TunnelState.on => (
+          'Защищено',
+          Colors.green.shade700,
+          Icons.verified_user_outlined,
+        ),
+      TunnelState.connecting => (
+          'Подключение…',
+          Theme.of(context).colorScheme.primary,
+          Icons.hourglass_top,
+        ),
+      TunnelState.failure => (
+          'Сбой',
+          Theme.of(context).colorScheme.error,
+          Icons.error_outline,
+        ),
+      TunnelState.off => (
+          'Отключено',
+          Theme.of(context).colorScheme.outline,
+          Icons.shield_outlined,
+        ),
+    };
+
+    return Row(
+      children: [
+        Icon(icon, size: 18, color: color),
+        const SizedBox(width: 8),
+        Text(text, style: TextStyle(color: color, fontWeight: FontWeight.w600)),
+        if (state.endpoint != null && state.isConnected) ...[
+          const Spacer(),
+          Flexible(
+            child: Text(
+              state.endpoint!,
+              style: Theme.of(context).textTheme.bodySmall,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
