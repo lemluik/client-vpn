@@ -118,6 +118,8 @@ class DesktopCore implements VpnCore {
     }
     final path = config.path!;
 
+    await _awaitFreePort(proxy.port);
+
     await SystemProxy.enable(
       '127.0.0.1',
       proxy.port,
@@ -133,6 +135,32 @@ class DesktopCore implements VpnCore {
       await SystemProxy.disable();
       rethrow;
     }
+  }
+
+  /// Порт локального inbound освобождается не в тот момент, когда ядро
+  /// завершилось: новое ядро, запущенное сразу после остановки старого,
+  /// падало с «bind: Only one usage of each socket address». Ждём освобождения
+  /// и говорим о занятом порте прямо, а не через сообщение ядра.
+  Future<void> _awaitFreePort(int port) async {
+    for (var attempt = 1; attempt <= 10; attempt++) {
+      ServerSocket? probe;
+      try {
+        probe = await ServerSocket.bind(InternetAddress.loopbackIPv4, port);
+        return;
+      } on SocketException {
+        _logController.add(
+          'Порт 127.0.0.1:$port ещё занят, жду освобождения ($attempt/10)',
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+      } finally {
+        await probe?.close();
+      }
+    }
+
+    throw Exception(
+      'Порт 127.0.0.1:$port занят другим приложением. '
+      'Освободите порт или выберите профиль с другим портом.',
+    );
   }
 
   Future<void> _spawn(String configPath) async {
@@ -191,6 +219,13 @@ class DesktopCore implements VpnCore {
     } on TimeoutException {
       _logController.add('Принудительная остановка...');
       _process!.kill(ProcessSignal.sigkill);
+      // Без ожидания выхода процесс мог остаться держателем порта, и следующее
+      // ядро не смогло бы на него встать.
+      try {
+        await _process!.exitCode.timeout(const Duration(seconds: 5));
+      } on TimeoutException {
+        _logController.add('Xray не завершился, порт может остаться занятым');
+      }
     }
 
     _process = null;
