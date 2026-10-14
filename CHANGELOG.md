@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- Exit region selection. The client groups subscription profiles by the node name
+  the provider sends (`Europe 1`, `Europe 2`, `Kyrgyzstan 1` -> two regions) and
+  shows a picker when a profile has more than one group. The choice is stored per
+  profile, survives a restart, and only the selected region's profiles go into the
+  core config; a region that disappears from the subscription falls back to the
+  first one. Switching on a live tunnel asks for confirmation and reconnects
+  through the new path. Subscriptions whose links carry no names behave as before
+- Profiles, providers and subscriptions replaced the single `config.json` entry
+  point: share links, base64 subscription bodies and subscription URLs, with a
+  cache of the last good answer, usage headers and offline start from cache
+- Journal on its own screen, masked before export: addresses and keys are replaced
+  with placeholders
+
 ## [0.2.1] - 2026-10-13
 
 Windows-only fixes; the Android build is unchanged.

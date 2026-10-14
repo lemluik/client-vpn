@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'profile_config.dart';
 import 'provider.dart';
+import 'region.dart';
 import 'share_link.dart';
 import 'vpn_config.dart';
 
@@ -22,6 +23,7 @@ class StoredProfile {
     this.providerId,
     this.rawJson,
     this.path,
+    this.region,
   });
 
   final String id;
@@ -41,11 +43,20 @@ class StoredProfile {
   /// Путь файла на диске. Есть только на десктопе, где ядро читает файл само.
   final String? path;
 
+  /// Выбранный регион выхода. Null — регион не выбран, работает первый.
+  /// Значение хранится даже если регион пропал из подписки: выбор вернётся,
+  /// когда провайдер снова отдаст этот регион.
+  final String? region;
+
   bool get canStart => kind == ProfileKind.file
       ? (rawJson?.isNotEmpty ?? false)
       : links.isNotEmpty;
 
-  StoredProfile copyWith({String? name, List<ShareLink>? links}) =>
+  StoredProfile copyWith({
+    String? name,
+    List<ShareLink>? links,
+    String? region,
+  }) =>
       StoredProfile(
         id: id,
         name: name ?? this.name,
@@ -55,6 +66,7 @@ class StoredProfile {
         providerId: providerId,
         rawJson: rawJson,
         path: path,
+        region: region ?? this.region,
       );
 
   /// Ссылки сохраняем исходным текстом: это компактнее и не зависит от того,
@@ -68,6 +80,7 @@ class StoredProfile {
         'provider': providerId,
         'json': rawJson,
         'path': path,
+        'region': region,
       };
 
   static StoredProfile fromJson(Map<String, dynamic> json) {
@@ -86,6 +99,7 @@ class StoredProfile {
           json['provider'] is String ? json['provider'] as String : null,
       rawJson: json['json'] is String ? json['json'] as String : null,
       path: json['path'] is String ? json['path'] as String : null,
+      region: json['region'] is String ? json['region'] as String : null,
     );
   }
 }
@@ -305,6 +319,22 @@ class ProfileStore {
     await _prefs.setString(_activeKey, id);
   }
 
+  /// Регионы выхода активного профиля: список извлекается из состава подписки.
+  List<Region> get activeRegions {
+    final profile = active;
+    return profile == null ? const [] : regionsOf(profile.links);
+  }
+
+  /// Выбирает регион выхода профиля. Регион обязан быть в его подписке.
+  Future<void> setRegion(String profileId, String regionKey) async {
+    final profile = _byId(profileId);
+    if (profile == null) return;
+    if (regionByKey(regionsOf(profile.links), regionKey) == null) {
+      throw FormatException('В подключении нет региона: $regionKey');
+    }
+    await _replaceProfile(profile.copyWith(region: regionKey));
+  }
+
   /// Удаляет профиль и его провайдера, если других профилей от него не осталось.
   Future<bool> remove(String id) async {
     final profile = _byId(id);
@@ -352,7 +382,7 @@ class ProfileStore {
     }
     return VpnConfig(
       name: profile.name,
-      json: buildConfigFromLinks(profile.links),
+      json: buildConfigFromLinks(linksOfProfile(profile)),
     );
   }
 
@@ -415,6 +445,14 @@ class ProfileStore {
 
 String _newId(String kind, String seed) =>
     md5.convert(utf8.encode('$kind|$seed')).toString();
+
+/// Профили выбранного региона. Если регион не выбран или пропал из подписки,
+/// работает первый: порядок строк подписки задаёт приоритет.
+List<ShareLink> linksOfProfile(StoredProfile profile) {
+  if (profile.links.isEmpty) return const [];
+  final regions = regionsOf(profile.links);
+  return (regionByKey(regions, profile.region) ?? regions.first).links;
+}
 
 ProfileKind _kindOf(Object? raw) {
   for (final kind in ProfileKind.values) {

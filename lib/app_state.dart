@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'log_mask.dart';
 import 'profile_store.dart';
 import 'provider.dart';
+import 'region.dart';
 import 'share_link.dart';
 import 'subscription.dart';
 import 'temp_config.dart';
@@ -75,6 +76,16 @@ class AppState extends ChangeNotifier {
 
   Provider? get activeProvider => _store.providerOf(_store.active?.providerId);
 
+  /// Регионы выхода активного подключения. Два и больше — пользователь выбирает.
+  List<Region> get regions => _store.activeRegions;
+
+  /// Действующий регион: выбранный, а если он пропал из подписки — первый.
+  Region? get activeRegion {
+    final list = regions;
+    if (list.isEmpty) return null;
+    return regionByKey(list, _store.active?.region) ?? list.first;
+  }
+
   List<Provider> get providers => _store.providers;
 
   List<String> get log => List.unmodifiable(_log);
@@ -100,6 +111,16 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Меняет регион выхода. Туннель перезапускает экран: смена пути рвёт
+  /// установленные соединения, поэтому её подтверждает пользователь.
+  Future<void> selectRegion(String key) async {
+    final profile = _store.active;
+    if (profile == null) return;
+    await _store.setRegion(profile.id, key);
+    _failure = null;
+    notifyListeners();
+  }
+
   Future<void> connect() async {
     if (_state == TunnelState.connecting) return;
 
@@ -112,7 +133,7 @@ class AppState extends ChangeNotifier {
       await _core.validate(config);
       await _core.start(config);
       _state = TunnelState.on;
-      _addLog('Подключено: ${_store.active?.name ?? ''}');
+      _addLog('Подключено: ${_activeLabel()}');
     } catch (error) {
       _state = TunnelState.failure;
       _failure = failureOf(error);
@@ -260,6 +281,15 @@ class AppState extends ChangeNotifier {
       _addLog('[ERR] Соединение прервано');
     }
     notifyListeners();
+  }
+
+  /// Имя подключения вместе с регионом, если провайдер их различает.
+  String _activeLabel() {
+    final name = _store.active?.name ?? '';
+    final region = activeRegion;
+    return regions.length > 1 && region != null
+        ? '$name · ${region.label}'
+        : name;
   }
 
   void _addLog(String line) {

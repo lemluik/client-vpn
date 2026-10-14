@@ -4,6 +4,7 @@ import 'app_state.dart';
 import 'log_screen.dart';
 import 'profile_store.dart';
 import 'provider.dart';
+import 'region.dart';
 
 /// Главный экран: состояние туннеля, список подключений и добавление новых.
 ///
@@ -74,6 +75,14 @@ class _HomeScreenState extends State<HomeScreen> {
                 child:
                     empty ? _EmptyState(onAdd: _showAddSheet) : _profileList(),
               ),
+              if (_state.regions.length > 1) ...[
+                const SizedBox(height: 12),
+                _RegionPicker(
+                  regions: _state.regions,
+                  selected: _state.activeRegion?.key,
+                  onChanged: _selectRegion,
+                ),
+              ],
               const SizedBox(height: 16),
               _StateButton(state: _state, onPressed: empty ? null : _toggle),
               const SizedBox(height: 12),
@@ -138,6 +147,25 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _refreshActive() async {
     final error = await _state.refreshActive();
     _notify(error ?? 'Подписка обновлена');
+  }
+
+  /// Смена региона рвёт установленные соединения, поэтому на поднятом туннеле
+  /// спрашиваем подтверждение и поднимаем туннель заново через новый путь.
+  Future<void> _selectRegion(String key) async {
+    if (!_state.isConnected) {
+      await _state.selectRegion(key);
+      return;
+    }
+
+    final leave = await _confirm(
+      'Сменить регион выхода?',
+      'Туннель будет поднят заново через другой регион. '
+          'Открытые соединения прервутся.',
+    );
+    if (!leave) return;
+    await _state.disconnect();
+    await _state.selectRegion(key);
+    await _state.connect();
   }
 
   Future<void> _rename(StoredProfile profile) async {
@@ -499,6 +527,59 @@ class _ProfileCard extends StatelessWidget {
   }
 
   String _megabytes(int bytes) => (bytes / (1024 * 1024)).toStringAsFixed(0);
+}
+
+/// Выбор региона выхода. Показывается, только когда провайдер отдаёт узлы
+/// нескольких регионов: подписки без регионов работают как раньше.
+class _RegionPicker extends StatelessWidget {
+  const _RegionPicker({
+    required this.regions,
+    required this.selected,
+    required this.onChanged,
+  });
+
+  final List<Region> regions;
+  final String? selected;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    // Выбранный регион мог пропасть после обновления подписки: тогда показываем
+    // действующий, первый, чтобы значение списка всегда совпадало с подключением.
+    final current = regions.any((region) => region.key == selected)
+        ? selected!
+        : regions.first.key;
+
+    return Row(
+      children: [
+        const Icon(Icons.public, size: 20),
+        const SizedBox(width: 8),
+        const Text('Регион выхода'),
+        const SizedBox(width: 8),
+        Expanded(
+          child: DropdownButton<String>(
+            value: current,
+            isExpanded: true,
+            underline: const SizedBox.shrink(),
+            borderRadius: BorderRadius.circular(8),
+            items: [
+              for (final region in regions)
+                DropdownMenuItem(
+                  value: region.key,
+                  child: Text(
+                    '${region.label} · профилей: ${region.links.length}',
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+            ],
+            onChanged: (value) {
+              if (value != null) onChanged(value);
+            },
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 class _StateButton extends StatelessWidget {

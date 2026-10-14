@@ -42,6 +42,7 @@ class ShareLink {
     required this.security,
     required this.network,
     required this.source,
+    this.remark = '',
     this.alterId = 0,
     this.encryption = '',
     this.flow = '',
@@ -61,6 +62,10 @@ class ShareLink {
 
   /// Имя профиля — из якоря ссылки или из поля `ps` у `vmess://`.
   final String name;
+
+  /// Имя, которое прислал провайдер. Пусто, если имени не было и [name]
+  /// заменён адресом: такие профили нельзя группировать по региону.
+  final String remark;
 
   final String address;
   final int port;
@@ -292,6 +297,7 @@ ShareLink _parseInline(Uri uri, LinkProtocol protocol, String source) {
   return ShareLink(
     protocol: protocol,
     name: name.isNotEmpty ? name : address,
+    remark: name,
     address: address,
     port: _portOf(uri),
     id: id,
@@ -374,6 +380,7 @@ ShareLink _parseVmess(String source) {
   return ShareLink(
     protocol: LinkProtocol.vmess,
     name: _nonEmpty(field('ps')) ?? address,
+    remark: _nonEmpty(field('ps')) ?? '',
     address: address,
     port: port,
     id: id,

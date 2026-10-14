@@ -221,4 +221,89 @@ void main() {
       expect(state.exportLog(), isNot(contains('203.0.113.7')));
     });
   });
+
+  group('регион выхода', () {
+    /// Ссылка узла: порт различает профили, имя задаёт регион.
+    String node(int port, String remark) =>
+        'vless://2f6bd5a1-1e73-4b1a-9d3c-000000000001@example.org:$port'
+        '?encryption=none&security=reality'
+        '&pbk=SaMdKeySaMdKeySaMdKeySaMdKeySaMd1234'
+        '&sid=ab12cd34&fp=chrome&type=tcp&sni=example.org'
+        '&flow=xtls-rprx-vision#${Uri.encodeComponent(remark)}';
+
+    final twoRegionLinks = [
+      node(443, 'Europe 1'),
+      node(8443, 'Europe 2'),
+      node(2053, 'Kyrgyzstan 1'),
+    ].join('\n');
+
+    const europeItem = 'Europe · профилей: 2';
+    const kyrgyzItem = 'Kyrgyzstan · профилей: 1';
+
+    testWidgets('выбор региона меняет путь туннеля', (tester) async {
+      final core = FakeCore();
+      final state = await makeState(core: core);
+      addTearDown(state.dispose);
+      await state.addFromText(twoRegionLinks);
+
+      await tester.pumpWidget(ClientVpnApp(state: state));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Регион выхода'), findsOneWidget);
+      expect(find.text(europeItem), findsOneWidget);
+
+      await tester.tap(find.text(europeItem));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(kyrgyzItem).last);
+      await tester.pumpAndSettle();
+
+      expect(state.activeRegion?.key, 'kyrgyzstan');
+
+      await tester.tap(find.text('ПОДКЛЮЧИТЬ'));
+      await tester.pumpAndSettle();
+
+      expect(core.startCalls, 1);
+      expect(core.lastConfig?.json, contains('"port":2053'));
+      expect(core.lastConfig?.json, isNot(contains('"port":443')));
+    });
+
+    testWidgets('смена региона на поднятом туннеле спрашивает разрешение',
+        (tester) async {
+      final core = FakeCore();
+      final state = await makeState(core: core);
+      addTearDown(state.dispose);
+      await state.addFromText(twoRegionLinks);
+
+      await tester.pumpWidget(ClientVpnApp(state: state));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('ПОДКЛЮЧИТЬ'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text(europeItem));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(kyrgyzItem).last);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Сменить регион выхода?'), findsOneWidget);
+      expect(core.startCalls, 1);
+
+      await tester.tap(find.text('Продолжить'));
+      await tester.pumpAndSettle();
+
+      expect(state.activeRegion?.key, 'kyrgyzstan');
+      expect(core.startCalls, 2);
+      expect(find.text('ОТКЛЮЧИТЬ'), findsOneWidget);
+    });
+
+    testWidgets('подписка одного региона не показывает выбор', (tester) async {
+      final state = await makeState();
+      addTearDown(state.dispose);
+      await state.addFromText('$linkOne\n$linkTwo');
+
+      await tester.pumpWidget(ClientVpnApp(state: state));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Регион выхода'), findsNothing);
+    });
+  });
 }
