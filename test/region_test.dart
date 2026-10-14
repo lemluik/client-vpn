@@ -17,10 +17,10 @@ String node(int port, String remark) =>
 /// Подписка двух регионов: строки региона идут подряд, порядок — приоритет.
 final twoRegions = parseLinks(
   [
-    node(443, 'Europe relay 1'),
-    node(8443, 'Europe relay 2'),
-    node(2053, 'Kyrgyzstan relay 1'),
-    node(2096, 'Kyrgyzstan direct'),
+    node(443, 'Germany relay 1'),
+    node(8443, 'Germany relay 2'),
+    node(2053, 'Finland relay 1'),
+    node(2096, 'Finland direct'),
   ].join('\n'),
 ).links;
 
@@ -46,8 +46,8 @@ void main() {
 
   group('метка региона', () {
     test('берётся первое слово имени узла', () {
-      expect(regionLabelOf('EU-РФ1'), 'EU');
-      expect(regionLabelOf('Кыргызстан 2'), 'Кыргызстан');
+      expect(regionLabelOf('DE-Relay 1'), 'DE');
+      expect(regionLabelOf('Finland 2'), 'Finland');
       expect(regionLabelOf('🇩🇪 Germany 01 | Premium'), 'Germany');
     });
 
@@ -61,10 +61,10 @@ void main() {
     test('группирует по имени и сохраняет порядок подписки', () {
       final regions = regionsOf(twoRegions);
 
-      expect(regions.map((region) => region.key), ['europe', 'kyrgyzstan']);
+      expect(regions.map((region) => region.key), ['germany', 'finland']);
       expect(regions.map((region) => region.label), [
-        'Europe',
-        'Kyrgyzstan',
+        'Germany',
+        'Finland',
       ]);
       expect(regions.first.links.map((link) => link.port), [443, 8443]);
       expect(regions.last.links.map((link) => link.port), [2053, 2096]);
@@ -83,7 +83,7 @@ void main() {
       final regions = regionsOf(twoRegions);
 
       expect(regions.last.key, regions.last.label.toLowerCase());
-      expect(regionByKey(regions, 'kyrgyzstan')?.label, 'Kyrgyzstan');
+      expect(regionByKey(regions, 'finland')?.label, 'Finland');
       expect(regionByKey(regions, null), isNull);
       expect(regionByKey(regions, ''), isNull);
       expect(regionByKey(regions, 'uk'), isNull);
@@ -102,20 +102,20 @@ void main() {
       final store = await ProfileStore.open();
       final profile = await store.addLinks(name: 'Подписка', links: twoRegions);
 
-      await store.setRegion(profile.id, 'kyrgyzstan');
+      await store.setRegion(profile.id, 'finland');
 
       expect(portsOf(store.activeConfig().json), [2053, 2096]);
-      expect(store.active?.region, 'kyrgyzstan');
+      expect(store.active?.region, 'finland');
     });
 
     test('выбранный регион переживает перезапуск приложения', () async {
       final store = await ProfileStore.open();
       final profile = await store.addLinks(name: 'Подписка', links: twoRegions);
-      await store.setRegion(profile.id, 'kyrgyzstan');
+      await store.setRegion(profile.id, 'finland');
 
       final reopened = await ProfileStore.open();
 
-      expect(reopened.active?.region, 'kyrgyzstan');
+      expect(reopened.active?.region, 'finland');
       expect(portsOf(reopened.activeConfig().json), [2053, 2096]);
     });
 

@@ -232,13 +232,13 @@ void main() {
         '&flow=xtls-rprx-vision#${Uri.encodeComponent(remark)}';
 
     final twoRegionLinks = [
-      node(443, 'Europe 1'),
-      node(8443, 'Europe 2'),
-      node(2053, 'Kyrgyzstan 1'),
+      node(443, 'Germany 1'),
+      node(8443, 'Germany 2'),
+      node(2053, 'Finland 1'),
     ].join('\n');
 
-    const europeItem = 'Europe · профилей: 2';
-    const kyrgyzItem = 'Kyrgyzstan · профилей: 1';
+    const germanyItem = 'Germany · профилей: 2';
+    const finlandItem = 'Finland · профилей: 1';
 
     testWidgets('выбор региона меняет путь туннеля', (tester) async {
       final core = FakeCore();
@@ -250,14 +250,14 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Регион выхода'), findsOneWidget);
-      expect(find.text(europeItem), findsOneWidget);
+      expect(find.text(germanyItem), findsOneWidget);
 
-      await tester.tap(find.text(europeItem));
+      await tester.tap(find.text(germanyItem));
       await tester.pumpAndSettle();
-      await tester.tap(find.text(kyrgyzItem).last);
+      await tester.tap(find.text(finlandItem).last);
       await tester.pumpAndSettle();
 
-      expect(state.activeRegion?.key, 'kyrgyzstan');
+      expect(state.activeRegion?.key, 'finland');
 
       await tester.tap(find.text('ПОДКЛЮЧИТЬ'));
       await tester.pumpAndSettle();
@@ -279,9 +279,9 @@ void main() {
       await tester.tap(find.text('ПОДКЛЮЧИТЬ'));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text(europeItem));
+      await tester.tap(find.text(germanyItem));
       await tester.pumpAndSettle();
-      await tester.tap(find.text(kyrgyzItem).last);
+      await tester.tap(find.text(finlandItem).last);
       await tester.pumpAndSettle();
 
       expect(find.text('Сменить регион выхода?'), findsOneWidget);
@@ -290,7 +290,7 @@ void main() {
       await tester.tap(find.text('Продолжить'));
       await tester.pumpAndSettle();
 
-      expect(state.activeRegion?.key, 'kyrgyzstan');
+      expect(state.activeRegion?.key, 'finland');
       expect(core.startCalls, 2);
       expect(find.text('ОТКЛЮЧИТЬ'), findsOneWidget);
     });
