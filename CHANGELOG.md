@@ -39,6 +39,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   application in plain language instead of a core error. This is what broke
   switching the exit country on a live tunnel
 
+### Changed
+
+- The connection control is a round disc in the centre of the screen instead of a
+  full-width button. Its colour, ring, glow, glyph and caption follow the tunnel
+  state (ready, connecting, protected, failed): the disc dips on press, the icon
+  and the caption cross-fade on every change, and a spinner replaces the glyph
+  while the tunnel is coming up. Adding a connection moved from the extended
+  floating button to a plain icon in the top bar next to the journal, which also
+  ends the collision between the status line and the button
+- The empty screen shows no disc — there is nothing to connect to — and its
+  explanation scrolls instead of overflowing in a short window
+
 ## [0.2.1] - 2026-10-13
 
 Windows-only fixes; the Android build is unchanged.
