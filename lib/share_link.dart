@@ -455,7 +455,8 @@ String _networkOf(Map<String, String> params) =>
 
 String _normalizeNetwork(String raw) {
   final network = switch (raw.trim().toLowerCase()) {
-    '' || 'tcp' => 'tcp',
+    // Провайдеры пишут «нет транспорта» по-разному: none, raw или пустой type.
+    '' || 'tcp' || 'none' || 'raw' => 'tcp',
     'h2' => 'http',
     final String value => value,
   };

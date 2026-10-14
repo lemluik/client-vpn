@@ -41,6 +41,12 @@ void main() {
       expect(link.source, realityLink);
     });
 
+    test('принимает none и raw как tcp-транспорт', () {
+      expect(parseShareLink(vless(query: 'type=none')).network, 'tcp');
+      expect(parseShareLink(vless(query: 'type=raw')).network, 'tcp');
+      expect(parseShareLink(vless(query: 'type=')).network, 'tcp');
+    });
+
     test('подставляет порт 443 и имя по адресу, если их нет', () {
       final link =
           parseShareLink('vless://$testUuid@example.org?security=none');
