@@ -9,9 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- Exit region selection. The client groups subscription profiles by the node name
-  the provider sends (`Europe 1`, `Europe 2`, `Kyrgyzstan 1` -> two regions) and
-  shows a picker when a profile has more than one group. The choice is stored per
+- Exit country selection. The client groups subscription profiles by the node name
+  the provider sends (`🇪🇺 Europe 1`, `🇪🇺 Europe 2`, `🇰🇬 Kyrgyzstan 1` -> two
+  countries) and shows a picker when a profile has more than one group. The label
+  keeps the provider's full name together with its flag; the stored key is the
+  name alone, so a node renumbered or re-flagged stays the same choice. The picker
+  is a list opened from the row above the connect button: flags and full names,
+  with the number of profiles per country. The choice is stored per
   profile, survives a restart, and only the selected region's profiles go into the
   core config; a region that disappears from the subscription falls back to the
   first one. Switching on a live tunnel asks for confirmation and reconnects

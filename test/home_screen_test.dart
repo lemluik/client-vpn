@@ -232,19 +232,19 @@ void main() {
         '&flow=xtls-rprx-vision#${Uri.encodeComponent(remark)}';
 
     final twoRegionLinks = [
-      node(443, 'Germany 1'),
-      node(8443, 'Germany 2'),
-      node(2053, 'Finland 1'),
+      node(443, '🇩🇪 Germany 1'),
+      node(8443, '🇩🇪 Germany 2'),
+      node(2053, '🇫🇮 Finland 1'),
     ].join('\n');
 
-    const germanyItem = 'Germany · профилей: 2';
-    const finlandItem = 'Finland · профилей: 1';
+    const germanyLabel = '🇩🇪 Germany';
+    const finlandLabel = '🇫🇮 Finland';
 
-    testWidgets('выбор региона меняет путь туннеля', (tester) async {
+    testWidgets('выбор страны из списка меняет путь туннеля', (tester) async {
       final core = FakeCore();
       final state = await makeState(core: core);
       addTearDown(state.dispose);
-      // Реальный размер окна клиента: строка выбора региона обязана помещаться.
+      // Реальный размер окна клиента: строка выбора страны обязана помещаться.
       tester.view.physicalSize = const Size(500, 700);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
@@ -253,15 +253,19 @@ void main() {
       await tester.pumpWidget(ClientVpnApp(state: state));
       await tester.pumpAndSettle();
 
-      expect(find.text('Регион выхода'), findsOneWidget);
-      expect(find.text(germanyItem), findsOneWidget);
+      expect(find.text('Страна выхода'), findsOneWidget);
+      expect(find.text(germanyLabel), findsOneWidget);
 
-      await tester.tap(find.text(germanyItem));
+      await tester.tap(find.text(germanyLabel));
       await tester.pumpAndSettle();
-      await tester.tap(find.text(finlandItem).last);
+      expect(find.text('Профилей: 2'), findsOneWidget);
+      expect(find.text('Профилей: 1'), findsOneWidget);
+
+      await tester.tap(find.text(finlandLabel));
       await tester.pumpAndSettle();
 
       expect(state.activeRegion?.key, 'finland');
+      expect(find.text(finlandLabel), findsOneWidget);
 
       await tester.tap(find.text('ПОДКЛЮЧИТЬ'));
       await tester.pumpAndSettle();
@@ -271,7 +275,7 @@ void main() {
       expect(core.lastConfig?.json, isNot(contains('"port":443')));
     });
 
-    testWidgets('смена региона на поднятом туннеле спрашивает разрешение',
+    testWidgets('смена страны на поднятом туннеле спрашивает разрешение',
         (tester) async {
       final core = FakeCore();
       final state = await makeState(core: core);
@@ -283,12 +287,12 @@ void main() {
       await tester.tap(find.text('ПОДКЛЮЧИТЬ'));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text(germanyItem));
+      await tester.tap(find.text(germanyLabel));
       await tester.pumpAndSettle();
-      await tester.tap(find.text(finlandItem).last);
+      await tester.tap(find.text(finlandLabel));
       await tester.pumpAndSettle();
 
-      expect(find.text('Сменить регион выхода?'), findsOneWidget);
+      expect(find.text('Сменить страну выхода?'), findsOneWidget);
       expect(core.startCalls, 1);
 
       await tester.tap(find.text('Продолжить'));
@@ -307,7 +311,7 @@ void main() {
       await tester.pumpWidget(ClientVpnApp(state: state));
       await tester.pumpAndSettle();
 
-      expect(find.text('Регион выхода'), findsNothing);
+      expect(find.text('Страна выхода'), findsNothing);
     });
   });
 }

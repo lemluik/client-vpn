@@ -14,13 +14,13 @@ String node(int port, String remark) =>
     '&sid=ab12cd34&fp=chrome&type=tcp&sni=example.org'
     '&flow=xtls-rprx-vision#${Uri.encodeComponent(remark)}';
 
-/// Подписка двух регионов: строки региона идут подряд, порядок — приоритет.
+/// Подписка двух стран: строки региона идут подряд, порядок — приоритет.
 final twoRegions = parseLinks(
   [
-    node(443, 'Germany relay 1'),
-    node(8443, 'Germany relay 2'),
-    node(2053, 'Finland relay 1'),
-    node(2096, 'Finland direct'),
+    node(443, '🇩🇪 Germany relay 1'),
+    node(8443, '🇩🇪 Germany relay 2'),
+    node(2053, '🇫🇮 Finland relay 1'),
+    node(2096, '🇫🇮 Finland direct'),
   ].join('\n'),
 ).links;
 
@@ -44,14 +44,23 @@ void main() {
 
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
-  group('метка региона', () {
-    test('берётся первое слово имени узла', () {
-      expect(regionLabelOf('DE-Relay 1'), 'DE');
-      expect(regionLabelOf('Finland 2'), 'Finland');
-      expect(regionLabelOf('🇩🇪 Germany 01 | Premium'), 'Germany');
+  group('название и метка страны', () {
+    test('название — первое слово, латиница и кириллица одинаково', () {
+      expect(regionNameOf('DE-Relay 1'), 'DE');
+      expect(regionNameOf('Finland 2'), 'Finland');
+      expect(regionNameOf('🇪🇺 Европа 2'), 'Европа');
+      expect(regionNameOf('🇰🇬 Кыргызстан 1'), 'Кыргызстан');
     });
 
-    test('имя из цифр и пустое имя региона не дают', () {
+    test('метка — флаг и полное название, флаг не пропадает', () {
+      expect(regionLabelOf('🇩🇪 Germany 01 | Premium'), '🇩🇪 Germany');
+      expect(regionLabelOf('🇪🇺 Европа 1'), '🇪🇺 Европа');
+      expect(regionLabelOf('Finland 2'), 'Finland');
+      expect(regionFlagOf('🇰🇬 Кыргызстан 1'), '🇰🇬');
+      expect(regionFlagOf('Germany 1'), isEmpty);
+    });
+
+    test('имя из цифр и пустое имя страны не дают', () {
       expect(regionLabelOf('01'), isEmpty);
       expect(regionLabelOf(''), isEmpty);
     });
@@ -63,11 +72,18 @@ void main() {
 
       expect(regions.map((region) => region.key), ['germany', 'finland']);
       expect(regions.map((region) => region.label), [
-        'Germany',
-        'Finland',
+        '🇩🇪 Germany',
+        '🇫🇮 Finland',
       ]);
       expect(regions.first.links.map((link) => link.port), [443, 8443]);
       expect(regions.last.links.map((link) => link.port), [2053, 2096]);
+    });
+
+    test('ключ — название без флага, поэтому выбор переживает смену значка', () {
+      final regions = regionsOf(twoRegions);
+
+      expect(regionByKey(regions, 'finland')?.label, '🇫🇮 Finland');
+      expect(regions.every((region) => !region.key.contains('🇫')), isTrue);
     });
 
     test('без имён провайдера регион один и выбор не предлагается', () {
@@ -79,11 +95,9 @@ void main() {
       expect(regions.single.links, hasLength(2));
     });
 
-    test('поиск по метке: ключ — метка в нижнем регистре, чужой метки нет', () {
+    test('поиск по метке: пустого и чужого ключа нет', () {
       final regions = regionsOf(twoRegions);
 
-      expect(regions.last.key, regions.last.label.toLowerCase());
-      expect(regionByKey(regions, 'finland')?.label, 'Finland');
       expect(regionByKey(regions, null), isNull);
       expect(regionByKey(regions, ''), isNull);
       expect(regionByKey(regions, 'uk'), isNull);

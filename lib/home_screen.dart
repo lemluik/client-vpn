@@ -149,7 +149,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _notify(error ?? 'Подписка обновлена');
   }
 
-  /// Смена региона рвёт установленные соединения, поэтому на поднятом туннеле
+  /// Смена страны рвёт установленные соединения, поэтому на поднятом туннеле
   /// спрашиваем подтверждение и поднимаем туннель заново через новый путь.
   Future<void> _selectRegion(String key) async {
     if (!_state.isConnected) {
@@ -158,8 +158,8 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     final leave = await _confirm(
-      'Сменить регион выхода?',
-      'Туннель будет поднят заново через другой регион. '
+      'Сменить страну выхода?',
+      'Туннель будет поднят заново через другую страну. '
           'Открытые соединения прервутся.',
     );
     if (!leave) return;
@@ -529,8 +529,9 @@ class _ProfileCard extends StatelessWidget {
   String _megabytes(int bytes) => (bytes / (1024 * 1024)).toStringAsFixed(0);
 }
 
-/// Выбор региона выхода. Показывается, только когда провайдер отдаёт узлы
-/// нескольких регионов: подписки без регионов работают как раньше.
+/// Выбор страны выхода. Показывается, только когда провайдер отдаёт узлы
+/// нескольких стран: подписки без регионов работают как раньше. Список
+/// открывается по тапу по строке, поэтому страну выбирают до подключения.
 class _RegionPicker extends StatelessWidget {
   const _RegionPicker({
     required this.regions,
@@ -549,35 +550,64 @@ class _RegionPicker extends StatelessWidget {
     final current = regions.any((region) => region.key == selected)
         ? selected!
         : regions.first.key;
+    final region = regions.firstWhere((r) => r.key == current);
 
-    return Row(
-      children: [
-        const Icon(Icons.public, size: 20),
-        const SizedBox(width: 8),
-        const Text('Регион выхода'),
-        const SizedBox(width: 8),
-        Expanded(
-          child: DropdownButton<String>(
-            value: current,
-            isExpanded: true,
-            underline: const SizedBox.shrink(),
-            borderRadius: BorderRadius.circular(8),
-            items: [
-              for (final region in regions)
-                DropdownMenuItem(
-                  value: region.key,
-                  child: Text(
-                    '${region.label} · профилей: ${region.links.length}',
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-            ],
-            onChanged: (value) {
-              if (value != null) onChanged(value);
-            },
-          ),
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: () => _openList(context, current),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+        child: Row(
+          children: [
+            const Icon(Icons.public, size: 20),
+            const SizedBox(width: 8),
+            const Text('Страна выхода'),
+            const SizedBox(width: 8),
+            const Spacer(),
+            Flexible(
+              child: Text(
+                region.label,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.end,
+              ),
+            ),
+            const Icon(Icons.keyboard_arrow_down, size: 20),
+          ],
         ),
-      ],
+      ),
+    );
+  }
+
+  void _openList(BuildContext context, String current) {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 4, 16, 8),
+              child: Text('Страна выхода'),
+            ),
+            for (final region in regions)
+              ListTile(
+                title: Text(
+                  region.label,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                subtitle: Text('Профилей: ${region.links.length}'),
+                trailing:
+                    region.key == current ? const Icon(Icons.check) : null,
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  if (region.key != current) onChanged(region.key);
+                },
+              ),
+          ],
+        ),
+      ),
     );
   }
 }
