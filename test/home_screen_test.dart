@@ -101,6 +101,7 @@ void main() {
       expect(find.text('Быстрый доступ в интернет'), findsOneWidget);
       expect(find.text('Добавить подключение'), findsOneWidget);
       expect(find.byType(FloatingActionButton), findsNothing);
+      expect(find.byTooltip('Добавить подключение'), findsOneWidget);
       expect(find.text('Отключено'), findsOneWidget);
     });
 
@@ -126,6 +127,28 @@ void main() {
       expect(state.profiles.single.kind, ProfileKind.links);
     });
 
+    testWidgets('плюс в шапке добавляет подключение к существующим',
+        (tester) async {
+      final state = await makeState();
+      addTearDown(state.dispose);
+      await state.addFromText(linkOne);
+
+      await tester.pumpWidget(ClientVpnApp(state: state));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Добавить подключение'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Ссылка или подписка'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField), linkTwo);
+      await tester.tap(find.text('Добавить'));
+      await tester.pumpAndSettle();
+
+      expect(state.profiles, hasLength(2));
+      expect(find.text('Узел 2'), findsOneWidget);
+    });
+
     testWidgets('подключение и отключение одной кнопкой', (tester) async {
       final core = FakeCore();
       final state = await makeState(core: core);
@@ -136,14 +159,30 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('2 профилей'), findsOneWidget);
-      await tester.tap(find.text('ПОДКЛЮЧИТЬ'));
+
+      // Кнопка — круг по центру экрана, плавающей кнопки больше нет.
+      final orb = find.byIcon(Icons.power_settings_new);
+      expect(orb, findsOneWidget);
+      expect(find.byType(FloatingActionButton), findsNothing);
+      expect(
+        find.byWidgetPredicate((widget) {
+          final decoration =
+              widget is AnimatedContainer ? widget.decoration : null;
+          return decoration is BoxDecoration &&
+              decoration.shape == BoxShape.circle;
+        }),
+        findsOneWidget,
+      );
+      expect(tester.getCenter(orb).dx, 400);
+
+      await tester.tap(find.text('Подключить'));
       await tester.pumpAndSettle();
 
       expect(find.text('Защищено'), findsOneWidget);
       expect(core.startCalls, 1);
       expect(core.lastConfig?.json, contains('cvpn-proxy'));
 
-      await tester.tap(find.text('ОТКЛЮЧИТЬ'));
+      await tester.tap(find.text('Отключить'));
       await tester.pumpAndSettle();
 
       expect(find.text('Отключено'), findsOneWidget);
@@ -161,7 +200,7 @@ void main() {
       await tester.pumpWidget(ClientVpnApp(state: state));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('ПОДКЛЮЧИТЬ'));
+      await tester.tap(find.text('Подключить'));
       await tester.pumpAndSettle();
 
       expect(find.text('Сбой'), findsOneWidget);
@@ -173,7 +212,7 @@ void main() {
         find.text('Подключитесь снова или выберите другой профиль'),
         findsOneWidget,
       );
-      expect(find.text('ПОДКЛЮЧИТЬ СНОВА'), findsOneWidget);
+      expect(find.text('Подключить снова'), findsOneWidget);
     });
 
     testWidgets('обрыв со стороны ядра — это сбой, а не отключение',
@@ -185,7 +224,7 @@ void main() {
 
       await tester.pumpWidget(ClientVpnApp(state: state));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('ПОДКЛЮЧИТЬ'));
+      await tester.tap(find.text('Подключить'));
       await tester.pumpAndSettle();
 
       core.dropConnection();
@@ -268,7 +307,7 @@ void main() {
       expect(state.activeRegion?.key, 'finland');
       expect(find.text(finlandLabel), findsOneWidget);
 
-      await tester.tap(find.text('ПОДКЛЮЧИТЬ'));
+      await tester.tap(find.text('Подключить'));
       await tester.pumpAndSettle();
 
       expect(core.startCalls, 1);
@@ -285,7 +324,7 @@ void main() {
 
       await tester.pumpWidget(ClientVpnApp(state: state));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('ПОДКЛЮЧИТЬ'));
+      await tester.tap(find.text('Подключить'));
       await tester.pumpAndSettle();
 
       await tester.tap(find.text(germanyLabel));
@@ -301,7 +340,7 @@ void main() {
 
       expect(state.activeRegion?.key, 'finland');
       expect(core.startCalls, 2);
-      expect(find.text('ОТКЛЮЧИТЬ'), findsOneWidget);
+      expect(find.text('Отключить'), findsOneWidget);
     });
 
     testWidgets('подписка одного региона не показывает выбор', (tester) async {

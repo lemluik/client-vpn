@@ -55,6 +55,11 @@ class _HomeScreenState extends State<HomeScreen> {
               onPressed: _state.isBusy ? null : _refreshActive,
             ),
           IconButton(
+            tooltip: 'Добавить подключение',
+            icon: const Icon(Icons.add),
+            onPressed: _state.isBusy ? null : _showAddSheet,
+          ),
+          IconButton(
             tooltip: 'Журнал',
             icon: const Icon(Icons.article_outlined),
             onPressed: _openLog,
@@ -84,21 +89,18 @@ class _HomeScreenState extends State<HomeScreen> {
                   onChanged: _selectRegion,
                 ),
               ],
-              const SizedBox(height: 16),
-              _StateButton(state: _state, onPressed: empty ? null : _toggle),
-              const SizedBox(height: 12),
+              // Пустой экран без диска: подключаться не к чему, а место
+              // под объяснение и его кнопку нужно отдать целиком.
+              if (!empty) ...[
+                const SizedBox(height: 16),
+                Center(child: _ConnectOrb(state: _state, onPressed: _toggle)),
+                const SizedBox(height: 12),
+              ],
               _StatusLine(state: _state),
             ],
           ),
         ),
       ),
-      floatingActionButton: empty
-          ? null
-          : FloatingActionButton.extended(
-              onPressed: _state.isBusy ? null : _showAddSheet,
-              icon: const Icon(Icons.add),
-              label: const Text('Добавить'),
-            ),
     );
   }
 
@@ -106,7 +108,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final active = _state.activeProfile;
 
     return ListView.separated(
-      padding: const EdgeInsets.only(bottom: 72),
+      padding: const EdgeInsets.only(bottom: 8),
       itemCount: _state.profiles.length,
       separatorBuilder: (context, index) => const SizedBox(height: 8),
       itemBuilder: (context, index) {
@@ -416,44 +418,53 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Круглая кнопка отняла место у объяснения: в маленьком окне текст
+    // должен прокручиваться, а не выходить за границы Column.
     return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 420),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.vpn_key_outlined,
-              size: 72,
-              color: Theme.of(context).colorScheme.primary,
+      child: LayoutBuilder(
+        builder: (context, constraints) => SingleChildScrollView(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              minHeight: constraints.maxHeight,
+              maxWidth: 420,
             ),
-            const SizedBox(height: 20),
-            Text(
-              'Быстрый доступ в интернет',
-              style: Theme.of(context).textTheme.headlineSmall,
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Добавьте ключ от вашего провайдера или адрес подписки — '
-              'клиент сам соберёт подключение. Своих серверов у клиента нет, '
-              'он работает с любым провайдером.',
-              style: Theme.of(context).textTheme.bodyMedium,
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 28),
-            SizedBox(
-              height: 52,
-              child: FilledButton.icon(
-                onPressed: onAdd,
-                icon: const Icon(Icons.add),
-                label: const Text(
-                  'Добавить подключение',
-                  style: TextStyle(fontSize: 16),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.vpn_key_outlined,
+                  size: 72,
+                  color: Theme.of(context).colorScheme.primary,
                 ),
-              ),
+                const SizedBox(height: 20),
+                Text(
+                  'Быстрый доступ в интернет',
+                  style: Theme.of(context).textTheme.headlineSmall,
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Добавьте ключ от вашего провайдера или адрес подписки — '
+                  'клиент сам соберёт подключение. Своих серверов у клиента нет, '
+                  'он работает с любым провайдером.',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 28),
+                SizedBox(
+                  height: 52,
+                  child: FilledButton.icon(
+                    onPressed: onAdd,
+                    icon: const Icon(Icons.add),
+                    label: const Text(
+                      'Добавить подключение',
+                      style: TextStyle(fontSize: 16),
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -619,52 +630,157 @@ class _CountryLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Text(
-    defaultTargetPlatform == TargetPlatform.windows || region.flag.isEmpty
-        ? region.name
-        : region.label,
-    overflow: TextOverflow.ellipsis,
-  );
+        defaultTargetPlatform == TargetPlatform.windows || region.flag.isEmpty
+            ? region.name
+            : region.label,
+        overflow: TextOverflow.ellipsis,
+      );
 }
 
-class _StateButton extends StatelessWidget {
-  const _StateButton({required this.state, required this.onPressed});
+/// Круглая кнопка подключения: цвет и кольцо показывают состояние,
+/// жест вниз втягивает диск, как настоящая кнопка.
+class _ConnectOrb extends StatefulWidget {
+  const _ConnectOrb({required this.state, required this.onPressed});
+
   final AppState state;
-  final Future<void> Function()? onPressed;
+  final Future<void> Function() onPressed;
+
+  static const double _diameter = 124;
+
+  @override
+  State<_ConnectOrb> createState() => _ConnectOrbState();
+}
+
+class _ConnectOrbState extends State<_ConnectOrb> {
+  bool _pressed = false;
+
+  AppState get _state => widget.state;
+
+  void _press(bool value) {
+    if (mounted) setState(() => _pressed = value);
+  }
 
   @override
   Widget build(BuildContext context) {
-    final connecting = state.state == TunnelState.connecting;
-    final connected = state.isConnected;
+    final connecting = _state.state == TunnelState.connecting;
+    final connected = _state.isConnected;
+    final failed = _state.state == TunnelState.failure;
     final colors = Theme.of(context).colorScheme;
 
-    final label = switch (state.state) {
-      TunnelState.connecting => 'ПОДКЛЮЧЕНИЕ…',
-      TunnelState.on => 'ОТКЛЮЧИТЬ',
-      TunnelState.failure => 'ПОДКЛЮЧИТЬ СНОВА',
-      TunnelState.off => 'ПОДКЛЮЧИТЬ',
+    // Во время подключения диск занят: canConnect уже исключает этот кадр.
+    final enabled = _state.canConnect || connected;
+
+    final (fill, ring, glyph, glow, caption) = switch (_state.state) {
+      TunnelState.on => (
+          colors.primary,
+          colors.primary.withValues(alpha: 0.35),
+          Colors.white,
+          colors.primary.withValues(alpha: 0.40),
+          'Отключить',
+        ),
+      TunnelState.connecting => (
+          colors.primaryContainer,
+          colors.primary.withValues(alpha: 0.55),
+          colors.onPrimaryContainer,
+          colors.primary.withValues(alpha: 0.18),
+          'Подключение…',
+        ),
+      TunnelState.failure => (
+          colors.errorContainer,
+          colors.error.withValues(alpha: 0.45),
+          colors.onErrorContainer,
+          colors.error.withValues(alpha: 0.18),
+          'Подключить снова',
+        ),
+      TunnelState.off => (
+          colors.surfaceContainerHighest,
+          colors.outline,
+          colors.onSurfaceVariant,
+          Colors.transparent,
+          'Подключить',
+        ),
     };
 
-    return SizedBox(
-      height: 64,
-      child: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 220),
-        child: FilledButton.icon(
-          key: ValueKey(state.state),
-          onPressed: state.canConnect || connected ? onPressed : null,
-          style: FilledButton.styleFrom(
-            backgroundColor: connected ? colors.errorContainer : null,
-            foregroundColor: connected ? colors.onErrorContainer : null,
-          ),
-          icon: connecting
-              ? const SizedBox(
-                  width: 22,
-                  height: 22,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : Icon(
-                  connected ? Icons.power_settings_new : Icons.shield_outlined,
+    return Semantics(
+      button: true,
+      enabled: enabled,
+      label: caption,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: enabled ? widget.onPressed : null,
+        onTapDown: enabled ? (_) => _press(true) : null,
+        onTapUp: (_) => _press(false),
+        onTapCancel: () => _press(false),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AnimatedScale(
+              scale: _pressed ? 0.94 : 1.0,
+              duration: const Duration(milliseconds: 130),
+              curve: Curves.easeOut,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 320),
+                curve: Curves.easeOutCubic,
+                width: _ConnectOrb._diameter,
+                height: _ConnectOrb._diameter,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: fill,
+                  border: Border.all(color: ring, width: 4),
+                  boxShadow: [
+                    BoxShadow(
+                      color: glow,
+                      blurRadius: 28,
+                      spreadRadius: _state.isConnected ? 4 : 0,
+                    ),
+                  ],
                 ),
-          label: Text(label, style: const TextStyle(fontSize: 18)),
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    if (connecting)
+                      SizedBox.fromSize(
+                        size: const Size(
+                          _ConnectOrb._diameter - 18,
+                          _ConnectOrb._diameter - 18,
+                        ),
+                        child: CircularProgressIndicator(
+                          color: glyph,
+                          strokeWidth: 3,
+                        ),
+                      ),
+                    AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 220),
+                      child: Icon(
+                        connecting
+                            ? Icons.hourglass_top
+                            : connected
+                                ? Icons.lock
+                                : failed
+                                    ? Icons.refresh
+                                    : Icons.power_settings_new,
+                        key: ValueKey(_state.state),
+                        size: connecting ? 34 : 52,
+                        color: glyph,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 220),
+              child: Text(
+                caption,
+                key: ValueKey(_state.state),
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: enabled ? null : colors.outline,
+                    ),
+              ),
+            ),
+          ],
         ),
       ),
     );
