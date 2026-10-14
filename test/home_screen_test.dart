@@ -244,6 +244,10 @@ void main() {
       final core = FakeCore();
       final state = await makeState(core: core);
       addTearDown(state.dispose);
+      // Реальный размер окна клиента: строка выбора региона обязана помещаться.
+      tester.view.physicalSize = const Size(500, 700);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
       await state.addFromText(twoRegionLinks);
 
       await tester.pumpWidget(ClientVpnApp(state: state));
