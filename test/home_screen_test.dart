@@ -5,6 +5,7 @@ import 'package:client_vpn/main.dart';
 import 'package:client_vpn/profile_store.dart';
 import 'package:client_vpn/vpn_config.dart';
 import 'package:client_vpn/vpn_core.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -312,6 +313,22 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Страна выхода'), findsNothing);
+    });
+
+    testWidgets('Windows не показывает значок флага, название остаётся',
+        (tester) async {
+      final state = await makeState();
+      addTearDown(state.dispose);
+      await state.addFromText(twoRegionLinks);
+
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      await tester.pumpWidget(ClientVpnApp(state: state));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Germany'), findsOneWidget);
+      expect(find.text('🇩🇪 Germany'), findsNothing);
+      // Значение foundation-переменной обязано вернуться в null до конца теста.
+      debugDefaultTargetPlatformOverride = null;
     });
   });
 }

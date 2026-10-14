@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'app_state.dart';
@@ -565,11 +566,7 @@ class _RegionPicker extends StatelessWidget {
             const SizedBox(width: 8),
             const Spacer(),
             Flexible(
-              child: Text(
-                region.label,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.end,
-              ),
+              child: _CountryLabel(region),
             ),
             const Icon(Icons.keyboard_arrow_down, size: 20),
           ],
@@ -593,10 +590,7 @@ class _RegionPicker extends StatelessWidget {
             ),
             for (final region in regions)
               ListTile(
-                title: Text(
-                  region.label,
-                  overflow: TextOverflow.ellipsis,
-                ),
+                title: _CountryLabel(region),
                 subtitle: Text('Профилей: ${region.links.length}'),
                 trailing:
                     region.key == current ? const Icon(Icons.check) : null,
@@ -612,9 +606,28 @@ class _RegionPicker extends StatelessWidget {
   }
 }
 
+/// Флаг и полное название страны.
+///
+/// Windows не рисует значки из пар региональных индикаторов: вместо флага в
+/// интерфейсе остаются две буквы («EU Европа»), и с явным Segoe UI Emoji так
+/// же. На Windows показываем только полное название; флаг при этом остаётся в
+/// имени узла, в журнале и в подписке провайдера.
+class _CountryLabel extends StatelessWidget {
+  const _CountryLabel(this.region);
+
+  final Region region;
+
+  @override
+  Widget build(BuildContext context) => Text(
+    defaultTargetPlatform == TargetPlatform.windows || region.flag.isEmpty
+        ? region.name
+        : region.label,
+    overflow: TextOverflow.ellipsis,
+  );
+}
+
 class _StateButton extends StatelessWidget {
   const _StateButton({required this.state, required this.onPressed});
-
   final AppState state;
   final Future<void> Function()? onPressed;
 

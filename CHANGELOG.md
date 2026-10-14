@@ -15,7 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   keeps the provider's full name together with its flag; the stored key is the
   name alone, so a node renumbered or re-flagged stays the same choice. The picker
   is a list opened from the row above the connect button: flags and full names,
-  with the number of profiles per country. The choice is stored per
+  with the number of profiles per country. Windows cannot draw a flag built of
+  regional indicator pairs and shows its two letters instead, so there the label is
+  the full name without the glyph; the flag stays in the node name, the journal and
+  the subscription. The choice is stored per
   profile, survives a restart, and only the selected region's profiles go into the
   core config; a region that disappears from the subscription falls back to the
   first one. Switching on a live tunnel asks for confirmation and reconnects
@@ -25,6 +28,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   cache of the last good answer, usage headers and offline start from cache
 - Journal on its own screen, masked before export: addresses and keys are replaced
   with placeholders
+
+### Fixed
+
+- Restarting the tunnel immediately after stopping it failed with the core's
+  `bind: Only one usage of each socket address`: the local inbound port is not
+  released at the moment the previous core process exits. The client now waits
+  for the port to free up before starting the core (and after a forced kill waits
+  for the process to actually finish), and reports a port held by another
+  application in plain language instead of a core error. This is what broke
+  switching the exit country on a live tunnel
 
 ## [0.2.1] - 2026-10-13
 

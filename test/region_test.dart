@@ -83,7 +83,14 @@ void main() {
       final regions = regionsOf(twoRegions);
 
       expect(regionByKey(regions, 'finland')?.label, '🇫🇮 Finland');
-      expect(regions.every((region) => !region.key.contains('🇫')), isTrue);
+      expect(
+        regions.every(
+          (region) => region.key.runes.every(
+            (r) => r < 0x1F1E6 || r > 0x1F1FF,
+          ),
+        ),
+        isTrue,
+      );
     });
 
     test('без имён провайдера регион один и выбор не предлагается', () {

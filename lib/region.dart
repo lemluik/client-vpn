@@ -7,18 +7,28 @@ import 'share_link.dart';
 /// универсальным и не знает нашего набора регионов. Порядок строк подписки
 /// сохраняется и внутри региона остаётся приоритетом профилей.
 class Region {
-  const Region({required this.key, required this.label, required this.links});
+  const Region({
+    required this.key,
+    required this.name,
+    required this.flag,
+    required this.links,
+  });
 
-    /// Идентификатор для хранения: название региона в нижнем регистре,
+  /// Идентификатор для хранения: название региона в нижнем регистре,
   /// без значка флага и порядкового номера узла.
   final String key;
 
-  /// Текст для интерфейса: значок флага и полное название, как их прислал
-  /// провайдер.
-  final String label;
+  /// Полное название страны, как его прислал провайдер: «Европа», «Germany».
+  final String name;
+
+  /// Значок флага из имени узла; пустой, если провайдер флаг не прислал.
+  final String flag;
 
   /// Профили региона в порядке приоритета.
   final List<ShareLink> links;
+
+  /// Текст для интерфейса: флаг и полное название.
+  String get label => flag.isEmpty ? name : '$flag $name';
 }
 
 /// Метка и подпись группы для профилей, которым провайдер не дал имени.
@@ -41,15 +51,16 @@ List<Region> regionsOf(Iterable<ShareLink> links) {
   final regions = <Region>[];
 
   for (final link in links) {
-    final key = regionNameOf(link.remark).toLowerCase();
+    final name = regionNameOf(link.remark);
+    final key = name.toLowerCase();
     final known = positions[key];
     if (known == null) {
       positions[key] = regions.length;
-      final label = regionLabelOf(link.remark);
       regions.add(
         Region(
           key: key,
-          label: label.isEmpty ? unnamedRegionLabel : label,
+          name: name.isEmpty ? unnamedRegionLabel : name,
+          flag: name.isEmpty ? '' : regionFlagOf(link.remark),
           links: [link],
         ),
       );
