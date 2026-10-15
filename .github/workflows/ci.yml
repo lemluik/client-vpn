@@ -114,10 +114,22 @@ jobs:
       - name: Сборка APK
         run: flutter build apk --release
 
+      # артефакт магазина обязан нести лицензию и уведомления (пункт У-6),
+      # а релиз — контрольную сумму (R1.10)
+      - name: Лицензионные файлы и sums
+        run: |
+          cd build/app/outputs/flutter-apk
+          cp "$GITHUB_WORKSPACE/NOTICE" "$GITHUB_WORKSPACE/LICENSE" .
+          sha256sum app-release.apk LICENSE NOTICE > SHA256SUMS.txt
+
       - uses: actions/upload-artifact@v4
         with:
           name: client-vpn-android-${{ github.ref_name }}
-          path: build/app/outputs/flutter-apk/app-release.apk
+          path: |-
+            build/app/outputs/flutter-apk/app-release.apk
+            build/app/outputs/flutter-apk/LICENSE
+            build/app/outputs/flutter-apk/NOTICE
+            build/app/outputs/flutter-apk/SHA256SUMS.txt
           if-no-files-found: error
 
   windows:
@@ -153,10 +165,16 @@ jobs:
       - name: Упаковать
         run: |
           cd build/windows/x64/runner/Release
+          cp "$GITHUB_WORKSPACE/LICENSE" "$GITHUB_WORKSPACE/NOTICE" .
           7z a -tzip "$GITHUB_WORKSPACE/client-vpn-windows-${GITHUB_REF_NAME}.zip" .
+
+      - name: Контрольная сумма архива
+        run: sha256sum client-vpn-windows-${{ github.ref_name }}.zip > SHA256SUMS.txt
 
       - uses: actions/upload-artifact@v4
         with:
           name: client-vpn-windows-${{ github.ref_name }}
-          path: client-vpn-windows-${{ github.ref_name }}.zip
+          path: |-
+            client-vpn-windows-${{ github.ref_name }}.zip
+            SHA256SUMS.txt
           if-no-files-found: error
