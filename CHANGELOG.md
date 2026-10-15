@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Settings screen behind the gear button in the top-left corner of the home screen: theme
+  (system, light, dark), start with the system, auto-connect to the connection that last worked,
+  and the list of saved profiles where one can be selected, renamed or removed
+- Autostart keeps the system's own flag rather than a copy of it: on Windows that is the
+  `HKCU\...\Run` value of the current user, on Android a boot receiver opens the app after start
 - Support chat accepts screenshots: the composer has an attach button, the file is uploaded to the
   homeserver and sent as an `m.image` event, and incoming images are downloaded and shown inline.
   Both the authenticated media API (Matrix 1.11+) and the legacy one are tried, so homeservers that

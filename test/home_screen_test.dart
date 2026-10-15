@@ -1,10 +1,12 @@
 import 'dart:async';
 
 import 'package:client_vpn/app_state.dart';
+import 'package:client_vpn/autostart.dart';
 import 'package:client_vpn/chat_service.dart';
 import 'package:client_vpn/chat_store.dart';
 import 'package:client_vpn/main.dart';
 import 'package:client_vpn/profile_store.dart';
+import 'package:client_vpn/settings_store.dart';
 import 'package:client_vpn/vpn_config.dart';
 import 'package:client_vpn/vpn_core.dart';
 import 'package:flutter/foundation.dart';
@@ -94,14 +96,30 @@ class _NullVault implements TokenVault {
   Future<void> erase(String key) async {}
 }
 
-Future<AppState> makeState({FakeCore? core}) async {
+Future<AppState> makeState({FakeCore? core, Autostart? autostart}) async {
   SharedPreferences.setMockInitialValues({});
   return AppState(
     await ProfileStore.open(),
     core ?? FakeCore(),
+    settings: await SettingsStore.open(),
+    autostart: autostart ?? FakeAutostart(),
     // Запись служебного конфига проверена отдельно в temp_config_test.
     configWriter: (config) async => config,
   );
+}
+
+/// Автозапуск без реестра: экран настроек проверяет только чтение и запись флага.
+class FakeAutostart implements Autostart {
+  bool on = false;
+
+  @override
+  bool get supported => true;
+
+  @override
+  Future<bool> isOn() async => on;
+
+  @override
+  Future<void> set(bool value) async => on = value;
 }
 
 void main() {
@@ -120,12 +138,59 @@ void main() {
       expect(find.text('Отключено'), findsOneWidget);
     });
 
+    testWidgets('шестерёнка слева открывает настройки', (tester) async {
+      final state = await makeState();
+      addTearDown(state.dispose);
+      await state.addFromText(linkOne);
+
+      await tester.pumpWidget(ClientVpnApp(state: state));
+      await tester.pumpAndSettle();
+
+      // Кнопка в leading: слева, в том же стиле, что журнал и чат.
+      final gear = find.byTooltip('Настройки');
+      expect(gear, findsOneWidget);
+      expect(tester.getCenter(gear).dx, lessThan(60));
+
+      await tester.tap(gear);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Оформление'), findsOneWidget);
+      expect(find.text('Автоподключение при запуске'), findsOneWidget);
+    });
+
+    testWidgets('автоподключение при запуске поднимает последний успешный профиль',
+        (tester) async {
+      final first = await makeState();
+      addTearDown(first.dispose);
+      await first.addFromText(linkOne);
+      await first.setAutoConnect(true);
+      await first.connect();
+      expect(first.isConnected, isTrue);
+
+      // Перезапуск приложения: то же хранилище, новое ядро.
+      final core = FakeCore();
+      final restarted = AppState(
+        await ProfileStore.open(),
+        core,
+        settings: await SettingsStore.open(),
+        configWriter: (config) async => config,
+      );
+      addTearDown(restarted.dispose);
+
+      await restarted.autoConnectOnLaunch();
+
+      expect(restarted.autoConnect, isTrue);
+      expect(core.startCalls, 1);
+      expect(restarted.activeProfile?.id, first.settings.lastProfileId);
+    });
+
     testWidgets('кнопка поддержки видна и без добавленного подключения',
         (tester) async {
       SharedPreferences.setMockInitialValues({});
       final state = AppState(
         await ProfileStore.open(),
         FakeCore(),
+        settings: await SettingsStore.open(),
         configWriter: (config) async => config,
         chat: ChatService(ChatStore(
           await SharedPreferences.getInstance(),

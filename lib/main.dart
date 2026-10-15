@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -53,10 +54,20 @@ class _ClientVpnAppState extends State<ClientVpnApp> with WindowListener {
   void initState() {
     super.initState();
     if (isDesktop) windowManager.addListener(this);
+    widget.state.addListener(_onChange);
+    // Первая отрисована: окно видно, пока поднимается туннель.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(widget.state.autoConnectOnLaunch());
+    });
+  }
+
+  void _onChange() {
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
+    widget.state.removeListener(_onChange);
     if (isDesktop) windowManager.removeListener(this);
     super.dispose();
   }
@@ -73,6 +84,7 @@ class _ClientVpnAppState extends State<ClientVpnApp> with WindowListener {
     return MaterialApp(
       title: 'КлиентВПН',
       debugShowCheckedModeBanner: false,
+      themeMode: widget.state.themeChoice.mode,
       theme: ThemeData(
         colorSchemeSeed: Colors.blue,
         useMaterial3: true,

@@ -15,6 +15,7 @@ class MainActivity : FlutterActivity() {
 
     companion object {
         private const val CHANNEL = "client_vpn/tunnel"
+        private const val APP_CHANNEL = "client_vpn/app"
         private const val USER_CONFIG = "user-config.json"
         private const val CONSENT_REQUEST = 4242
     }
@@ -45,6 +46,24 @@ class MainActivity : FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
+
+        // Автозапуск: значение читает и пишет система, Dart только показывает переключатель.
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, APP_CHANNEL)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "isAutoStart" -> result.success(AutoStart.isOn(this))
+                    "setAutoStart" -> {
+                        val value = call.arguments as? Boolean
+                        if (value == null) {
+                            result.error("bad_argument", "Не передан флаг автозапуска", null)
+                        } else {
+                            AutoStart.set(this, value)
+                            result.success(null)
+                        }
+                    }
+                    else -> result.notImplemented()
+                }
+            }
     }
 
     /** Прогоняет конфиг пользователя через `xray run -test` — как на десктопе. */

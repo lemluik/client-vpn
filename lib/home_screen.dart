@@ -6,6 +6,7 @@ import 'log_screen.dart';
 import 'profile_store.dart';
 import 'provider.dart';
 import 'region.dart';
+import 'settings_screen.dart';
 import 'support_chat_screen.dart';
 
 /// Главный экран: состояние туннеля, список подключений и добавление новых.
@@ -48,6 +49,11 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         title: const Text('КлиентВПН'),
         centerTitle: true,
+        leading: IconButton(
+          tooltip: 'Настройки',
+          icon: const Icon(Icons.settings_outlined),
+          onPressed: _openSettings,
+        ),
         actions: [
           if (!empty && _state.activeProvider != null)
             IconButton(
@@ -235,6 +241,14 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
     return result ?? false;
+  }
+
+  void _openSettings() {
+    Navigator.push(
+      context,
+      MaterialPageRoute<void>(
+          builder: (context) => SettingsScreen(state: _state)),
+    );
   }
 
   void _openLog() {

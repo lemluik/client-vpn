@@ -9,6 +9,7 @@ import 'package:client_vpn/chat_store.dart';
 import 'package:client_vpn/matrix_api.dart';
 import 'package:client_vpn/profile_store.dart';
 import 'package:client_vpn/provider.dart';
+import 'package:client_vpn/settings_store.dart';
 import 'package:client_vpn/support_chat_screen.dart';
 import 'package:client_vpn/vpn_config.dart';
 import 'package:client_vpn/vpn_core.dart';
@@ -249,7 +250,12 @@ void main() {
       call: node.call,
       delay: (_) async {},
     );
-    state = AppState(await ProfileStore.open(), IdleCore(), chat: chat);
+    state = AppState(
+      await ProfileStore.open(),
+      IdleCore(),
+      settings: await SettingsStore.open(),
+      chat: chat,
+    );
   });
 
   tearDown(() {
