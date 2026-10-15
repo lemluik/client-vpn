@@ -83,10 +83,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 _FailureCard(failure: _state.failure!),
                 const SizedBox(height: 16),
               ],
-              Expanded(
-                child:
-                    empty ? _EmptyState(onAdd: _showAddSheet) : _profileList(),
-              ),
+              if (empty)
+                Expanded(child: _EmptyState(onAdd: _showAddSheet))
+              else
+                Flexible(child: _profileList()),
               if (_state.regions.length > 1) ...[
                 const SizedBox(height: 12),
                 _RegionPicker(
@@ -99,7 +99,11 @@ class _HomeScreenState extends State<HomeScreen> {
               // под объяснение и его кнопку нужно отдать целиком.
               if (!empty) ...[
                 const SizedBox(height: 16),
-                Center(child: _ConnectOrb(state: _state, onPressed: _toggle)),
+                Expanded(
+                  child: Center(
+                    child: _ConnectOrb(state: _state, onPressed: _toggle),
+                  ),
+                ),
                 const SizedBox(height: 12),
               ],
               _StatusLine(state: _state),
@@ -114,6 +118,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final active = _state.activeProfile;
 
     return ListView.separated(
+      shrinkWrap: true,
       padding: const EdgeInsets.only(bottom: 8),
       itemCount: _state.profiles.length,
       separatorBuilder: (context, index) => const SizedBox(height: 8),

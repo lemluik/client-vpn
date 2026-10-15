@@ -14,6 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   Both the authenticated media API (Matrix 1.11+) and the legacy one are tried, so homeservers that
   serve media only on the old path keep working
 
+### Changed
+
+- The connect button sits in the middle of the home screen instead of being pinned to the bottom:
+  the profile list now takes only the height it needs and the button is centered in the space left
+
 ### Fixed
 
 - Recovery after a core failure is not wired to anything yet: on Windows the system proxy can stay

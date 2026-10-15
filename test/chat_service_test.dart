@@ -66,6 +66,10 @@ class FakeNode {
           : _reply(200, found);
     }
 
+    if (path.endsWith('/messages')) {
+      return _reply(200, {'chunk': []});
+    }
+
     bodies.add(jsonDecode(request.body!)['body'] as String);
     txns.add(path.split('/').last);
     final failure = sendFailures.isEmpty ? null : sendFailures.removeAt(0);
@@ -329,11 +333,18 @@ void main() {
       expect(chat.messages.single.failed, isTrue);
       expect(chat.queued, 1);
       chat.stop();
+      // У остановленного цикла остаётся невостребованный long-poll: гасим его,
+      // иначе ответ уйдёт старому соединению, а новый вход будет ждать вечно.
+      node.answerSync({'rooms': {}, 'next_batch': 's0'});
+      await pump();
 
       // Перезапуск приложения: очередь восстановилась и ушла на узел прежним
       // txnId — дубля на стороне homeserver не будет.
       final restored = service();
-      expect(await restored.resume(providerId), isTrue);
+      final resumed = restored.resume(providerId);
+      await pump();
+      node.answerSync({'rooms': {'join': {room: {}}}, 'next_batch': 's1'});
+      expect(await resumed, isTrue);
       await pump();
 
       expect(restored.messages.single.body, 'Потерялось');

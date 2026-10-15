@@ -212,6 +212,12 @@ void main() {
         findsOneWidget,
       );
       expect(tester.getCenter(orb).dx, 400);
+      // По вертикали — середина свободной области, а не низ экрана.
+      expect(tester.getCenter(orb).dy, inInclusiveRange(200, 400));
+      expect(
+        tester.getCenter(orb).dy,
+        lessThan(tester.getTopLeft(find.text('Отключено')).dy),
+      );
 
       await tester.tap(find.text('Подключить'));
       await tester.pumpAndSettle();
