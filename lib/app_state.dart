@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'chat_service.dart';
 import 'chat_store.dart';
+import 'deep_link.dart';
 import 'log_mask.dart';
 import 'profile_store.dart';
 import 'provider.dart';
@@ -71,6 +72,7 @@ class AppState extends ChangeNotifier {
     PresetStore? presets,
     String languageCode = '',
     Stream<List<ConnectivityResult>>? networks,
+    Stream<String>? deepLinks,
   })  : _writeConfig = configWriter ??
             (Platform.isAndroid ? _passThrough : ensureConfigOnDisk),
         _chat = chat,
@@ -80,6 +82,7 @@ class AppState extends ChangeNotifier {
     _logSubscription = _core.logs.listen(_onLog);
     _statusSubscription = _core.statusChanges.listen(_onStatus);
     _networkSubscription = networks?.listen(_onNetworks);
+    _deepLinkSubscription = deepLinks?.listen(_onDeepLink);
   }
 
   static Future<AppState> create() async {
@@ -91,6 +94,7 @@ class AppState extends ChangeNotifier {
       presets: PresetStore(prefs),
       languageCode: PlatformDispatcher.instance.locale.languageCode,
       networks: Connectivity().onConnectivityChanged,
+      deepLinks: deepLinkStream(),
     );
   }
 
@@ -114,6 +118,7 @@ class AppState extends ChangeNotifier {
   StreamSubscription<List<ConnectivityResult>>? _networkSubscription;
   Timer? _networkTimer;
   String? _networkKey;
+  StreamSubscription<String>? _deepLinkSubscription;
 
   final List<String> _log = [];
   TunnelState _state = TunnelState.off;
@@ -380,6 +385,19 @@ class AppState extends ChangeNotifier {
     await connect();
   }
 
+  /// Тап по ссылке подключения вне приложения: окно открывается уже с новым
+  /// профилем, поэтому экран в этом не участвует и подтверждения не просит.
+  void _onDeepLink(String link) => unawaited(_addFromDeepLink(link));
+
+  Future<void> _addFromDeepLink(String link) async {
+    final reason = await addFromText(link);
+    // Ссылка держит ключ узла, а причина отказа повторяет саму строку:
+    // в журнал она попадает только через маскирование.
+    _addLog(reason == null
+        ? 'Подключение добавлено по ссылке'
+        : maskSecrets('Ссылка не добавлена: $reason'));
+  }
+
   void _onStatus(bool running) {
     if (running) {
       _state = TunnelState.on;
@@ -427,6 +445,7 @@ class AppState extends ChangeNotifier {
     _statusSubscription?.cancel();
     _networkTimer?.cancel();
     _networkSubscription?.cancel();
+    _deepLinkSubscription?.cancel();
     _chat?.dispose();
     unawaited(_core.dispose());
     unawaited(clearWorkingDirectory());

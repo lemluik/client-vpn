@@ -30,6 +30,17 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <!-- Глубокая ссылка по стандартным схемам протоколов: тап в
+                 браузере или мессенджере открывает этого клиента и передаёт
+                 ссылку через MainActivity. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="vless"/>
+                <data android:scheme="trojan"/>
+                <data android:scheme="vmess"/>
+            </intent-filter>
         </activity>
 
         <service

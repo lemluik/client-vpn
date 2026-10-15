@@ -15,6 +15,7 @@ class MainActivity : FlutterActivity() {
 
     companion object {
         private const val CHANNEL = "client_vpn/tunnel"
+        private const val DEEP_LINK_CHANNEL = "client_vpn/deep_link"
         private const val USER_CONFIG = "user-config.json"
         private const val CONSENT_REQUEST = 4242
     }
@@ -22,8 +23,12 @@ class MainActivity : FlutterActivity() {
     private lateinit var channel: MethodChannel
     private var pendingConsent: MethodChannel.Result? = null
 
+    private var deepLinkChannel: MethodChannel? = null
+    private var pendingLink: String? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        pendingLink = linkOf(intent)
         TunnelBus.subscribe { method, argument ->
             runOnUiThread { channel.invokeMethod(method, argument) }
         }
@@ -45,6 +50,47 @@ class MainActivity : FlutterActivity() {
                 "status" -> result.success(TunnelBus.lastStatus)
                 else -> result.notImplemented()
             }
+        }
+
+        deepLinkChannel = MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            DEEP_LINK_CHANNEL,
+        ).apply {
+            setMethodCallHandler { call, result ->
+                when (call.method) {
+                    // Ссылка холодного старта забирается один раз, чтобы
+                    // пересоздание движка не добавило её повторно.
+                    "takePending" -> {
+                        result.success(pendingLink)
+                        pendingLink = null
+                    }
+                    else -> result.notImplemented()
+                }
+            }
+        }
+    }
+
+    /** Тап по ссылке, когда приложение уже живёт: singleTop даёт новый интент
+     *  вместо второго экземпляра активности. */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        val link = linkOf(intent) ?: return
+        val deepLinks = deepLinkChannel
+        if (deepLinks == null) {
+            pendingLink = link
+            return
+        }
+        runOnUiThread { deepLinks.invokeMethod("link", link) }
+    }
+
+    /** Наружу отдаём только стандартные схемы протоколов: MAIN-интент и
+     *  прочие системные ссылки ссылкой подключения не являются. */
+    private fun linkOf(intent: Intent?): String? {
+        val data = intent?.data ?: return null
+        return when (data.scheme) {
+            "vless", "trojan", "vmess" -> data.toString()
+            else -> null
         }
     }
 
