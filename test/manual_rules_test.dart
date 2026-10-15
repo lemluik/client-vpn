@@ -8,6 +8,7 @@ import 'package:client_vpn/profile_config.dart';
 import 'package:client_vpn/profile_store.dart';
 import 'package:client_vpn/routing_presets.dart';
 import 'package:client_vpn/rules_screen.dart';
+import 'package:client_vpn/settings_store.dart';
 import 'package:client_vpn/share_link.dart';
 import 'package:client_vpn/vpn_config.dart';
 import 'package:client_vpn/vpn_core.dart';
@@ -332,6 +333,7 @@ void main() {
       final state = AppState(
         store,
         core,
+        settings: await SettingsStore.open(),
         configWriter: (config) async => config,
         perApps: PerAppStore(await SharedPreferences.getInstance()),
         appExclusions: (packages) async => sent.add(packages),
@@ -358,6 +360,7 @@ void main() {
       final state = AppState(
         store,
         core,
+        settings: await SettingsStore.open(),
         configWriter: (config) async => config,
         ruleStore: RuleStore(
           await SharedPreferences.getInstance(),
@@ -389,6 +392,7 @@ void main() {
       final state = AppState(
         store,
         CapturingCore(),
+        settings: await SettingsStore.open(),
         configWriter: (config) async => config,
         ruleStore: RuleStore(await SharedPreferences.getInstance()),
       );

@@ -4,6 +4,7 @@ import 'package:client_vpn/android_core.dart';
 import 'package:client_vpn/app_proxy.dart';
 import 'package:client_vpn/app_state.dart';
 import 'package:client_vpn/profile_store.dart';
+import 'package:client_vpn/settings_store.dart';
 import 'package:client_vpn/system_proxy.dart';
 import 'package:client_vpn/tun_config.dart';
 import 'package:client_vpn/vpn_config.dart';
@@ -58,6 +59,7 @@ Future<AppState> makeState(VpnCore core) async {
   return AppState(
     await ProfileStore.open(),
     core,
+    settings: await SettingsStore.open(),
     configWriter: (config) async => config,
   );
 }

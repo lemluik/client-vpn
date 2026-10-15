@@ -21,6 +21,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get tooltipSettings => 'Настройки';
 
   @override
+  String get tooltipMore => 'Дополнительно';
+
+  @override
   String get tooltipLog => 'Журнал';
 
   @override

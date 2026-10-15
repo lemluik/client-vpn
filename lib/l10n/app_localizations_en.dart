@@ -21,6 +21,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get tooltipSettings => 'Settings';
 
   @override
+  String get tooltipMore => 'More';
+
+  @override
   String get tooltipLog => 'Log';
 
   @override

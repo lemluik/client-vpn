@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Settings screen behind the gear button in the top-left corner of the home screen: theme
+  (system, light, dark), start with the system, auto-connect to the connection that last worked,
+  and the list of saved profiles where one can be selected, renamed or removed
+- Autostart keeps the system's own flag rather than a copy of it: on Windows that is the
+  `HKCU\...\Run` value of the current user, on Android a boot receiver opens the app after start
+- Support chat accepts screenshots: the composer has an attach button, the file is uploaded to the
+  homeserver and sent as an `m.image` event, and incoming images are downloaded and shown inline.
+  Both the authenticated media API (Matrix 1.11+) and the legacy one are tried, so homeservers that
+  serve media only on the old path keep working
+
+### Changed
+
+- The connect button sits in the middle of the home screen instead of being pinned to the bottom:
+  the profile list now keeps its natural height, two spacers center the button in the space left,
+  and the connection status stays at the bottom edge of the window
+- The connect button keeps the same power glyph once the tunnel is up instead of switching to a
+  padlock; the active state is shown by the filled circle and its glow
+- The support team member is called an "operator" everywhere in the chat interface and texts,
+  replacing the previous wording
+
 ### Fixed
 
 - Recovery after a core failure is wired to startup. It was written and never called, so on Windows

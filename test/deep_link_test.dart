@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:client_vpn/app_state.dart';
 import 'package:client_vpn/deep_link.dart';
 import 'package:client_vpn/profile_store.dart';
+import 'package:client_vpn/settings_store.dart';
 import 'package:client_vpn/vpn_config.dart';
 import 'package:client_vpn/vpn_core.dart';
 import 'package:flutter/services.dart';
@@ -76,6 +77,7 @@ Future<AppState> opened({Stream<String>? links}) async {
     await ProfileStore.open(),
     QuietCore(),
     // Запись служебного конфига проверена в temp_config_test.
+    settings: await SettingsStore.open(),
     configWriter: (config) async => config,
     deepLinks: links,
   );

@@ -12,6 +12,7 @@ import 'provider.dart';
 import 'region.dart';
 import 'routing_presets.dart';
 import 'rules_screen.dart';
+import 'settings_screen.dart';
 import 'support_chat_screen.dart';
 import 'update_screen.dart';
 
@@ -56,6 +57,11 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         title: Text(l.appTitle),
         centerTitle: true,
+        leading: IconButton(
+          tooltip: l.tooltipSettings,
+          icon: const Icon(Icons.settings_outlined),
+          onPressed: _openSettings,
+        ),
         actions: [
           if (!empty && _state.activeProvider != null)
             IconButton(
@@ -69,7 +75,7 @@ class _HomeScreenState extends State<HomeScreen> {
             onPressed: _state.isBusy ? null : _showAddSheet,
           ),
           IconButton(
-            tooltip: l.tooltipSettings,
+            tooltip: l.tooltipMore,
             icon: const Icon(Icons.tune),
             onPressed: _state.isBusy ? null : _showSettingsSheet,
           ),
@@ -96,24 +102,26 @@ class _HomeScreenState extends State<HomeScreen> {
                 _FailureCard(failure: _state.failure!),
                 const SizedBox(height: 16),
               ],
-              Expanded(
-                child:
-                    empty ? _EmptyState(onAdd: _showAddSheet) : _profileList(),
-              ),
-              if (_state.regions.length > 1) ...[
-                const SizedBox(height: 12),
-                _RegionPicker(
-                  regions: _state.regions,
-                  selected: _state.activeRegion?.key,
-                  onChanged: _selectRegion,
+              if (empty)
+                Expanded(child: _EmptyState(onAdd: _showAddSheet))
+              else ...[
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 260),
+                  child: _profileList(),
                 ),
-              ],
-              // Пустой экран без диска: подключаться не к чему, а место
-              // под объяснение и его кнопку нужно отдать целиком.
-              if (!empty) ...[
-                const SizedBox(height: 16),
-                Center(child: _ConnectOrb(state: _state, onPressed: _toggle)),
-                const SizedBox(height: 12),
+                if (_state.regions.length > 1) ...[
+                  const SizedBox(height: 12),
+                  _RegionPicker(
+                    regions: _state.regions,
+                    selected: _state.activeRegion?.key,
+                    onChanged: _selectRegion,
+                  ),
+                ],
+                // Два одинаковых Spacer'а ставят диск ровно в середину
+                // оставшегося места, а строка статуса остаётся у нижнего края.
+                const Spacer(),
+                _ConnectOrb(state: _state, onPressed: _toggle),
+                const Spacer(),
               ],
               _StatusLine(state: _state),
             ],
@@ -127,6 +135,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final active = _state.activeProfile;
 
     return ListView.separated(
+      shrinkWrap: true,
       padding: const EdgeInsets.only(bottom: 8),
       itemCount: _state.profiles.length,
       separatorBuilder: (context, index) => const SizedBox(height: 8),
@@ -250,6 +259,14 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
     return result ?? false;
+  }
+
+  void _openSettings() {
+    Navigator.push(
+      context,
+      MaterialPageRoute<void>(
+          builder: (context) => SettingsScreen(state: _state)),
+    );
   }
 
   void _openLog() {
@@ -1001,11 +1018,9 @@ class _ConnectOrbState extends State<_ConnectOrb> {
                       child: Icon(
                         connecting
                             ? Icons.hourglass_top
-                            : connected
-                                ? Icons.lock
-                                : failed
-                                    ? Icons.refresh
-                                    : Icons.power_settings_new,
+                            : failed
+                                ? Icons.refresh
+                                : Icons.power_settings_new,
                         key: ValueKey(_state.state),
                         size: connecting ? 34 : 52,
                         color: glyph,

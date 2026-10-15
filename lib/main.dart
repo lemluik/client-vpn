@@ -87,10 +87,21 @@ class _ClientVpnAppState extends State<ClientVpnApp> with WindowListener {
       windowManager.addListener(this);
       widget.state.addListener(_updateTrayTooltip);
     }
+    widget.state.addListener(_onChange);
+    // Первая отрисована: окно видно, пока поднимается туннель.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(widget.state.autoConnectOnLaunch());
+    });
+  }
+
+  /// Пересборка нужна самому `MaterialApp`: тема живёт в его `themeMode`.
+  void _onChange() {
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
+    widget.state.removeListener(_onChange);
     if (isDesktop) {
       widget.state.removeListener(_updateTrayTooltip);
       windowManager.removeListener(this);
@@ -170,6 +181,7 @@ class _ClientVpnAppState extends State<ClientVpnApp> with WindowListener {
         // англоязычная — английский, прочая откатывается на русский как первый.
         supportedLocales: AppLocalizations.supportedLocales,
         localizationsDelegates: AppLocalizations.localizationsDelegates,
+        themeMode: widget.state.themeChoice.mode,
         theme: _theme(lightDynamic, Brightness.light),
         darkTheme: _theme(darkDynamic, Brightness.dark),
         home: Builder(

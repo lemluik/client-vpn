@@ -1,3 +1,6 @@
+import 'dart:typed_data';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import 'app_state.dart';
@@ -5,18 +8,66 @@ import 'chat_service.dart';
 import 'matrix_api.dart';
 import 'provider.dart';
 
+/// Снимок, который выбрал пользователь: имя и содержимое.
+class PickedImage {
+  const PickedImage({required this.name, required this.bytes});
+
+  final String name;
+  final Uint8List bytes;
+}
+
+/// Выбор снимка. В испытаниях подменяется: системный диалог в тесте не открыть.
+typedef ImagePicker = Future<PickedImage?> Function();
+
+/// Диалог выбора изображения: на телефоне это галерея, на компьютере — проводник.
+/// Содержимое читаем через picker: на мобильной платформе путь это content URI,
+/// которым файл напрямую не открыть.
+Future<PickedImage?> pickSupportImage() async {
+  final picked = await FilePicker.pickFile(
+    dialogTitle: 'Выберите снимок',
+    type: FileType.image,
+  );
+  if (picked == null) return null;
+  return PickedImage(name: picked.name, bytes: await picked.readAsBytes());
+}
+
+/// Тип файла по расширению: узел кладёт его в `info.mimetype`, и оператор видит
+/// снимок тем, чем он сделан.
+String imageMimeType(String name) {
+  final dot = name.lastIndexOf('.');
+  final ext = dot < 0 ? '' : name.substring(dot + 1).toLowerCase();
+  return switch (ext) {
+    'png' => 'image/png',
+    'jpg' || 'jpeg' => 'image/jpeg',
+    'gif' => 'image/gif',
+    'webp' => 'image/webp',
+    'bmp' => 'image/bmp',
+    'heic' => 'image/heic',
+    'heif' => 'image/heif',
+    _ => 'application/octet-stream',
+  };
+}
+
 /// Чат поддержки внутри клиента: узел и комнату даёт провайдер, учётка уже
-/// выпущена. Самостоятельной регистрации на узлах нет, вложений и звонков в
-/// первой версии тоже — только текст.
+/// выпущена. Самостоятельной регистрации на узлах нет, звонков тоже — только
+/// текст и снимки экрана.
 ///
 /// Провайдер необязателен: без него чат доступен как «первая помощь» тому, у
 /// кого ключ ещё не добавлен или туннель не поднимается. Такая сессия
 /// хранится под отдельным ключом и с данными провайдера не смешивается.
 class SupportChatScreen extends StatefulWidget {
-  const SupportChatScreen({required this.state, this.provider, super.key});
+  const SupportChatScreen({
+    required this.state,
+    this.provider,
+    this.pickImage,
+    super.key,
+  });
 
   final AppState state;
   final Provider? provider;
+
+  /// Чем выбирать снимок. По умолчанию — системный диалог.
+  final ImagePicker? pickImage;
 
   @override
   State<SupportChatScreen> createState() => _SupportChatScreenState();
@@ -117,6 +168,7 @@ class _SupportChatScreenState extends State<SupportChatScreen> {
                       replies: chat.quickReplies,
                       onSend: _send,
                       onPick: _pick,
+                      onAttach: _attach,
                       onRetry: chat.retry,
                     ),
                   ],
@@ -178,6 +230,29 @@ class _SupportChatScreenState extends State<SupportChatScreen> {
     _scrollToEnd();
   }
 
+  /// Отправка снимка. Отказ от выбора файла ошибкой не считается — пользователь
+  /// просто передумал, поэтому сообщение показываем только на сбой отправки.
+  Future<void> _attach() async {
+    final chat = _chat;
+    if (chat == null) return;
+    final picked = await (widget.pickImage ?? pickSupportImage)();
+    if (picked == null || picked.bytes.isEmpty) return;
+    final error = await chat.sendImage(
+      bytes: picked.bytes,
+      name: picked.name,
+      mimeType: imageMimeType(picked.name),
+    );
+    _scrollToEnd();
+    if (error != null) _snack(error);
+  }
+
+  void _snack(String text) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(text)));
+  }
+
   void _scrollToEnd() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scroll.hasClients) {
@@ -188,7 +263,7 @@ class _SupportChatScreenState extends State<SupportChatScreen> {
 }
 
 /// Приватность и маршрут трафика — обе вещи пользователь видит до отправки:
-/// текст читает дежурный, а чат идёт через туннель, только если туннель поднят.
+/// текст читает оператор, а чат идёт через туннель, только если туннель поднят.
 class _PrivacyNote extends StatelessWidget {
   const _PrivacyNote({required this.tunnelUp});
 
@@ -210,7 +285,7 @@ class _PrivacyNote extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              'Сообщения читает дежурный поддержки — не пишите пароли и данные карты. '
+              'Сообщения читает оператор поддержки — не пишите пароли и данные карты. '
               'Туннель ${tunnelUp ? 'поднят: чат идёт через него' : 'выключен: чат идёт напрямую'}.',
               style: Theme.of(context).textTheme.bodySmall,
             ),
@@ -291,7 +366,10 @@ class _Bubble extends StatelessWidget {
                     color: colors.primary,
                   ),
                 ),
-              Text(message.body, style: TextStyle(color: onFill)),
+              if (message.image == null)
+                Text(message.body, style: TextStyle(color: onFill))
+              else
+                _Attachment(image: message.image!, onFill: onFill),
               const SizedBox(height: 2),
               Text(
                 _status(mine),
@@ -322,11 +400,57 @@ class _Bubble extends StatelessWidget {
   }
 }
 
+/// Вложение в сообщении: снимок целиком, а пока он не скачался — имя файла.
+class _Attachment extends StatelessWidget {
+  const _Attachment({required this.image, required this.onFill});
+
+  final ChatImage image;
+  final Color onFill;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!image.loaded) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox(
+            width: 14,
+            height: 14,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              'Загрузка снимка… ${image.name}',
+              style: TextStyle(color: onFill),
+            ),
+          ),
+        ],
+      );
+    }
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxHeight: 240),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: Image.memory(
+          image.bytes!,
+          fit: BoxFit.contain,
+          errorBuilder: (context, error, stack) => Text(
+            'Снимок не открылся: ${image.name}',
+            style: TextStyle(color: onFill),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _Composer extends StatelessWidget {
   const _Composer({
     required this.controller,
     required this.blocked,
     required this.onSend,
+    required this.onAttach,
     required this.onRetry,
     this.replies = const [],
     this.onPick,
@@ -337,6 +461,7 @@ class _Composer extends StatelessWidget {
   final List<QuickReply> replies;
   final Future<void> Function(QuickReply)? onPick;
   final Future<void> Function() onSend;
+  final Future<void> Function() onAttach;
   final Future<void> Function() onRetry;
 
   @override
@@ -346,22 +471,35 @@ class _Composer extends StatelessWidget {
       children: [
         if (replies.isNotEmpty) ...[
           // Кнопки пришли из комнаты — набор задаёт провайдер, а не клиент.
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
+          // Перенос по строкам: восемь категорий не помещаются в одну полосу.
+          LayoutBuilder(
+            builder: (context, constraints) => Wrap(
+              spacing: 8,
+              runSpacing: 6,
               children: [
                 for (final reply in replies)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 8, bottom: 6),
-                    child: ActionChip(
+                  ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: constraints.maxWidth),
+                    // ActionChip не переносит длинную подпись и обрезает её,
+                    // поэтому кнопка категории — TextButton в виде чипа.
+                    child: TextButton(
                       key: ValueKey('quick.${reply.id}'),
-                      label: Text(reply.caption),
                       onPressed: blocked ? null : () => onPick?.call(reply),
+                      style: TextButton.styleFrom(
+                        minimumSize: const Size(0, 36),
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        side: BorderSide(color: Theme.of(context).colorScheme.outline),
+                      ),
+                      child: Text(reply.caption),
                     ),
                   ),
               ],
             ),
           ),
+          const SizedBox(height: 6),
         ],
         Row(
           children: [
@@ -374,13 +512,19 @@ class _Composer extends StatelessWidget {
                 maxLines: 4,
                 textInputAction: TextInputAction.newline,
                 decoration: const InputDecoration(
-                  hintText: 'Сообщение дежурному',
+                  hintText: 'Сообщение оператору',
                   border: OutlineInputBorder(),
                   isDense: true,
                 ),
               ),
             ),
             const SizedBox(width: 8),
+            IconButton(
+              key: const ValueKey('attach'),
+              tooltip: 'Приложить снимок',
+              icon: const Icon(Icons.attach_file),
+              onPressed: blocked ? null : onAttach,
+            ),
             IconButton(
               tooltip: 'Отправить',
               icon: const Icon(Icons.send),
@@ -459,7 +603,7 @@ class _SignInState extends State<_SignIn> {
           Text(
             'Учётку для чата выдаёт провайдер вместе с ключом. '
             'Регистрации в приложении нет: войти можно только готовым логином '
-            'и паролем. Сообщения читает дежурный поддержки.',
+            'и паролем. Сообщения читает оператор поддержки.',
             style: Theme.of(context).textTheme.bodyMedium,
           ),
           const SizedBox(height: 16),

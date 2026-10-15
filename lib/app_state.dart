@@ -5,6 +5,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'autostart.dart';
 import 'chat_service.dart';
 import 'chat_store.dart';
 import 'deep_link.dart';
@@ -17,6 +18,7 @@ import 'provider.dart';
 import 'reconnect.dart';
 import 'region.dart';
 import 'routing_presets.dart';
+import 'settings_store.dart';
 import 'share_link.dart';
 import 'subscription.dart';
 import 'temp_config.dart';
@@ -74,8 +76,10 @@ class AppState extends ChangeNotifier {
   AppState(
     this._store,
     this._core, {
+    required SettingsStore settings,
     ConfigWriter? configWriter,
     ChatService? chat,
+    Autostart? autostart,
     PresetStore? presets,
     RuleStore? ruleStore,
     PerAppStore? perApps,
@@ -88,6 +92,8 @@ class AppState extends ChangeNotifier {
   })  : _writeConfig = configWriter ??
             (Platform.isAndroid ? _passThrough : ensureConfigOnDisk),
         _chat = chat,
+        _settings = settings,
+        _autostart = autostart ?? const UnsupportedAutostart(),
         _presets = presets,
         _ruleStore = ruleStore,
         _manualRules = ruleStore?.load() ?? const [],
@@ -110,6 +116,8 @@ class AppState extends ChangeNotifier {
     return AppState(
       await ProfileStore.open(),
       createVpnCore(),
+      settings: await SettingsStore.open(),
+      autostart: Autostart.platform(),
       chat: ChatService(await ChatStore.open()),
       presets: PresetStore(prefs),
       ruleStore: RuleStore(prefs),
@@ -136,6 +144,8 @@ class AppState extends ChangeNotifier {
   final VpnCore _core;
   final ConfigWriter _writeConfig;
   final ChatService? _chat;
+  final SettingsStore _settings;
+  final Autostart _autostart;
   final PresetStore? _presets;
 
   /// Правила пользователя: хранятся на устройстве, применяются поверх пресета.
@@ -164,6 +174,7 @@ class AppState extends ChangeNotifier {
   Failure? _failure;
   bool _busy = false;
   bool _stopping = false;
+  bool? _autoStart;
 
   /// Пользователь хочет туннель поднятым: с этого момента клиент переподключается
   /// сам, без нажатия кнопки.
@@ -172,6 +183,17 @@ class AppState extends ChangeNotifier {
 
   /// Чат поддержки, если он выпущен для активной подписки.
   ChatService? get chat => _chat;
+
+  SettingsStore get settings => _settings;
+
+  ThemeChoice get themeChoice => _settings.themeChoice;
+
+  bool get autoConnect => _settings.autoConnect;
+
+  /// Платформа без поддержки автозапуска прячет настройку целиком.
+  bool get autostartSupported => _autostart.supported;
+
+  bool get autoStart => _autoStart ?? false;
 
   TunnelState get state => _state;
 
@@ -296,6 +318,50 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setTheme(ThemeChoice value) async {
+    await _settings.setTheme(value);
+    notifyListeners();
+  }
+
+  Future<void> setAutoConnect(bool value) async {
+    await _settings.setAutoConnect(value);
+    notifyListeners();
+  }
+
+  /// Флаг автозапуска принадлежит системе и его правят не только отсюда
+  /// (regedit, диспетчер задач, настройки Android), поэтому значение
+  /// перечитывается, а не хранится в настройках.
+  Future<void> refreshAutostart() async {
+    if (!_autostart.supported) return;
+    _autoStart = await _autostart.isOn();
+    notifyListeners();
+  }
+
+  Future<void> setAutoStart(bool value) async {
+    await _autostart.set(value);
+    await refreshAutostart();
+  }
+
+  /// Автоподключение при запуске: поднимаем последний успешный профиль,
+  /// если он ещё жив. Отказ системы (запрос согласия на Android) оставляет
+  /// приложение подключённым к кнопке — пользователь нажмёт сам.
+  Future<void> autoConnectOnLaunch() async {
+    final id = _settings.lastProfileId;
+    if (!_settings.autoConnect || id == null || _state != TunnelState.off) return;
+
+    StoredProfile? profile;
+    for (final candidate in _store.profiles) {
+      if (candidate.id == id && candidate.canStart) {
+        profile = candidate;
+        break;
+      }
+    }
+    if (profile == null) return;
+
+    await select(id);
+    await connect();
+  }
+
   Future<void> connect() async {
     if (_state == TunnelState.connecting) return;
 
@@ -320,6 +386,8 @@ class AppState extends ChangeNotifier {
       _state = TunnelState.on;
       _reconnect.reset();
       _stopReconnectTimers();
+      final profile = _store.active;
+      if (profile != null) await _settings.rememberProfile(profile.id);
       _addLog('Подключено: ${_activeLabel()}');
     } catch (error) {
       _state = TunnelState.failure;
@@ -413,6 +481,7 @@ class AppState extends ChangeNotifier {
     }
     final providerId = _store.providerOfProfile(id);
     await _store.remove(id);
+    await _settings.forgetProfile(id);
     // Данные чата принадлежат записи провайдера: не стало провайдера —
     // не стало сессии, курсора, очереди и токена.
     if (providerId != null && _store.providerOf(providerId) == null) {

@@ -122,6 +122,12 @@ abstract class AppLocalizations {
   /// **'Настройки'**
   String get tooltipSettings;
 
+  /// No description provided for @tooltipMore.
+  ///
+  /// In ru, this message translates to:
+  /// **'Дополнительно'**
+  String get tooltipMore;
+
   /// No description provided for @tooltipLog.
   ///
   /// In ru, this message translates to:

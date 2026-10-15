@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:client_vpn/app_state.dart';
 import 'package:client_vpn/profile_store.dart';
+import 'package:client_vpn/settings_store.dart';
 import 'package:client_vpn/share_link.dart';
 import 'package:client_vpn/vpn_config.dart';
 import 'package:client_vpn/vpn_core.dart';
@@ -77,6 +78,7 @@ Future<(AppState, StreamController<List<ConnectivityResult>>)> watched(
     store,
     core,
     // Служебный конфиг на диске проверен отдельно в temp_config_test.
+    settings: await SettingsStore.open(),
     configWriter: (config) async => config,
     networks: controller.stream,
   );
