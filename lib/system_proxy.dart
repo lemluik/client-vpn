@@ -89,6 +89,7 @@ class SystemProxy {
     await prefs.remove(_oursKey);
     await prefs.remove(_savedServerKey);
     await prefs.remove(_savedEnableKey);
+    await prefs.remove(_savedOverrideKey);
   }
 
   static Future<void> _saveOriginal() async {

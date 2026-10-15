@@ -27,7 +27,9 @@ void main() {
       expect(proxy, (protocol: 'socks', port: 10808));
     });
 
-    test('возвращает первый подходящий inbound', () {
+    test('http предпочитается socks, даже если socks стоит раньше', () {
+      // Замер ТД-11: записью `socks=…` браузер резолвит назначение сам,
+      // поэтому системный прокси ведут на http-вход, если он в конфиге есть.
       final proxy = parseProxyInbound('''
         {"inbounds": [
           {"protocol": "vless", "port": 443},
@@ -36,7 +38,29 @@ void main() {
         ]}
       ''');
 
+      expect(proxy, (protocol: 'http', port: 10809));
+    });
+
+    test('socks остаётся точкой входа, если http-входа нет', () {
+      final proxy = parseProxyInbound('''
+        {"inbounds": [
+          {"protocol": "vless", "port": 443},
+          {"protocol": "socks", "port": 10808}
+        ]}
+      ''');
+
       expect(proxy, (protocol: 'socks', port: 10808));
+    });
+
+    test('берёт первый http, если их несколько', () {
+      final proxy = parseProxyInbound('''
+        {"inbounds": [
+          {"protocol": "http", "port": 10809},
+          {"protocol": "http", "port": 10810}
+        ]}
+      ''');
+
+      expect(proxy, (protocol: 'http', port: 10809));
     });
 
     // Регрессия H1: без локального прокси системные настройки не меняются,
