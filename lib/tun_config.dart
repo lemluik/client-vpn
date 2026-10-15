@@ -76,14 +76,25 @@ String buildTunConfig(String userJson) {
 ///
 /// `xray run -test` на Android не может открыть устройство туннеля: оно
 /// передаётся ядру через переменную окружения `xray.tun.fd` только при реальном
-/// запуске. Inbound меняется на socks — всё остальное (маршрутизация, балансёр,
+/// запуске. Inbound меняется на socks — всё остальное (маршрутизация,
 /// наблюдатель, DNS) проверяется тем же кодом ядра, что и пойдёт в работу.
+///
+/// Снифинг с tun-входа переносится на замену: правило по `protocol:` без него
+/// ядро не разрешает, а в работе он включён — иначе проверка отклоняла бы
+/// конфиг, который на устройстве запускается.
 String tunConfigForTest(String tunJson, {int port = 10810}) {
   final decoded = jsonDecode(tunJson);
   if (decoded is! Map) {
     throw const FormatException('Конфиг туннеля должен быть JSON-объектом');
   }
   final map = Map<String, dynamic>.from(decoded.cast<String, dynamic>());
+  final inbounds = map['inbounds'];
+  final sniffing = inbounds is List &&
+          inbounds.isNotEmpty &&
+          inbounds.first is Map &&
+          (inbounds.first as Map)['sniffing'] != null
+      ? (inbounds.first as Map)['sniffing']
+      : null;
   map['inbounds'] = [
     {
       'listen': '127.0.0.1',
@@ -91,6 +102,7 @@ String tunConfigForTest(String tunJson, {int port = 10810}) {
       'protocol': 'socks',
       'settings': {'udp': true},
       'tag': 'test-in',
+      if (sniffing != null) 'sniffing': sniffing,
     }
   ];
   return jsonEncode(map);

@@ -142,16 +142,25 @@ void main() {
     }
     ''';
 
-    test('dns, policy, observatory и burstObservatory переходят в туннельный конфиг', () {
+    test(
+        'dns, policy, observatory и burstObservatory переходят в туннельный конфиг',
+        () {
       final result = build(withExtras);
 
-      expect(result['dns'], {'servers': ['1.1.1.1']});
-      expect(result['policy'], {'levels': {'0': {'handshake': 4}}});
+      expect(result['dns'], {
+        'servers': ['1.1.1.1'],
+      });
+      expect(result['policy'], {
+        'levels': {
+          '0': {'handshake': 4},
+        },
+      });
       expect((result['observatory'] as Map)['enableMemoryStats'], true);
       expect((result['burstObservatory'] as Map)['maxParallelism'], 4);
     });
 
-    test('балансировщик остаётся внутри routing — только там его читает ядро', () {
+    test('балансировщик остаётся внутри routing — только там его читает ядро',
+        () {
       const source = '''
       {
         "outbounds": [{"protocol": "vless", "tag": "proxy-a"}],
@@ -164,7 +173,8 @@ void main() {
       final routing = build(source)['routing'] as Map;
 
       expect(routing['balancers'], hasLength(1));
-      expect(routing['rules'][0], {'type': 'field', 'network': 'tcp,udp', 'balancerTag': 'lb'});
+      expect(routing['rules'][0],
+          {'type': 'field', 'network': 'tcp,udp', 'balancerTag': 'lb'},);
       // завершающее «всё в прокси» дописывается после правил пользователя
       expect((routing['rules'].last as Map)['outboundTag'], 'proxy-a');
     });
@@ -200,19 +210,33 @@ void main() {
                     "rules": [{"type": "field", "network": "tcp,udp", "balancerTag": "lb"}]}
       }
       ''';
-      final forTest = jsonDecode(tunConfigForTest(buildTunConfig(source))) as Map<String, dynamic>;
+      final forTest = jsonDecode(tunConfigForTest(buildTunConfig(source)))
+          as Map<String, dynamic>;
       final inbounds = forTest['inbounds'] as List;
 
       expect(inbounds, hasLength(1));
       expect(inbounds.single['protocol'], 'socks');
       expect(inbounds.single['listen'], '127.0.0.1');
-      expect(forTest['dns'], {'servers': ['1.1.1.1']});
+      expect(forTest['dns'], {
+        'servers': ['1.1.1.1'],
+      });
       expect((forTest['routing'] as Map)['balancers'], hasLength(1));
       expect((forTest['outbounds'] as List).single['tag'], 'proxy');
     });
 
     test('нечитаемый конфиг туннеля отклоняется', () {
       expect(() => tunConfigForTest('['), throwsA(isA<FormatException>()));
+    });
+
+    test('снифинг с tun-входа переносится в проверочный вход', () {
+      const source = '{"outbounds": [{"protocol": "vless", "tag": "proxy"}]}';
+      final forTest =
+          jsonDecode(tunConfigForTest(buildTunConfig(source))) as Map;
+      final tun = jsonDecode(buildTunConfig(source)) as Map;
+      final tunSniffing = ((tun['inbounds'] as List).first as Map)['sniffing'];
+
+      expect(((forTest['inbounds'] as List).first as Map)['sniffing'],
+          tunSniffing,);
     });
   });
 
