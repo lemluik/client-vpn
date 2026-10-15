@@ -48,6 +48,10 @@ class ChatService extends ChangeNotifier {
   int _attempts = 0;
   bool _running = false;
 
+  /// Вложения, которые сейчас качаются: один запрос на файл, иначе лента
+  /// заведёт по копии запроса на каждое сообщение с тем же снимком.
+  final Set<String> _downloading = {};
+
   ChatStatus get status => _status;
 
   String? get error => _error;
@@ -84,9 +88,72 @@ class ChatService extends ChangeNotifier {
     _status = ChatStatus.connecting;
     _error = null;
     notifyListeners();
+    await _reconcileRoom();
     _start();
+    unawaited(_backfill());
     unawaited(_loadReplies());
     return true;
+  }
+
+  /// Комната из сохранённой сессии могла устареть: личную комнату пересоздают,
+  /// учётку переносят. Один раз за вход сверяем с фактом узла и предпочитаем
+  /// личную (m.direct) комнату общей.
+  Future<void> _reconcileRoom() async {
+    final client = _client;
+    final session = _session;
+    if (client == null || session == null) return;
+    try {
+      final reply = await client.sync();
+      final join = (reply.json['rooms'] as Map?)?['join'];
+      if (join is! Map || join.isEmpty) return;
+      final joined = join.keys.whereType<String>().toList();
+      final direct = directRoomsFromSync(reply.json).where(joined.contains).toList();
+      final current = session.roomId;
+      if (joined.contains(current) && (direct.isEmpty || direct.contains(current))) {
+        return;
+      }
+      // Токен синхронизации общий для всех комнат: он уже мог пройти события
+      // новой комнаты, пока клиент сидел в старой. Сбрасываем — полный sync
+      // вернёт недавнюю ленту новой комнаты.
+      _session = session.copyWith(
+        roomId: direct.isNotEmpty ? direct.first : joined.first,
+        clearSince: true,
+      );
+      _messages.clear();
+      _downloading.clear();
+      await _persist();
+    } on Object {
+      // Узел не ответил: остаёмся на сохранённой комнате, цикл повторит приём.
+    }
+  }
+
+  /// История комнаты после перезапуска: локальная лента пуста, а токен sync
+  /// уже прошёл старые события, поэтому последние запрашиваем явно. Свои
+  /// сообщения, которые локальная очередь ещё рисует сама, не дублируем.
+  Future<void> _backfill() async {
+    final client = _client;
+    final session = _session;
+    if (client == null || session == null) return;
+    try {
+      final past = await client.history(session.roomId);
+      if (past.isEmpty) return;
+      final knownEvents =
+          _messages.where((m) => m.eventId.isNotEmpty).map((m) => m.eventId).toSet();
+      final knownTxn =
+          _messages.where((m) => m.txnId.isNotEmpty).map((m) => m.txnId).toSet();
+      final fresh = past
+          .where((m) =>
+              (m.eventId.isEmpty || !knownEvents.contains(m.eventId)) &&
+              (m.txnId.isEmpty || !knownTxn.contains(m.txnId)))
+          .toList();
+      if (fresh.isEmpty) return;
+      _messages.insertAll(0, fresh);
+      _messages.sort((a, b) => a.at.compareTo(b.at));
+      _loadPendingImages();
+      notifyListeners();
+    } on Object {
+      // История не подтянулась: приём новых сообщений идёт как обычно.
+    }
   }
 
   /// Вход готовой учёткой. Пароль в историю и в журнал не попадает, токен
@@ -127,6 +194,7 @@ class ChatService extends ChangeNotifier {
       await _store.saveToken(providerId, login.token);
       await _persist();
       _messages.clear();
+      _downloading.clear();
       _status = ChatStatus.live;
       notifyListeners();
       _start();
@@ -159,6 +227,72 @@ class ChatService extends ChangeNotifier {
     await _persist();
     notifyListeners();
     await _flush();
+    return _error;
+  }
+
+  /// Отправка снимка: файл уходит на узел, а в комнату — сообщение `m.image`.
+  /// В очередь на диске вложение не кладём: мегабайты в настройках не хранят,
+  /// поэтому при сбое снимок помечается неотправленным и выбирается заново.
+  Future<String?> sendImage({
+    required Uint8List bytes,
+    required String name,
+    String? mimeType,
+    int width = 0,
+    int height = 0,
+  }) async {
+    final session = _session;
+    final client = _client;
+    if (session == null || client == null) return 'Чат не открыт';
+    if (bytes.isEmpty) return 'В файле нет данных';
+    if (bytes.length > maxMatrixMediaBytes) return 'Файл больше 8 МБ: уменьшите снимок';
+    if (_status == ChatStatus.blocked) return _error ?? 'Доступ к чату закончился';
+
+    final label = name.trim().isEmpty ? 'Изображение' : name.trim();
+    final item = OutboxItem(txnId: newTxnId(), body: label, at: _now());
+    _messages.add(ChatMessage(
+      sender: session.userId,
+      body: label,
+      at: item.at,
+      txnId: item.txnId,
+      pending: true,
+      image: ChatImage(
+        mxc: '',
+        name: label,
+        mimeType: mimeType,
+        size: bytes.length,
+        width: width,
+        height: height,
+        bytes: bytes,
+      ),
+    ));
+    notifyListeners();
+
+    try {
+      final mxc = await client.upload(
+        bytes,
+        filename: label,
+        mimeType: mimeType ?? 'application/octet-stream',
+      );
+      await client.sendImage(
+        session.roomId,
+        item.txnId,
+        filename: label,
+        mxc: mxc,
+        mimeType: mimeType,
+        size: bytes.length,
+        width: width,
+        height: height,
+      );
+      _markSent(item.txnId);
+      _error = null;
+      if (_status == ChatStatus.retrying) _status = ChatStatus.connecting;
+      notifyListeners();
+    } on Object catch (error) {
+      if (error is MatrixException && error.unknownToken) {
+        return fail('Доступ к чату закончился', ChatStatus.blocked);
+      }
+      _markFailed(item.txnId, chatErrorOf(error));
+    }
     return _error;
   }
 
@@ -203,6 +337,7 @@ class ChatService extends ChangeNotifier {
     }
     _messages.clear();
     _quickReplies = const [];
+    _downloading.clear();
     _client = null;
     _session = null;
     _status = ChatStatus.signedOut;
@@ -316,10 +451,41 @@ class ChatService extends ChangeNotifier {
       _messages.add(message);
       arrived++;
     }
+    _loadPendingImages();
     // Дежурный меняет кнопки по ходу диалога, поэтому после входящих перечитываем
     // state-событие: набор кнопок обязан отражать текущее состояние заявки.
     if (arrived > 0 || _hasRepliesUpdate(payload, session.roomId)) {
       unawaited(_loadReplies());
+    }
+  }
+
+  /// Чужой снимок приходит ссылкой: байты докачиваются отдельно, по одному
+  /// запросу на ссылку. Лента перерисовывается, когда файл получен.
+  void _loadPendingImages() {
+    final client = _client;
+    if (client == null) return;
+    for (final message in List.of(_messages)) {
+      final image = message.image;
+      if (image == null || image.loaded || image.mxc.isEmpty) continue;
+      if (!_downloading.add(image.mxc)) continue;
+      unawaited(_downloadImage(client, image.mxc));
+    }
+  }
+
+  Future<void> _downloadImage(MatrixClient client, String mxc) async {
+    try {
+      final bytes = await client.download(mxc);
+      for (var i = 0; i < _messages.length; i++) {
+        final image = _messages[i].image;
+        if (image != null && image.mxc == mxc && !image.loaded) {
+          _messages[i] = _messages[i].copyWith(image: image.copyWith(bytes: bytes));
+        }
+      }
+      notifyListeners();
+    } on Object {
+      // Файл не скачался — в ленте остаётся подпись, приём сообщений продолжается.
+    } finally {
+      _downloading.remove(mxc);
     }
   }
 

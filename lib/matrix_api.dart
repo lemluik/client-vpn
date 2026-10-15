@@ -9,6 +9,7 @@ library;
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 /// Предел ожидания обычного запроса: и соединение, и чтение.
 const Duration matrixTimeout = Duration(seconds: 20);
@@ -22,14 +23,27 @@ const int maxMatrixBytes = 2 * 1024 * 1024;
 /// Предел нашего тела: на узле nginx ограничивает запрос 1 MiB.
 const int maxMatrixBodyBytes = 1024 * 1024;
 
+/// Предел вложения в обе стороны: снимок экрана весит единицы мегабайт, а
+/// держать в памяти клиенту больше — уже расточительно.
+const int maxMatrixMediaBytes = 8 * 1024 * 1024;
+
 const String _api = '/_matrix/client/v3';
 
-/// Ответ узла: код и разобранный JSON (пустой, если JSON не читается).
+/// Классический медиа-API. Часть узлов отдаёт вложения только через него.
+const String _mediaApi = '/_matrix/media/v3';
+
+/// Медиа-API с авторизацией (Matrix 1.11+): файл не отдадут без токена.
+const String _mediaAuthApi = '/_matrix/client/v1/media';
+
+/// Ответ узла: код, разобранный JSON и байты, если это файл.
 class MatrixReply {
-  const MatrixReply(this.status, this.json);
+  const MatrixReply(this.status, this.json, {this.bytes});
 
   final int status;
   final Map<String, dynamic> json;
+
+  /// Содержимое вложения. Заполнено только у запросов с `binary`.
+  final Uint8List? bytes;
 
   bool get ok => status >= 200 && status < 300;
 
@@ -39,14 +53,29 @@ class MatrixReply {
 }
 
 /// Запрос к узлу. `wait` отдельно от URL, чтобы long-poll ждал дольше обычного.
+/// Тело — либо строка JSON (`body`), либо байты вложения (`bytes`).
 class MatrixRequest {
-  const MatrixRequest(this.method, this.url, {this.body, this.token, this.wait = matrixTimeout});
+  const MatrixRequest(
+    this.method,
+    this.url, {
+    this.body,
+    this.bytes,
+    this.contentType,
+    this.token,
+    this.wait = matrixTimeout,
+    this.binary = false,
+  });
 
   final String method;
   final Uri url;
   final String? body;
+  final Uint8List? bytes;
+  final String? contentType;
   final String? token;
   final Duration wait;
+
+  /// Ответ — файл, а не JSON: его не разбирают и не ограничивают как текст.
+  final bool binary;
 }
 
 /// Способ обмена с узлом. В испытаниях подменяется заглушкой: сеть не нужна,
@@ -105,8 +134,25 @@ class MatrixClient {
     return query == null ? uri : uri.replace(queryParameters: query);
   }
 
-  Future<MatrixReply> _get(String method, Uri url, {String? body, Duration? wait}) async {
-    final reply = await _call(MatrixRequest(method, url, body: body, token: _token, wait: wait ?? matrixTimeout));
+  Future<MatrixReply> _get(
+    String method,
+    Uri url, {
+    String? body,
+    Uint8List? bytes,
+    String? contentType,
+    Duration? wait,
+    bool binary = false,
+  }) async {
+    final reply = await _call(MatrixRequest(
+      method,
+      url,
+      body: body,
+      bytes: bytes,
+      contentType: contentType,
+      token: _token,
+      wait: wait ?? matrixTimeout,
+      binary: binary,
+    ));
     if (!reply.ok) throw MatrixException(reply.status, reply.errcode);
     return reply;
   }
@@ -163,7 +209,38 @@ class MatrixClient {
   Future<String> send(String roomId, String body, String txnId) async {
     final text = body.trim();
     if (text.isEmpty) throw const FormatException('Пустое сообщение');
-    final payload = jsonEncode({'msgtype': 'm.text', 'body': text});
+    return _sendEvent(roomId, txnId, {'msgtype': 'm.text', 'body': text});
+  }
+
+  /// Отправка снимка: файл уже загружен на узел, в комнату уходит ссылка `mxc`.
+  /// Подпись — имя файла, его дежурный видит и в своей программе.
+  Future<String> sendImage(
+    String roomId,
+    String txnId, {
+    required String filename,
+    required String mxc,
+    String? mimeType,
+    int size = 0,
+    int width = 0,
+    int height = 0,
+  }) {
+    final info = <String, dynamic>{
+      if (mimeType != null && mimeType.isNotEmpty) 'mimetype': mimeType,
+      if (size > 0) 'size': size,
+      if (width > 0) 'w': width,
+      if (height > 0) 'h': height,
+    };
+    return _sendEvent(roomId, txnId, {
+      'msgtype': 'm.image',
+      'body': filename,
+      'filename': filename,
+      'url': mxc,
+      if (info.isNotEmpty) 'info': info,
+    });
+  }
+
+  Future<String> _sendEvent(String roomId, String txnId, Map<String, dynamic> content) async {
+    final payload = jsonEncode(content);
     if (utf8.encode(payload).length > maxMatrixBodyBytes) {
       throw const FormatException('Сообщение слишком длинное');
     }
@@ -171,6 +248,60 @@ class MatrixClient {
     final reply = await _get('PUT', _url(path), body: payload);
     final event = reply.json['event_id'];
     return event is String ? event : '';
+  }
+
+  /// Загрузка вложения на узел, возвращает `mxc://…`. Узлы настроены по-разному:
+  /// где-то медиа-API закрыт снаружи, где-то нет авторизованного варианта,
+  /// поэтому при 404/405 пробуем второй путь.
+  Future<String> upload(
+    Uint8List bytes, {
+    required String filename,
+    String mimeType = 'application/octet-stream',
+  }) async {
+    if (bytes.isEmpty) throw const FormatException('В файле нет данных');
+    if (bytes.length > maxMatrixMediaBytes) {
+      throw const FormatException('Файл больше 8 МБ: уменьшите снимок');
+    }
+    final query = {'filename': filename};
+    MatrixReply reply;
+    try {
+      reply = await _get(
+        'POST',
+        _url('$_mediaAuthApi/upload', query),
+        bytes: bytes,
+        contentType: mimeType,
+      );
+    } on MatrixException catch (error) {
+      if (error.status != 404 && error.status != 405) rethrow;
+      reply = await _get(
+        'POST',
+        _url('$_mediaApi/upload', query),
+        bytes: bytes,
+        contentType: mimeType,
+      );
+    }
+    final uri = reply.json['content_uri'];
+    if (uri is! String || splitMxc(uri) == null) {
+      throw const MatrixException(502, 'M_MISSING_CONTENT_URI');
+    }
+    return uri;
+  }
+
+  /// Байты вложения по ссылке `mxc://узел/ид`.
+  Future<Uint8List> download(String mxc) async {
+    final parts = splitMxc(mxc);
+    if (parts == null) throw const FormatException('Ссылка на вложение повреждена');
+    final tail = '${Uri.encodeComponent(parts.$1)}/${Uri.encodeComponent(parts.$2)}';
+    MatrixReply reply;
+    try {
+      reply = await _get('GET', _url('$_mediaAuthApi/download/$tail'), binary: true);
+    } on MatrixException catch (error) {
+      if (error.status != 404 && error.status != 405) rethrow;
+      reply = await _get('GET', _url('$_mediaApi/download/$tail'), binary: true);
+    }
+    final bytes = reply.bytes;
+    if (bytes == null || bytes.isEmpty) throw const MatrixException(502, 'M_EMPTY_MEDIA');
+    return bytes;
   }
 
   /// Снимает эту сессию с узла. Проще отозвать доступ, чем удалять устройство:
@@ -187,10 +318,19 @@ class MatrixClient {
     final path = '$_api/rooms/${Uri.encodeComponent(roomId)}/state/$quickRepliesStateType';
     return quickRepliesFromJson((await _get('GET', _url(path))).json);
   }
+
+  /// Лента комнаты назад: после перезапуска локальная лента пуста, а токен
+  /// синхронизации уже прошёл старые события, поэтому их надо запросить явно.
+  Future<List<ChatMessage>> history(String roomId, {int limit = 50}) async {
+    final path = '$_api/rooms/${Uri.encodeComponent(roomId)}/messages';
+    final reply = await _get('GET', _url(path, {'dir': 'b', 'limit': '$limit'}));
+    final chunk = reply.json['chunk'];
+    return chunk is List ? messagesFromChunk(chunk) : const <ChatMessage>[];
+  }
 }
 
-/// Разбирает сообщения комнаты из ответа `/sync`. Возвращает только текстовые
-/// сообщения: вложений и звонков в первой версии чата нет.
+/// Разбирает сообщения комнаты из ответа `/sync`. Берёт текст и изображения:
+/// остальные типы (звонки, файлы произвольного вида) чат поддержки не показывает.
 List<ChatMessage> messagesFromSync(Map<String, dynamic> payload, String roomId, {String? selfUserId}) {
   final join = payload['rooms'];
   if (join is! Map) return const [];
@@ -206,24 +346,84 @@ List<ChatMessage> messagesFromSync(Map<String, dynamic> payload, String roomId, 
   final out = <ChatMessage>[];
   for (final event in events) {
     if (event is! Map) continue;
-    if (event['type'] != 'm.room.message') continue;
-    final content = event['content'];
-    if (content is! Map || content['msgtype'] != 'm.text') continue;
-    final body = content['body'];
-    if (body is! String) continue;
-    final sender = event['sender'] is String ? event['sender'] as String : '';
-    if (_isSelf(sender, selfUserId)) continue;
-    out.add(ChatMessage(
-      sender: sender,
-      body: body,
-      at: DateTime.fromMillisecondsSinceEpoch(
-        event['origin_server_ts'] is int ? event['origin_server_ts'] as int : 0,
-        isUtc: true,
-      ),
-      eventId: event['event_id'] is String ? event['event_id'] as String : '',
-    ));
+    final message = chatMessageFromEvent(event, selfUserId: selfUserId);
+    if (message != null) out.add(message);
   }
   return out;
+}
+
+/// Одно событие ленты в сообщение чата; `null` — событие не из ленты.
+/// В живом sync наши исходящие не дублируются (их рисует локальная очередь),
+/// а в подтяжке истории они нужны — отсюда `includeSelf`.
+ChatMessage? chatMessageFromEvent(Map<Object?, Object?> event,
+    {String? selfUserId, bool includeSelf = false}) {
+  if (event['type'] != 'm.room.message') return null;
+  final content = event['content'];
+  if (content is! Map) return null;
+  final body = content['body'] is String ? content['body'] as String : '';
+
+  ChatImage? image;
+  if (content['msgtype'] == 'm.image') {
+    image = imageFromContent(content);
+    if (image == null) return null;
+  } else if (content['msgtype'] != 'm.text' || body.trim().isEmpty) {
+    return null;
+  }
+
+  final sender = event['sender'] is String ? event['sender'] as String : '';
+  if (!includeSelf && _isSelf(sender, selfUserId)) return null;
+  final unsigned = event['unsigned'];
+  return ChatMessage(
+    sender: sender,
+    body: image == null ? body : image.name,
+    at: DateTime.fromMillisecondsSinceEpoch(
+      event['origin_server_ts'] is int ? event['origin_server_ts'] as int : 0,
+      isUtc: true,
+    ),
+    eventId: event['event_id'] is String ? event['event_id'] as String : '',
+    txnId: unsigned is Map && unsigned['transaction_id'] is String
+        ? unsigned['transaction_id'] as String
+        : '',
+    image: image,
+  );
+}
+
+/// Лента `/messages` приходит в обратном порядке: разворачиваем в хронологию.
+List<ChatMessage> messagesFromChunk(List<Object?> chunk) {
+  final out = <ChatMessage>[];
+  for (final event in chunk) {
+    if (event is! Map) continue;
+    final message = chatMessageFromEvent(event, includeSelf: true);
+    if (message != null) out.add(message);
+  }
+  return out.reversed.toList();
+}
+
+/// Содержимое `m.image` → описание снимка. Без годной ссылки `mxc://` файл
+/// нечем показать, поэтому такое сообщение просто не попадает в ленту.
+ChatImage? imageFromContent(Map<dynamic, dynamic> content) {
+  final url = content['url'];
+  if (url is! String || splitMxc(url) == null) return null;
+  final info = content['info'];
+  final meta = info is Map ? info : const {};
+  final body = content['body'];
+  return ChatImage(
+    mxc: url,
+    name: body is String && body.trim().isNotEmpty ? body.trim() : 'Изображение',
+    mimeType: meta['mimetype'] is String ? meta['mimetype'] as String : null,
+    size: meta['size'] is int ? meta['size'] as int : 0,
+    width: meta['w'] is int ? meta['w'] as int : 0,
+    height: meta['h'] is int ? meta['h'] as int : 0,
+  );
+}
+
+/// `mxc://узел/ид` → (`узел`, `ид`). Всё остальное ссылкой на вложение не считается.
+(String, String)? splitMxc(String value) {
+  if (!value.startsWith('mxc://')) return null;
+  final rest = value.substring('mxc://'.length);
+  final cut = rest.indexOf('/');
+  if (cut <= 0 || cut == rest.length - 1) return null;
+  return (rest.substring(0, cut), rest.substring(cut + 1));
 }
 
 /// Свои сообщения узел отдаёт в ленте обратно — второй раз их показывать не нужно.
@@ -296,6 +496,41 @@ List<String> directRoomsFromSync(Map<String, dynamic> payload) {
   return out;
 }
 
+/// Снимок в чате: ссылка на узле, подпись и байты для превью. У своего файла
+/// байты есть сразу, у чужого появляются после скачивания.
+class ChatImage {
+  const ChatImage({
+    required this.mxc,
+    required this.name,
+    this.mimeType,
+    this.size = 0,
+    this.width = 0,
+    this.height = 0,
+    this.bytes,
+  });
+
+  /// Пусто, пока файл не загружен на узел.
+  final String mxc;
+  final String name;
+  final String? mimeType;
+  final int size;
+  final int width;
+  final int height;
+  final Uint8List? bytes;
+
+  bool get loaded => bytes != null && bytes!.isNotEmpty;
+
+  ChatImage copyWith({String? mxc, Uint8List? bytes}) => ChatImage(
+        mxc: mxc ?? this.mxc,
+        name: name,
+        mimeType: mimeType,
+        size: size,
+        width: width,
+        height: height,
+        bytes: bytes ?? this.bytes,
+      );
+}
+
 /// Сообщение из истории чата.
 class ChatMessage {
   const ChatMessage({
@@ -306,6 +541,7 @@ class ChatMessage {
     this.txnId = '',
     this.pending = false,
     this.failed = false,
+    this.image,
   });
 
   final String sender;
@@ -320,7 +556,10 @@ class ChatMessage {
   final bool pending;
   final bool failed;
 
-  ChatMessage copyWith({bool? pending, bool? failed}) => ChatMessage(
+  /// Снимок вместо текста. `body` у такого сообщения — имя файла.
+  final ChatImage? image;
+
+  ChatMessage copyWith({bool? pending, bool? failed, ChatImage? image}) => ChatMessage(
         sender: sender,
         body: body,
         at: at,
@@ -328,6 +567,7 @@ class ChatMessage {
         txnId: txnId,
         pending: pending ?? this.pending,
         failed: failed ?? this.failed,
+        image: image ?? this.image,
       );
 
   /// Короткое имя отправителя для интерфейса: `@имя:host` → `имя`.
@@ -343,25 +583,42 @@ Future<MatrixReply> sendMatrixRequest(MatrixRequest request) async {
     if (request.token != null) {
       outgoing.headers.set(HttpHeaders.authorizationHeader, 'Bearer ${request.token}');
     }
-    if (request.body != null) {
+    final attachment = request.bytes;
+    if (attachment != null) {
+      outgoing.headers.contentType =
+          ContentType.parse(request.contentType ?? 'application/octet-stream');
+      outgoing.headers.contentLength = attachment.length;
+      outgoing.add(attachment);
+    } else if (request.body != null) {
       outgoing.headers.contentType = ContentType.json;
       outgoing.write(request.body);
     }
     final response = await outgoing.close().timeout(request.wait);
 
+    final limit = request.binary ? maxMatrixMediaBytes : maxMatrixBytes;
     final bytes = <int>[];
     await for (final chunk in response) {
       bytes.addAll(chunk);
-      if (bytes.length > maxMatrixBytes) {
-        throw const FormatException('Ответ узла чата слишком большой');
+      if (bytes.length > limit) {
+        throw FormatException(
+          request.binary ? 'Вложение больше 8 МБ' : 'Ответ узла чата слишком большой',
+        );
       }
     }
+    if (request.binary) {
+      return MatrixReply(response.statusCode, const {}, bytes: Uint8List.fromList(bytes));
+    }
     if (bytes.isEmpty) return MatrixReply(response.statusCode, const {});
-    final decoded = jsonDecode(utf8.decode(bytes, allowMalformed: true));
-    return MatrixReply(
-      response.statusCode,
-      decoded is Map<String, dynamic> ? decoded : const {},
-    );
+    try {
+      final decoded = jsonDecode(utf8.decode(bytes, allowMalformed: true));
+      return MatrixReply(
+        response.statusCode,
+        decoded is Map<String, dynamic> ? decoded : const {},
+      );
+    } on FormatException {
+      // Не JSON: например, страница прокси вместо ответа узла. Код важнее тела.
+      return MatrixReply(response.statusCode, const {});
+    }
   } on FormatException {
     rethrow;
   } finally {
@@ -375,6 +632,7 @@ String chatErrorOf(Object error) {
     if (error.unknownToken) return 'Доступ к чату закончился';
     if (error.rateLimited) return 'Узел просит отправлять реже';
     if (error.errcode == 'M_LOGIN_REJECTED') return 'Неверный логин или пароль чата';
+    if (error.status == 413) return 'Узел не принял такой большой файл';
     if (error.status == 403) return 'Эта комната не доступна учётке';
     if (error.status >= 500) return 'Узел чата временно не отвечает';
     return 'Узел чата ответил ошибкой';

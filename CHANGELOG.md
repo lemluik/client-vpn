@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Support chat accepts screenshots: the composer has an attach button, the file is uploaded to the
+  homeserver and sent as an `m.image` event, and incoming images are downloaded and shown inline.
+  Both the authenticated media API (Matrix 1.11+) and the legacy one are tried, so homeservers that
+  serve media only on the old path keep working
+
 ### Fixed
 
 - Recovery after a core failure is not wired to anything yet: on Windows the system proxy can stay
