@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Recovery after a core failure is not wired to anything yet: on Windows the system proxy can stay
+  enabled after the core process is killed, and a subscription is refreshed only when its button is
+  pressed, not on the interval the provider advertises
+
+## [0.3.0] - 2026-10-15
+
 ### Added
 
 - Support chat over Matrix, built into the client: the homeserver and the room come
