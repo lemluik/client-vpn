@@ -1,0 +1,162 @@
+# CI открытого клиента: анализ, тесты, гейты на каждый push и pull request,
+# артефакты — только на тег. Бесплатные раннеры, кэш pub и Gradle включён.
+#
+# Что здесь сознательно сделано не так, как звучала задача:
+# — гейт нейтральности с именами наших узлов и домена в этом репозитории не
+#   запускается: сам такой список и был бы утечкой. В CI идёт tools/check_public.py
+#   (адреса, секреты, чужие письменности, пути машины разработчика, новые
+#   git-идентичности), а именной гейт остаётся локальным перед коммитом;
+#   дополнительные шаблоны можно передать секретом NEUTRAL_EXTRA_PATTERNS;
+# — тесты с настоящим ядром (test/kernel_config_test.dart) исполняются только в
+#   windows-сборке: им нужен assets/xray/xray.exe, на Linux-раннере они пропускаются.
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      build:
+        description: 'Собрать артефакты Windows и Android с этой ветки'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# новый push в ту же ветку отменяет предыдущий прогон — минуты не горят
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_VERSION: '3.47.7'
+
+jobs:
+  checks:
+    name: Анализ, тесты и гейты
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # история нужна, чтобы сравнить авторов коммитов прогона с авторами base
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Гейт публичного репозитория
+        env:
+          NEUTRAL_EXTRA_PATTERNS: ${{ secrets.NEUTRAL_EXTRA_PATTERNS }}
+        run: |
+          BASE="${{ github.event.pull_request.base.sha || github.event.before }}"
+          if [ -n "$BASE" ] && git cat-file -e "${BASE}^{commit}" 2>/dev/null; then
+            python tools/check_public.py --commits --base "$BASE"
+          else
+            python tools/check_public.py
+          fi
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Строки интерфейса
+        run: flutter gen-l10n
+
+      - name: Анализ
+        run: flutter analyze
+
+      - name: Тесты
+        run: flutter test
+
+  android:
+    name: Сборка Android
+    needs: checks
+    if: >-
+      startsWith(github.ref, 'refs/tags/v') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.build == 'true')
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Кэш Gradle
+        uses: actions/cache@v4
+        with:
+          path:
+            - ~/.gradle/caches
+            - ~/.gradle/wrapper
+          key: >-
+            gradle-${{ runner.os }}-${{ hashFiles('android/gradle/wrapper/gradle-wrapper.properties',
+            'android/app/build.gradle.kts', 'android/build.gradle.kts', 'pubspec.lock') }}
+          restore-keys: gradle-${{ runner.os }}-
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Ядро и geo-базы для APK
+        run: bash scripts/download_xray_android.sh
+
+      # на раннере 7 ГБ, а в gradle.properties стоит -Xmx8G и MaxMetaspace 4G под
+      # рабочую машину: демон не поднимется, поэтому память ограничивается до сборки
+      - name: Память Gradle под размер раннера
+        run: >-
+          sed -i 's/-Xmx8G/-Xmx3G/; s/MaxMetaspaceSize=4G/MaxMetaspaceSize=1G/'
+          android/gradle.properties
+
+      - name: Сборка APK
+        run: flutter build apk --release
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: client-vpn-android-${{ github.ref_name }}
+          path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+
+  windows:
+    name: Сборка Windows и тесты с ядром
+    needs: checks
+    if: >-
+      startsWith(github.ref, 'refs/tags/v') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.build == 'true')
+    runs-on: windows-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Ядро и geo-базы для сборки
+        run: bash scripts/download_xray.sh
+
+      # этот же прогон проверяет собранный конфиг настоящим ядром:
+      # test/kernel_config_test.dart исполняется только здесь, где есть xray.exe
+      - name: Тесты с ядром
+        run: flutter test
+
+      - name: Сборка Windows
+        run: flutter build windows --release
+
+      - name: Упаковать
+        run: |
+          cd build/windows/x64/runner/Release
+          7z a -tzip "$GITHUB_WORKSPACE/client-vpn-windows-${GITHUB_REF_NAME}.zip" .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: client-vpn-windows-${{ github.ref_name }}
+          path: client-vpn-windows-${{ github.ref_name }}.zip
+          if-no-files-found: error
