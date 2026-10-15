@@ -1,9 +1,19 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:client_vpn/profile_config.dart';
+import 'package:client_vpn/share_link.dart';
 import 'package:client_vpn/tun_config.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
+
+/// Две ссылки стороннего вида: адреса из документации, не боевой узел.
+const firstLink = 'vless://2f6bd5a1-1e73-4b1a-9d3c-000000000001@example.org:443'
+    '?security=reality&sni=www.example.org&fp=chrome'
+    '&pbk=SaMdKeySaMdKeySaMdKeySaMdKeySaMdKeySaMd1234&sid=a1b2c3d4'
+    '#%D0%9F%D0%B5%D1%80%D0%B2%D1%8B%D0%B9';
+
+const secondLink = 'trojan://pass@example.org:8443?sni=example.org#Second';
 
 /// Проверка собранных конфигов настоящим ядром, а не только структурой.
 ///
@@ -215,6 +225,50 @@ void main() {
       () async {
         final tun = buildTunConfig(jsonEncode(configWith({})));
         final result = await testConfig(tunConfigForTest(tun));
+
+        expect(result.exitCode, 0, reason: output(result));
+      },
+      skip: ready ? false : reason,
+    );
+
+    test(
+      'конфиг из ссылок с балансировщиком: ядро берёт узлы из балансировщика',
+      () async {
+        final json = buildConfigFromLinks(
+          parseLinks('$firstLink\n$secondLink').links,
+          balancers: [
+            {
+              'tag': 'cvpn-lb',
+              'selector': [proxyTag, '$proxyTag-2'],
+            },
+          ],
+        );
+        final result = await testConfig(json);
+
+        expect(result.exitCode, 0, reason: output(result));
+        expect(
+          ((jsonDecode(json)['routing'] as Map)['rules'] as List).last,
+          containsPair('balancerTag', 'cvpn-lb'),
+        );
+      },
+      skip: ready ? false : reason,
+    );
+
+    test(
+      'туннельный конфиг из ссылок с балансировщиком проходит проверку',
+      () async {
+        final links = buildConfigFromLinks(
+          parseLinks(firstLink).links,
+          balancers: [
+            {
+              'tag': 'cvpn-lb',
+              'selector': [proxyTag],
+            },
+          ],
+        );
+        final result = await testConfig(
+          tunConfigForTest(buildTunConfig(links)),
+        );
 
         expect(result.exitCode, 0, reason: output(result));
       },

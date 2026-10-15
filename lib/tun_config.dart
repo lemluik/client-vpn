@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'profile_config.dart';
+
 /// Протоколы, которые действительно уводят трафик на сервер.
 /// `freedom` и `blackhole` к ним не относятся: если такой outbound окажется
 /// первым, весь трафик пойдёт напрямую — на Android это тихая утечка.
@@ -138,6 +140,9 @@ List<dynamic> _withTag(List<dynamic> outbounds, int index, String tag) {
 ///
 /// `domainStrategy` принудительно `AsIs`: ядро не должно резолвить домены
 /// на устройстве — это обошло бы туннель и раскрыло DNS.
+/// Если пользовательский конфиг объявляет балансировщик с нашим узлом в
+/// `selector`, завершающее правило ссылается на него: иначе автопереключение
+/// внутри региона осталось бы объявленным, но не работающим.
 Map<String, dynamic> _routing(dynamic userRouting, String proxyTag) {
   final routing = userRouting is Map
       ? Map<String, dynamic>.from(userRouting.cast<String, dynamic>())
@@ -147,11 +152,7 @@ Map<String, dynamic> _routing(dynamic userRouting, String proxyTag) {
   routing['domainStrategy'] = 'AsIs';
   routing['rules'] = [
     if (rules is List) ...rules,
-    {
-      'type': 'field',
-      'network': 'tcp,udp',
-      'outboundTag': proxyTag,
-    },
+    terminalRule(proxyTag, balancers: routing['balancers']),
   ];
   return routing;
 }

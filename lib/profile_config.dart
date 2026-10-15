@@ -17,17 +17,50 @@ const int defaultSocksPort = 10809;
 String tagForProfile(int index) =>
     index == 0 ? proxyTag : '$proxyTag-${index + 1}';
 
+/// Балансировщик, которому доверен outbound с тегом [tag], или null.
+///
+/// Ядро читает `balancers` только внутри `routing` и берёт узлы из `selector`.
+/// Балансировщик без нашего узла в списке не годится: правило на него отдало бы
+/// трафик узлам, которые пользователь для этого пути не выбирал.
+String? balancerTagFor(Object? balancers, String tag) {
+  if (balancers is! List) return null;
+  for (final balancer in balancers) {
+    if (balancer is! Map) continue;
+    final name = balancer['tag'];
+    if (name is! String || name.isEmpty) continue;
+    final selector = balancer['selector'];
+    if (selector is List && selector.contains(tag)) return name;
+  }
+  return null;
+}
+
+/// Завершающее правило маршрутизации: весь остальной трафик — на прокси.
+///
+/// При объявленном балансировщике правило ссылается на него (`balancerTag`),
+/// а не на метку первого исходящего соединения: иначе узлы региона,
+/// собранные в балансировщик, никогда не выбирались бы ядром.
+Map<String, dynamic> terminalRule(String tag, {Object? balancers}) {
+  final balancer = balancerTagFor(balancers, tag);
+  if (balancer != null) {
+    return {'type': 'field', 'network': 'tcp,udp', 'balancerTag': balancer};
+  }
+  return {'type': 'field', 'network': 'tcp,udp', 'outboundTag': tag};
+}
+
 /// Собирает конфиг ядра из разобранных ссылок — целиком в памяти.
 ///
 /// Файл пользователя не создаётся и не читается: на диске оказывается только
 /// служебный конфиг, который приложение пишет само перед запуском ядра.
 /// Правила из [rules] встают **до** завершающего «всё в прокси», поэтому пресет
 /// «напрямую» для своей страны работает, не меняя остальной трафик.
+/// Балансировщики из [balancers] остаются внутри `routing` — только там их
+/// читает ядро, — и завершающее правило начинает ссылаться на них.
 String buildConfigFromLinks(
   Iterable<ShareLink> links, {
   int httpPort = defaultHttpPort,
   int socksPort = defaultSocksPort,
   List<Map<String, dynamic>> rules = const [],
+  List<Map<String, dynamic>> balancers = const [],
 }) {
   final profiles = links.toList();
   if (profiles.isEmpty) {
@@ -60,9 +93,10 @@ String buildConfigFromLinks(
     // иначе запрос уйдёт в открытый DNS мимо туннеля.
     'routing': {
       'domainStrategy': 'AsIs',
+      if (balancers.isNotEmpty) 'balancers': balancers,
       'rules': [
         ...rules,
-        {'type': 'field', 'network': 'tcp,udp', 'outboundTag': proxyTag},
+        terminalRule(proxyTag, balancers: balancers),
       ],
     },
   });

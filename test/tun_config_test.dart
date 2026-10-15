@@ -175,7 +175,28 @@ void main() {
       expect(routing['balancers'], hasLength(1));
       expect(routing['rules'][0],
           {'type': 'field', 'network': 'tcp,udp', 'balancerTag': 'lb'},);
-      // завершающее «всё в прокси» дописывается после правил пользователя
+      // завершающее «всё в прокси» ведёт на балансировщик, который управляет
+      // этим узлом, а не на метку самого узла
+      expect(
+        (routing['rules'].last as Map),
+        {'type': 'field', 'network': 'tcp,udp', 'balancerTag': 'lb'},
+      );
+    });
+
+    test('балансировщик без нашего узла в selector завершающее правило не берёт',
+        () {
+      const source = '''
+      {
+        "outbounds": [{"protocol": "vless", "tag": "proxy-a"}],
+        "routing": {
+          "balancers": [{"tag": "lb", "selector": ["proxy-z"]}],
+          "rules": []
+        }
+      }
+      ''';
+      final routing = build(source)['routing'] as Map;
+
+      expect(routing['balancers'], hasLength(1));
       expect((routing['rules'].last as Map)['outboundTag'], 'proxy-a');
     });
 

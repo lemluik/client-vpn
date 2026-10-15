@@ -129,4 +129,60 @@ void main() {
       expect(tagForProfile(9), '$proxyTag-10');
     });
   });
+
+  group('balancerTagFor', () {
+    test('находит балансировщик, которому доверен тег', () {
+      expect(
+        balancerTagFor([
+          {'tag': 'lb-other', 'selector': ['cvpn-proxy-2']},
+          {'tag': 'lb', 'selector': [proxyTag, 'cvpn-proxy-2']},
+        ], proxyTag),
+        'lb',
+      );
+    });
+
+    test('балансировщик без тега и без узла в selector не подходит', () {
+      expect(balancerTagFor([{'selector': [proxyTag]}], proxyTag), isNull);
+      expect(balancerTagFor([{'tag': 'lb', 'selector': ['other']}], proxyTag),
+          isNull);
+      expect(balancerTagFor(null, proxyTag), isNull);
+      expect(balancerTagFor(const [], proxyTag), isNull);
+    });
+  });
+
+  group('завершающее правило при объявленном балансировщике', () {
+    const balancers = [
+      {'tag': 'lb', 'selector': [proxyTag, '$proxyTag-2']},
+    ];
+
+    test('ссылается на балансировщик, а не на первое исходящее соединение', () {
+      final config = decode(
+        buildConfigFromLinks(parsedLinks(), balancers: balancers),
+      );
+      final routing = config['routing'] as Map;
+
+      expect(routing['balancers'], balancers);
+      expect(routing['rules'].last, {
+        'type': 'field',
+        'network': 'tcp,udp',
+        'balancerTag': 'lb',
+      });
+    });
+
+    test('без балансировщиков правило остаётся на метке прокси', () {
+      expect(terminalRule(proxyTag), {
+        'type': 'field',
+        'network': 'tcp,udp',
+        'outboundTag': proxyTag,
+      });
+    });
+
+    test('балансировщик не уходит верхним уровнем', () {
+      final config = decode(
+        buildConfigFromLinks(parsedLinks(), balancers: balancers),
+      );
+
+      expect(config.containsKey('balancers'), false);
+    });
+  });
 }
