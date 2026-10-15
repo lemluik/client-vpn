@@ -75,6 +75,13 @@ class DesktopCore implements VpnCore {
     }
   }
 
+  /// Каталог geo-баз: `geoip.dat`/`geosite.dat` лежат рядом с бинарником.
+  /// Передаётся ядру явно, потому что поиск по рабочему каталогу не работает,
+  /// когда конфиг читается из временной папки профиля.
+  static Map<String, String> _coreEnvironment(String xrayPath) => {
+        'XRAY_LOCATION_ASSET': p.dirname(xrayPath),
+      };
+
   @override
   Future<void> validate(VpnConfig config) async {
     final path = config.path;
@@ -87,13 +94,15 @@ class DesktopCore implements VpnCore {
       xrayPath,
       ['run', '-test', '-config', path],
       workingDirectory: p.dirname(xrayPath),
+      environment: _coreEnvironment(xrayPath),
     );
 
     if (result.exitCode != 0) {
       final out = '${result.stdout}'.trim();
       final err = '${result.stderr}'.trim();
       throw Exception(
-        'Валидация не пройдена (код ${result.exitCode}):\n$out\n$err',
+        'Валидация не пройдена (код ${result.exitCode}):\n$out\n$err'
+        '${_geoHint('$out$err')}',
       );
     }
 
@@ -106,6 +115,13 @@ class DesktopCore implements VpnCore {
     }
     _proxy = proxy;
   }
+
+  /// Правила `geoip:`/`geosite:` не работают без geo-баз: ядро сообщает об этом
+  /// по-английски и без указания, где взять файлы.
+  static String _geoHint(String output) =>
+      output.contains('geosite.dat') || output.contains('geoip.dat')
+          ? '\nGeo-базы не установлены — выполните: bash scripts/download_xray.sh'
+          : '';
 
   @override
   Future<void> start(VpnConfig config) async {
@@ -173,6 +189,7 @@ class DesktopCore implements VpnCore {
       xrayPath,
       ['run', '-config', configPath],
       workingDirectory: p.dirname(xrayPath),
+      environment: _coreEnvironment(xrayPath),
     );
 
     _process!.stdout

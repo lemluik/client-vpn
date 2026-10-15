@@ -27,9 +27,13 @@ desktop.ini
 # Xray binary (download separately via scripts/download_xray.sh)
 assets/xray/xray.exe
 assets/xray/*.zip
+assets/xray/*.dat
 
 # Ядро Xray для Android (download separately via scripts/download_xray_android.sh)
 android/app/src/main/jniLibs/
+
+# Geo-базы для Android (download separately via scripts/download_xray_android.sh)
+android/app/src/main/assets/geo/
 
 # Логи сборки Kotlin (содержат локальные пути)
 android/.kotlin/

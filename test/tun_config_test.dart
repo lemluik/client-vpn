@@ -126,6 +126,96 @@ void main() {
     });
   });
 
+  group('блоки, которые ядро читает отдельно от маршрутизации', () {
+    const withExtras = '''
+    {
+      "outbounds": [{"protocol": "vless", "tag": "proxy"}],
+      "routing": {"rules": []},
+      "dns": {"servers": ["1.1.1.1"]},
+      "policy": {"levels": {"0": {"handshake": 4}}},
+      "observatory": {"enableMemoryStats": true, "subjectFrequency": {
+        "enabled": true, "target": "https://www.gstatic.com/generate_204",
+        "timeout": "1s", "frequency": "5m"}},
+      "burstObservatory": {"maxParallelism": 4, "pingConfig": {
+        "mode": "connect", "timeout": "5s", "frequency": "30s",
+        "targets": ["https://www.gstatic.com/generate_204"]}}
+    }
+    ''';
+
+    test('dns, policy, observatory и burstObservatory переходят в туннельный конфиг', () {
+      final result = build(withExtras);
+
+      expect(result['dns'], {'servers': ['1.1.1.1']});
+      expect(result['policy'], {'levels': {'0': {'handshake': 4}}});
+      expect((result['observatory'] as Map)['enableMemoryStats'], true);
+      expect((result['burstObservatory'] as Map)['maxParallelism'], 4);
+    });
+
+    test('балансировщик остаётся внутри routing — только там его читает ядро', () {
+      const source = '''
+      {
+        "outbounds": [{"protocol": "vless", "tag": "proxy-a"}],
+        "routing": {
+          "balancers": [{"tag": "lb", "selector": ["proxy-a"]}],
+          "rules": [{"type": "field", "network": "tcp,udp", "balancerTag": "lb"}]
+        }
+      }
+      ''';
+      final routing = build(source)['routing'] as Map;
+
+      expect(routing['balancers'], hasLength(1));
+      expect(routing['rules'][0], {'type': 'field', 'network': 'tcp,udp', 'balancerTag': 'lb'});
+      // завершающее «всё в прокси» дописывается после правил пользователя
+      expect((routing['rules'].last as Map)['outboundTag'], 'proxy-a');
+    });
+
+    test('балансировщик верхним уровнем в конфиг туннеля не попадает', () {
+      const source = '''
+      {
+        "outbounds": [{"protocol": "vless", "tag": "proxy"}],
+        "balancers": [{"tag": "lb", "selector": ["proxy"]}]
+      }
+      ''';
+
+      expect(build(source).containsKey('balancers'), false);
+    });
+
+    test('отсутствующие блоки не добавляются пустыми', () {
+      final result = build(userConfig);
+
+      expect(result.containsKey('dns'), false);
+      expect(result.containsKey('observatory'), false);
+      expect(result.containsKey('burstObservatory'), false);
+      expect(result.containsKey('policy'), false);
+    });
+  });
+
+  group('tunConfigForTest', () {
+    test('заменяет tun inbound на локальный socks, остальное не трогает', () {
+      const source = '''
+      {
+        "outbounds": [{"protocol": "vless", "tag": "proxy"}],
+        "dns": {"servers": ["1.1.1.1"]},
+        "routing": {"balancers": [{"tag": "lb", "selector": ["proxy"]}],
+                    "rules": [{"type": "field", "network": "tcp,udp", "balancerTag": "lb"}]}
+      }
+      ''';
+      final forTest = jsonDecode(tunConfigForTest(buildTunConfig(source))) as Map<String, dynamic>;
+      final inbounds = forTest['inbounds'] as List;
+
+      expect(inbounds, hasLength(1));
+      expect(inbounds.single['protocol'], 'socks');
+      expect(inbounds.single['listen'], '127.0.0.1');
+      expect(forTest['dns'], {'servers': ['1.1.1.1']});
+      expect((forTest['routing'] as Map)['balancers'], hasLength(1));
+      expect((forTest['outbounds'] as List).single['tag'], 'proxy');
+    });
+
+    test('нечитаемый конфиг туннеля отклоняется', () {
+      expect(() => tunConfigForTest('['), throwsA(isA<FormatException>()));
+    });
+  });
+
   group('tunInbound', () {
     test('sniffing включён для http и tls', () {
       final sniffing = tunInbound()['sniffing'] as Map<String, dynamic>;

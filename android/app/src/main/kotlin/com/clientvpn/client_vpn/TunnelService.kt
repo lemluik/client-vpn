@@ -36,6 +36,7 @@ class TunnelService : VpnService() {
         private const val NOTIFICATION_ID = 1
         private const val MTU = 1500
         private const val TUN_FD_ENV = "xray.tun.fd"
+        private const val ASSET_ENV = "XRAY_LOCATION_ASSET"
     }
 
     private var process: Process? = null
@@ -139,11 +140,16 @@ class TunnelService : VpnService() {
         }
         xray.setExecutable(true)
 
+        // Без баз правило `geoip:ru` роняет ядро на старте, а не на проверке:
+        // ошибки конфигурации пользователь увидел бы как «не подключается».
+        GeoAssets.ensure(this)?.let { throw IllegalStateException(it) }
+
         val launch = ProcessBuilder(xray.absolutePath, "run", "-config", config.absolutePath)
             .directory(filesDir)
             .redirectErrorStream(true)
             .redirectInput(ProcessBuilder.Redirect.INHERIT)
         launch.environment()[TUN_FD_ENV] = "0"
+        launch.environment()[ASSET_ENV] = GeoAssets.assetDir(this).absolutePath
 
         val started = launch.start()
         process = started

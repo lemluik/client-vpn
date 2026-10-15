@@ -75,6 +75,10 @@ class MainActivity : FlutterActivity() {
         if (!xray.exists()) return "ядро не найдено в ${xray.parent}"
         xray.setExecutable(true)
 
+        // Проверка конфига с geo-правилами без баз падает на чтении geosite.dat:
+        // ядро искало бы файл в рабочем каталоге.
+        GeoAssets.ensure(this)?.let { return it }
+
         val process = ProcessBuilder(
             xray.absolutePath,
             "run",
@@ -84,6 +88,7 @@ class MainActivity : FlutterActivity() {
         )
             .directory(filesDir)
             .redirectErrorStream(true)
+            .apply { environment()["XRAY_LOCATION_ASSET"] = GeoAssets.assetDir(this@MainActivity).absolutePath }
             .start()
 
         val output = process.inputStream.bufferedReader().readText()
