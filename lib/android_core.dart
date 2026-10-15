@@ -52,15 +52,19 @@ class AndroidCore implements VpnCore {
 
   @override
   Future<void> validate(VpnConfig config) async {
+    String tunJson;
     try {
-      _tunJson = buildTunConfig(config.json);
+      tunJson = buildTunConfig(config.json);
     } on FormatException catch (e) {
       throw Exception('Конфиг не читается: ${e.message}');
     }
+    _tunJson = tunJson;
     _endpoint = _describeOutbound(config.json);
 
-    // Проверку выполняет само ядро: те же правила, что и на десктопе.
-    await _channel.invokeMethod<void>('validate', config.json);
+    // Проверяется именно тот конфиг, который пойдёт в туннель, а не конфиг
+    // пользователя: ядро ловит ошибки маршрутизации, балансёра и DNS до того,
+    // как пользователь подтвердит поднятие туннеля.
+    await _channel.invokeMethod<void>('validate', tunConfigForTest(tunJson));
   }
 
   /// Адрес дальней стороны из первого прокси-outbound — для строки статуса.

@@ -26,6 +26,17 @@ Map<String, dynamic> tunInbound({String name = 'tun0', int mtu = 1500}) => {
       'tag': 'tun-in',
     };
 
+/// Верхнеуровневые блоки, которые ядро читает отдельно от маршрутизации.
+/// Без `dns` адрес не резолвится по настройкам пользователя, без
+/// `observatory`/`burstObservatory` балансировщик не видит задержек, без
+/// `policy` теряются лимиты соединений.
+const List<String> passthroughKeys = [
+  'dns',
+  'observatory',
+  'burstObservatory',
+  'policy',
+];
+
 /// Перестраивает конфиг пользователя под Android.
 ///
 /// Локальные http/socks inbound на мобильной платформе бесполезны — вместо них
@@ -56,7 +67,45 @@ String buildTunConfig(String userJson) {
     'inbounds': [tunInbound()],
     'outbounds': _withTag(outbounds, index, tag),
     'routing': _routing(decoded['routing'], tag),
+    for (final key in passthroughKeys)
+      if (decoded[key] != null) key: decoded[key],
   });
+}
+
+/// Локальный inbound для проверки собранного туннельного конфига ядром.
+///
+/// `xray run -test` на Android не может открыть устройство туннеля: оно
+/// передаётся ядру через переменную окружения `xray.tun.fd` только при реальном
+/// запуске. Inbound меняется на socks — всё остальное (маршрутизация,
+/// наблюдатель, DNS) проверяется тем же кодом ядра, что и пойдёт в работу.
+///
+/// Снифинг с tun-входа переносится на замену: правило по `protocol:` без него
+/// ядро не разрешает, а в работе он включён — иначе проверка отклоняла бы
+/// конфиг, который на устройстве запускается.
+String tunConfigForTest(String tunJson, {int port = 10810}) {
+  final decoded = jsonDecode(tunJson);
+  if (decoded is! Map) {
+    throw const FormatException('Конфиг туннеля должен быть JSON-объектом');
+  }
+  final map = Map<String, dynamic>.from(decoded.cast<String, dynamic>());
+  final inbounds = map['inbounds'];
+  final sniffing = inbounds is List &&
+          inbounds.isNotEmpty &&
+          inbounds.first is Map &&
+          (inbounds.first as Map)['sniffing'] != null
+      ? (inbounds.first as Map)['sniffing']
+      : null;
+  map['inbounds'] = [
+    {
+      'listen': '127.0.0.1',
+      'port': port,
+      'protocol': 'socks',
+      'settings': {'udp': true},
+      'tag': 'test-in',
+      if (sniffing != null) 'sniffing': sniffing,
+    }
+  ];
+  return jsonEncode(map);
 }
 
 int _proxyIndex(List<dynamic> outbounds) {
