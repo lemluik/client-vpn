@@ -130,6 +130,34 @@ Map<String, dynamic> syncWith(String sender, String body, String eventId) => {
       'next_batch': 's$eventId',
     };
 
+/// Ответ `/sync`, в котором есть только обновление state-события кнопок: мост
+/// меняет контекст заявки без нового сообщения.
+Map<String, dynamic> syncWithRepliesState(String eventId) => {
+      'rooms': {
+        'join': {
+          room: {
+            'timeline': {
+              'events': [
+                {
+                  'type': quickRepliesStateType,
+                  'state_key': '',
+                  'sender': '@bridge:chat.example',
+                  'origin_server_ts': 1700000000000,
+                  'event_id': eventId,
+                  'content': {
+                    'items': [
+                      {'id': 's2', 'text': 'Уточните номер заявки'},
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        },
+      },
+      'next_batch': 's$eventId',
+    };
+
 void main() {
   late FakeNode node;
   late MemoryVault vault;
@@ -299,6 +327,27 @@ void main() {
     await pump(tester);
 
     expect(node.bodies, ['Медленно работает']);
+  });
+
+  testWidgets('дежурный сменил кнопки без нового сообщения — набор перерисован', (tester) async {
+    node.quickReplies = {
+      'items': [
+        {'id': 'c1', 'text': 'Не подключается'},
+      ],
+    };
+    await signIn(tester);
+    expect(find.byKey(const ValueKey('quick.c1')), findsOneWidget);
+
+    node.quickReplies = {
+      'items': [
+        {'id': 's2', 'text': 'Уточните номер заявки'},
+      ],
+    };
+    node.answerSync(syncWithRepliesState('r1'));
+    await pump(tester);
+
+    expect(find.byKey(const ValueKey('quick.c1')), findsNothing);
+    expect(find.byKey(const ValueKey('quick.s2')), findsOneWidget);
   });
 
   testWidgets('без кнопок в комнате поле ввода работает как раньше', (tester) async {

@@ -346,22 +346,35 @@ class _Composer extends StatelessWidget {
       children: [
         if (replies.isNotEmpty) ...[
           // Кнопки пришли из комнаты — набор задаёт провайдер, а не клиент.
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
+          // Перенос по строкам: восемь категорий не помещаются в одну полосу.
+          LayoutBuilder(
+            builder: (context, constraints) => Wrap(
+              spacing: 8,
+              runSpacing: 6,
               children: [
                 for (final reply in replies)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 8, bottom: 6),
-                    child: ActionChip(
+                  ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: constraints.maxWidth),
+                    // ActionChip не переносит длинную подпись и обрезает её,
+                    // поэтому кнопка категории — TextButton в виде чипа.
+                    child: TextButton(
                       key: ValueKey('quick.${reply.id}'),
-                      label: Text(reply.caption),
                       onPressed: blocked ? null : () => onPick?.call(reply),
+                      style: TextButton.styleFrom(
+                        minimumSize: const Size(0, 36),
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        side: BorderSide(color: Theme.of(context).colorScheme.outline),
+                      ),
+                      child: Text(reply.caption),
                     ),
                   ),
               ],
             ),
           ),
+          const SizedBox(height: 6),
         ],
         Row(
           children: [

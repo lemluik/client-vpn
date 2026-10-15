@@ -318,7 +318,33 @@ class ChatService extends ChangeNotifier {
     }
     // Дежурный меняет кнопки по ходу диалога, поэтому после входящих перечитываем
     // state-событие: набор кнопок обязан отражать текущее состояние заявки.
-    if (arrived > 0) unawaited(_loadReplies());
+    if (arrived > 0 || _hasRepliesUpdate(payload, session.roomId)) {
+      unawaited(_loadReplies());
+    }
+  }
+
+  /// Мост vpn-mx-bridge может обновить кнопки без нового сообщения — тогда
+  /// state-событие support.quick_replies приходит само по себе. В инкрементальном
+  /// /sync оно лежит в timeline нашей комнаты, при первичном — в разделе state.
+  bool _hasRepliesUpdate(Map<String, dynamic> payload, String roomId) {
+    final rooms = payload['rooms'];
+    if (rooms is! Map) return false;
+    final join = rooms['join'];
+    if (join is! Map) return false;
+    final room = join[roomId];
+    if (room is! Map) return false;
+
+    for (final key in const ['timeline', 'state']) {
+      final section = room[key];
+      if (section is! Map) continue;
+      final events = section['events'];
+      if (events is! List) continue;
+      for (final event in events) {
+        if (event is Map && event['type'] == quickRepliesStateType) return true;
+      }
+    }
+
+    return false;
   }
 
   /// Кнопки заявки — факультативные: у провайдера их может не быть, а ответ узла
