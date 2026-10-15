@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'app_state.dart';
 import 'l10n/app_localizations.dart';
@@ -781,6 +782,14 @@ class _ConnectOrbState extends State<_ConnectOrb> {
     if (mounted) setState(() => _pressed = value);
   }
 
+  /// Переключение туннеля меняет сетевой путь всего устройства, поэтому нажатие
+  /// подтверждается осязанием: пользователю важно почувствовать команду, когда
+  /// экран не виден (карман, рука на руле).
+  void _tap() {
+    HapticFeedback.mediumImpact();
+    widget.onPressed();
+  }
+
   @override
   Widget build(BuildContext context) {
     final connecting = _state.state == TunnelState.connecting;
@@ -829,7 +838,7 @@ class _ConnectOrbState extends State<_ConnectOrb> {
       label: caption,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: enabled ? widget.onPressed : null,
+        onTap: enabled ? _tap : null,
         onTapDown: enabled ? (_) => _press(true) : null,
         onTapUp: (_) => _press(false),
         onTapCancel: () => _press(false),

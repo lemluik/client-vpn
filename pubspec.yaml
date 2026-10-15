@@ -19,6 +19,10 @@ dependencies:
   window_manager: ^0.5.2
   connectivity_plus: ^7.3.2
   intl: ^0.20.3
+  # 1.9.0 — последняя ветка, отдающая ColorScheme из Flutter: в 2.x палитра
+  # приходит из пакета material_ui с собственным типом схемы, несовместимым
+  # с ThemeData текущей версии Flutter.
+  dynamic_color: 1.9.0
 
 dev_dependencies:
   flutter_test:

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -77,24 +78,32 @@ class _ClientVpnAppState extends State<ClientVpnApp> with WindowListener {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'КлиентВПН',
-      debugShowCheckedModeBanner: false,
-      // Язык берётся с устройства: русская и около-русская локаль дают русский,
-      // англоязычная — английский, прочая откатывается на русский как первый.
-      supportedLocales: AppLocalizations.supportedLocales,
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      theme: ThemeData(
-        colorSchemeSeed: Colors.blue,
-        useMaterial3: true,
-        brightness: Brightness.light,
+    return DynamicColorBuilder(
+      builder: (lightDynamic, darkDynamic) => MaterialApp(
+        title: 'КлиентВПН',
+        debugShowCheckedModeBanner: false,
+        // Язык берётся с устройства: русская и около-русская локаль дают русский,
+        // англоязычная — английский, прочая откатывается на русский как первый.
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        theme: _theme(lightDynamic, Brightness.light),
+        darkTheme: _theme(darkDynamic, Brightness.dark),
+        home: HomeScreen(state: widget.state),
       ),
-      darkTheme: ThemeData(
-        colorSchemeSeed: Colors.blue,
-        useMaterial3: true,
-        brightness: Brightness.dark,
-      ),
-      home: HomeScreen(state: widget.state),
     );
   }
+
+  /// Палитра берётся из цветов системы: Android 12+ отдаёт собственную схему,
+  /// десктоп — акцентный цвет. До ответа системы и на устройствах без такой
+  /// палитры остаётся посевной синий, поэтому интерфейс никогда не бывает
+  /// бесцветным.
+  static ThemeData _theme(ColorScheme? dynamic, Brightness brightness) =>
+      ThemeData(
+        useMaterial3: true,
+        colorScheme: dynamic ??
+            ColorScheme.fromSeed(
+              seedColor: Colors.blue,
+              brightness: brightness,
+            ),
+      );
 }

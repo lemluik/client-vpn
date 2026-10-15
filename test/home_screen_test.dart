@@ -3,12 +3,14 @@ import 'dart:async';
 import 'package:client_vpn/app_state.dart';
 import 'package:client_vpn/chat_service.dart';
 import 'package:client_vpn/chat_store.dart';
+import 'package:client_vpn/home_screen.dart';
 import 'package:client_vpn/main.dart';
 import 'package:client_vpn/profile_store.dart';
 import 'package:client_vpn/vpn_config.dart';
 import 'package:client_vpn/vpn_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -430,6 +432,86 @@ void main() {
       expect(find.text('🇩🇪 Germany'), findsNothing);
       // Значение foundation-переменной обязано вернуться в null до конца теста.
       debugDefaultTargetPlatformOverride = null;
+    });
+  });
+
+  group('палитра под цвета системы и отклик кнопки', () {
+    const dynamicChannel = MethodChannel('io.material.plugins/dynamic_color');
+
+    /// Отвечаем системе за палитру: ядро палитры не отдаём, как на десктопе,
+    /// а акцентный цвет — тот, что задал тест.
+    void mockSystemAccent(WidgetTester tester, int? argb) {
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(dynamicChannel, (call) async {
+        if (call.method == 'getAccentColor') return argb;
+        return null;
+      });
+      addTearDown(
+        () => messenger.setMockMethodCallHandler(dynamicChannel, null),
+      );
+    }
+
+    ColorScheme schemeOf(WidgetTester tester) =>
+        Theme.of(tester.element(find.byType(HomeScreen))).colorScheme;
+
+    testWidgets('система без палитры оставляет посевной синий', (tester) async {
+      mockSystemAccent(tester, null);
+      final state = await makeState();
+      addTearDown(state.dispose);
+
+      await pumpApp(tester, state);
+      await tester.pumpAndSettle();
+
+      expect(
+        schemeOf(tester).primary,
+        ColorScheme.fromSeed(seedColor: Colors.blue).primary,
+      );
+    });
+
+    testWidgets('акцентный цвет системы перекрашивает интерфейс',
+        (tester) async {
+      mockSystemAccent(tester, 0xFF6750A4);
+      final state = await makeState();
+      addTearDown(state.dispose);
+
+      await pumpApp(tester, state);
+      await tester.pumpAndSettle();
+
+      expect(
+        schemeOf(tester).primary,
+        ColorScheme.fromSeed(seedColor: const Color(0xFF6750A4)).primary,
+      );
+      expect(
+        schemeOf(tester).primary,
+        isNot(ColorScheme.fromSeed(seedColor: Colors.blue).primary),
+      );
+    });
+
+    testWidgets('переключение туннеля подтверждается осязанием',
+        (tester) async {
+      final state = await makeState();
+      addTearDown(state.dispose);
+      await state.addFromText(linkOne);
+
+      final calls = <MethodCall>[];
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+        calls.add(call);
+        return null;
+      });
+
+      await pumpApp(tester, state);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.power_settings_new));
+      await tester.pumpAndSettle();
+
+      final taps = calls
+          .where((call) => call.method == 'HapticFeedback.vibrate')
+          .toList();
+      expect(taps, hasLength(1));
+      expect(taps.single.arguments, 'HapticFeedbackType.mediumImpact');
     });
   });
 }
