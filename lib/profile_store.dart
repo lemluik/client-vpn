@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'failover.dart';
 import 'profile_config.dart';
 import 'provider.dart';
 import 'region.dart';
@@ -370,7 +371,12 @@ class ProfileStore {
   ///
   /// Правила из [rules] — выбранный пользователем пресет маршрутизации. В
   /// файле пользователя пресет не появляется: свой config.json он собирает сам.
-  VpnConfig activeConfig({List<Map<String, dynamic>> rules = const []}) {
+  /// [probeEndpoint] — точка проб наблюдателя (У-3): клиент строит
+  /// балансировщик узлов региона, а без точки проб ядро стратегию не принимает.
+  VpnConfig activeConfig({
+    List<Map<String, dynamic>> rules = const [],
+    String probeEndpoint = defaultProbeEndpoint,
+  }) {
     final profile = active;
     if (profile == null) {
       throw LinkFormatException('Сначала добавьте подключение');
@@ -387,9 +393,18 @@ class ProfileStore {
     if (profile.links.isEmpty) {
       throw LinkFormatException('В подключении «${profile.name}» нет профилей');
     }
+    final links = linksOfProfile(profile);
+    final balancers = regionBalancers([
+      for (final (index, _) in links.indexed) tagForProfile(index),
+    ]);
     return VpnConfig(
       name: profile.name,
-      json: buildConfigFromLinks(linksOfProfile(profile), rules: rules),
+      json: buildConfigFromLinks(
+        links,
+        rules: rules,
+        balancers: balancers,
+        observatory: balancers.isEmpty ? null : observatoryFor(probeEndpoint),
+      ),
     );
   }
 

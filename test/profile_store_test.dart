@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:client_vpn/failover.dart';
 import 'package:client_vpn/profile_store.dart';
 import 'package:client_vpn/provider.dart';
 import 'package:client_vpn/share_link.dart';
@@ -9,13 +10,15 @@ import 'package:client_vpn/vpn_config.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-const linkOne = 'vless://2f6bd5a1-1e73-4b1a-9d3c-000000000001@example.org:443'
+const linkOne =
+    'vless://2f6bd5a1-1e73-4b1a-9d3c-000000000001@example.org:443'
     '?encryption=none&security=reality'
     '&pbk=SaMdKeySaMdKeySaMdKeySaMdKeySaMd1234'
     '&sid=ab12cd34&fp=chrome&type=tcp&sni=example.org'
     '&flow=xtls-rprx-vision#%D0%A3%D0%B7%D0%B5%D0%BB%201';
 
-const linkTwo = 'vless://2f6bd5a1-1e73-4b1a-9d3c-000000000001@example.org:8443'
+const linkTwo =
+    'vless://2f6bd5a1-1e73-4b1a-9d3c-000000000001@example.org:8443'
     '?encryption=none&security=reality'
     '&pbk=SaMdKeySaMdKeySaMdKeySaMdKeySaMd1234'
     '&sid=ab12cd34&fp=chrome&type=tcp&sni=example.org'
@@ -43,7 +46,8 @@ SubscriptionFetcher responds({
 }) =>
     (url) async => SubscriptionResponse(body: body, headers: headers);
 
-SubscriptionFetcher failsWith(Object error) => (url) async => throw error;
+SubscriptionFetcher failsWith(Object error) =>
+    (url) async => throw error;
 
 String base64Body(String text) => base64.encode(utf8.encode(text));
 
@@ -180,9 +184,18 @@ void main() {
       expect(outbounds, hasLength(3));
       expect(outbounds.last['protocol'], 'freedom');
       expect(routing['domainStrategy'], 'AsIs');
-      expect(
-        (rules.last as Map<String, dynamic>)['outboundTag'],
+      // Автопереключение внутри региона (МК-3, МК-6): узлов два, поэтому
+      // завершающее правило ведёт на балансировщик, а наблюдатель нужен,
+      // чтобы ядро принял стратегию.
+      expect(routing['balancers'], hasLength(1));
+      expect(((routing['balancers'] as List).first as Map)['selector'], [
         'cvpn-proxy',
+        'cvpn-proxy-2',
+      ]);
+      expect(document['observatory'], {'target': defaultProbeEndpoint});
+      expect(
+        (rules.last as Map<String, dynamic>)['balancerTag'],
+        regionBalancerTag,
       );
     });
 
@@ -349,7 +362,8 @@ void main() {
   group('устойчивость хранилища', () {
     test('битые записи пропускаются, остальные остаются', () async {
       SharedPreferences.setMockInitialValues({
-        'profiles.v1': '[{"id":"хороший","name":"Целый","kind":"links",'
+        'profiles.v1':
+            '[{"id":"хороший","name":"Целый","kind":"links",'
             '"added":"2026-10-13T12:00:00.000Z","links":["$linkOne"]},'
             '{"name":"без идентификатора"}]',
         'providers.v1': 'это не список',

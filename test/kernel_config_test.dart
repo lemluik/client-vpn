@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:client_vpn/failover.dart';
 import 'package:client_vpn/profile_config.dart';
 import 'package:client_vpn/routing_presets.dart';
 import 'package:client_vpn/share_link.dart';
@@ -215,6 +216,26 @@ void main() {
           },
         ];
         final result = await testConfig(jsonEncode(config));
+
+        expect(result.exitCode, 0, reason: output(result));
+      },
+      skip: ready ? false : reason,
+    );
+
+    test(
+      'конфиг из двух ссылок: балансировщик региона и наблюдатель',
+      () async {
+        final links = parseLinks('$firstLink\n$secondLink').links;
+        final balancers = regionBalancers([
+          for (final (index, _) in links.indexed) tagForProfile(index),
+        ]);
+        final result = await testConfig(
+          buildConfigFromLinks(
+            links,
+            balancers: balancers,
+            observatory: observatoryFor(defaultProbeEndpoint),
+          ),
+        );
 
         expect(result.exitCode, 0, reason: output(result));
       },

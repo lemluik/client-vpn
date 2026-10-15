@@ -55,12 +55,16 @@ Map<String, dynamic> terminalRule(String tag, {Object? balancers}) {
 /// «напрямую» для своей страны работает, не меняя остальной трафик.
 /// Балансировщики из [balancers] остаются внутри `routing` — только там их
 /// читает ядро, — и завершающее правило начинает ссылаться на них.
+/// Блоки [observatory] и [burstObservatory] встают на верхнем уровне: без
+/// наблюдателя ядро не принимает явную стратегию балансировщика.
 String buildConfigFromLinks(
   Iterable<ShareLink> links, {
   int httpPort = defaultHttpPort,
   int socksPort = defaultSocksPort,
   List<Map<String, dynamic>> rules = const [],
   List<Map<String, dynamic>> balancers = const [],
+  Map<String, dynamic>? observatory,
+  Map<String, dynamic>? burstObservatory,
 }) {
   final profiles = links.toList();
   if (profiles.isEmpty) {
@@ -69,6 +73,8 @@ String buildConfigFromLinks(
 
   return jsonEncode({
     'log': {'loglevel': 'warning'},
+    'observatory': ?observatory,
+    'burstObservatory': ?burstObservatory,
     'inbounds': [
       {
         'protocol': 'http',
@@ -94,10 +100,7 @@ String buildConfigFromLinks(
     'routing': {
       'domainStrategy': 'AsIs',
       if (balancers.isNotEmpty) 'balancers': balancers,
-      'rules': [
-        ...rules,
-        terminalRule(proxyTag, balancers: balancers),
-      ],
+      'rules': [...rules, terminalRule(proxyTag, balancers: balancers)],
     },
   });
 }
