@@ -40,7 +40,8 @@ target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
 add_dependencies(${BINARY_NAME} flutter_assemble)
 
 # Copy assets/xray (populated by scripts/download_xray.sh) next to the
-# executable so XrayProcessManager finds xray.exe in a release build.
+# executable so DesktopCore finds xray.exe and the geo databases in a release
+# build.
 add_custom_command(TARGET ${BINARY_NAME} POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E copy_directory
     "${CMAKE_SOURCE_DIR}/../assets/xray"

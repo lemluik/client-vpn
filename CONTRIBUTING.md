@@ -37,17 +37,21 @@ See [README.md](README.md#сборка-из-исходников) for setup inst
 
 ## Architecture
 
-- **lib/main.dart** — UI (single screen), config validation, proxy/Xray lifecycle
-- **lib/xray_process.dart** — manages xray.exe subprocess, verifies its SHA-256 before launch
+- **lib/main.dart** — app entry, theme, single-instance guard, tray wiring
+- **lib/home_screen.dart**, **lib/app_state.dart** — the UI and the state machine that drives it
+- **lib/desktop_core.dart** — `DesktopCore`: starts the `xray.exe` subprocess and verifies its SHA-256 before every launch
+- **lib/android_core.dart** + `android/app/src/main/kotlin/` — the same contract on Android through the `VpnService` tunnel
+- **lib/tun_config.dart**, **lib/temp_config.dart** — config assembly for the engine and the working file it needs
 - **lib/system_proxy.dart** — Windows system proxy via registry, saves and restores the user's previous settings
 
 ## Bumping the Xray-core version
 
-The binary's SHA-256 is pinned in **two** places, and both must be updated
-together or the client will refuse to start:
+The binary's SHA-256 is pinned in **three** places, and all of them must be
+updated together or the client will refuse to start:
 
-1. `lib/xray_process.dart` — `_expectedSha256` (the extracted `xray.exe`)
+1. `lib/desktop_core.dart` — `_expectedSha256` (the extracted `xray.exe`) and `version`
 2. `scripts/download_xray.sh` — `ZIP_SHA256` and `EXE_SHA256`
+3. `scripts/download_xray_android.sh` — `ZIP_SHA256` and `BIN_SHA256` for the arm64 build
 
 Take the new values from the official digest file, never from a local build:
 
@@ -55,7 +59,9 @@ Take the new values from the official digest file, never from a local build:
 curl -sfL "https://github.com/XTLS/Xray-core/releases/download/<VERSION>/Xray-windows-64.zip.dgst"
 ```
 
-Also update the version badge and `XrayProcessManager.version` in `README.md`.
+Also update the `xray-26.3.27` badge in `README.md` and `DesktopCore.version`.
+`test/kernel_config_test.dart` runs the real binary, so a mismatched pin fails
+there before it fails for a user.
 
 ## Questions?
 

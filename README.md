@@ -129,11 +129,14 @@
 git clone https://github.com/lemluik/client-vpn.git
 cd client-vpn
 
-# 2. Создайте Flutter-проект (или используйте существующий)
-flutter create --org com.clientvpn --platforms=windows,android .
+# 2. Зависимости
+flutter pub get
 
-# 3. Скачайте Xray-core v26.3.27
-# Вариант A: скрипт (Git Bash)
+# 3. Строки интерфейса: генерируются из lib/l10n по l10n.yaml
+flutter gen-l10n
+
+# 4. Скачайте Xray-core v26.3.27 (бинарник в git не лежит)
+# Вариант A: скрипт (Git Bash) — сверяет SHA-256 архива и бинарника
 bash scripts/download_xray.sh
 
 # Вариант B: вручную
@@ -141,22 +144,17 @@ bash scripts/download_xray.sh
 # Скачайте Xray-windows-64.zip, распакуйте xray.exe в assets/xray/
 # Положите туда же geoip.dat и geosite.dat (иначе правило geoip:/geosite: не работает)
 
-# 4. Добавьте в windows/runner/CMakeLists.txt перед закрывающим ):
-#
-#    add_custom_command(TARGET ${BINARY_NAME} POST_BUILD
-#      COMMAND ${CMAKE_COMMAND} -E copy_directory
-#      "${CMAKE_SOURCE_DIR}/../assets/xray"
-#      "$<TARGET_FILE_DIR:${BINARY_NAME}>/xray"
-#    )
-
-# 5. Установите зависимости
-flutter pub get
-
-# 6. Соберите
+# 5. Соберите
 flutter build windows
 ```
 
 Готовый exe: `build\windows\x64\runner\Release\client_vpn.exe`
+
+Копировать `assets/xray` рядом с исполняемым файлом руками не нужно: шаг
+`POST_BUILD` уже описан в `windows/runner/CMakeLists.txt`. Проверить сборку можно
+командами, которыми её проверяет CI (`.github/workflows/ci.yml`):
+`flutter analyze` и `flutter test` — тесты `test/kernel_config_test.dart` собирают
+конфиг настоящим ядром, поэтому требуют `assets/xray/xray.exe`.
 
 ### Сборка Android
 
