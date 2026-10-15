@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -34,6 +35,29 @@ class Failure {
   final String action;
 }
 
+/// Сети, смена которых рвёт установленные соединения ядра.
+///
+/// `none` и `vpn` в подпись не входят: в первую переподнимать туннель некуда,
+/// второе — собственный туннель клиента не должен считаться сменой сети.
+const Set<ConnectivityResult> networkTransports = {
+  ConnectivityResult.bluetooth,
+  ConnectivityResult.ethernet,
+  ConnectivityResult.mobile,
+  ConnectivityResult.other,
+  ConnectivityResult.wifi,
+};
+
+/// Сеть в виде строки для сравнения: `'wifi'`, `'mobile'`, `''` — связи нет.
+String networkKey(List<ConnectivityResult> networks) {
+  final names = networks
+      .where(networkTransports.contains)
+      .map((network) => network.name)
+      .toSet()
+      .toList()
+    ..sort();
+  return names.join(',');
+}
+
 /// Связка хранилища профилей и ядра для экрана.
 ///
 /// Долгие операции не останавливают отрисовку: экран слушает уведомления и
@@ -46,6 +70,7 @@ class AppState extends ChangeNotifier {
     ChatService? chat,
     PresetStore? presets,
     String languageCode = '',
+    Stream<List<ConnectivityResult>>? networks,
   })  : _writeConfig = configWriter ??
             (Platform.isAndroid ? _passThrough : ensureConfigOnDisk),
         _chat = chat,
@@ -54,6 +79,7 @@ class AppState extends ChangeNotifier {
             presets?.load(languageCode) ?? defaultPresetFor(languageCode) {
     _logSubscription = _core.logs.listen(_onLog);
     _statusSubscription = _core.statusChanges.listen(_onStatus);
+    _networkSubscription = networks?.listen(_onNetworks);
   }
 
   static Future<AppState> create() async {
@@ -64,10 +90,18 @@ class AppState extends ChangeNotifier {
       chat: ChatService(await ChatStore.open()),
       presets: PresetStore(prefs),
       languageCode: PlatformDispatcher.instance.locale.languageCode,
+      networks: Connectivity().onConnectivityChanged,
     );
   }
 
   static const int logLimit = 500;
+
+  /// Окно, за которое события о смене сети успевают закончиться.
+  ///
+  /// Переход Wi-Fi ↔ LTE приходит не одним событием, а серией, поэтому
+  /// переподъём откладывается. Значение 2 с взято как заведомо бо́льшее, чем
+  /// разрыв между событиями; живой замер на телефоне ещё не выполнен.
+  static const Duration networkSettle = Duration(seconds: 2);
 
   final ProfileStore _store;
   final VpnCore _core;
@@ -77,6 +111,9 @@ class AppState extends ChangeNotifier {
 
   StreamSubscription<String>? _logSubscription;
   StreamSubscription<bool>? _statusSubscription;
+  StreamSubscription<List<ConnectivityResult>>? _networkSubscription;
+  Timer? _networkTimer;
+  String? _networkKey;
 
   final List<String> _log = [];
   TunnelState _state = TunnelState.off;
@@ -317,6 +354,32 @@ class AppState extends ChangeNotifier {
 
   void _onLog(String line) => _addLog(line);
 
+  /// Реакция на событие о сети: `'wifi' → 'mobile'` при поднятом туннеле
+  /// откладывает переподъём, а серия событий схлопывается в один.
+  void _onNetworks(List<ConnectivityResult> networks) {
+    final key = networkKey(networks);
+    // Первое событие только задаёт отправную точку: до него состояние сети
+    // неизвестно, и переподнимать туннель по нему было бы ошибкой.
+    if (_networkKey == null) {
+      _networkKey = key;
+      return;
+    }
+    if (key == _networkKey) return;
+    _networkKey = key;
+    // Сбой и подъём заново — не здесь: восстановление после обрыва
+    // относится к МК-5.
+    if (key.isEmpty || _state != TunnelState.on || _busy || _stopping) return;
+    _networkTimer?.cancel();
+    _networkTimer = Timer(networkSettle, _raiseTunnelOnNewNetwork);
+  }
+
+  Future<void> _raiseTunnelOnNewNetwork() async {
+    if (_state != TunnelState.on || _busy || _stopping) return;
+    _addLog('Сеть сменилась — туннель поднимается заново');
+    await disconnect();
+    await connect();
+  }
+
   void _onStatus(bool running) {
     if (running) {
       _state = TunnelState.on;
@@ -362,6 +425,8 @@ class AppState extends ChangeNotifier {
   void dispose() {
     _logSubscription?.cancel();
     _statusSubscription?.cancel();
+    _networkTimer?.cancel();
+    _networkSubscription?.cancel();
     _chat?.dispose();
     unawaited(_core.dispose());
     unawaited(clearWorkingDirectory());
