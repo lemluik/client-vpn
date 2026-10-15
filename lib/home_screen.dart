@@ -10,6 +10,7 @@ import 'profile_store.dart';
 import 'provider.dart';
 import 'region.dart';
 import 'routing_presets.dart';
+import 'rules_screen.dart';
 import 'support_chat_screen.dart';
 
 /// Главный экран: состояние туннеля, список подключений и добавление новых.
@@ -371,6 +372,22 @@ class _HomeScreenState extends State<HomeScreen> {
                     await _applyPreset(preset);
                   },
                 ),
+              ListTile(
+                title: Text(l.myRules),
+                subtitle: Text(
+                  _state.manualRules.isEmpty
+                      ? l.myRulesEmpty
+                      : l.myRulesCount(_state.manualRules.length),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.of(this.context).push(
+                    MaterialPageRoute(
+                      builder: (_) => RulesScreen(state: _state),
+                    ),
+                  );
+                },
+              ),
               ListTile(
                 title: Text(l.probeTarget),
                 subtitle: Text(_state.probeEndpoint),

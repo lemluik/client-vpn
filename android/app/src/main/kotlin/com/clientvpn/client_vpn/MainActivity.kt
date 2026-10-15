@@ -48,6 +48,8 @@ class MainActivity : FlutterActivity() {
                 "start" -> start(call.arguments as? String, result)
                 "stop" -> stop(result)
                 "status" -> result.success(TunnelBus.lastStatus)
+                "setExcludedApps" -> setExcludedApps(call.arguments, result)
+                "listApps" -> listApps(result)
                 else -> result.notImplemented()
             }
         }
@@ -148,6 +150,46 @@ class MainActivity : FlutterActivity() {
         } else {
             output.trim().ifEmpty { "код ${process.exitValue()}" }
         }
+    }
+
+    /** Список устанавливаемый вне туннеля приложений (R2.3): одна строка на
+     *  имя пакета. Пишется до подключения — туннель читает его при поднятии. */
+    private fun setExcludedApps(arguments: Any?, result: MethodChannel.Result) {
+        val packages = (arguments as? List<*>)?.filterIsInstance<String>()
+            ?: emptyList()
+        try {
+            File(filesDir, TunnelService.APPS_FILE)
+                .writeText(packages.joinToString("\n"))
+            result.success(null)
+        } catch (e: Exception) {
+            result.error("write_failed", e.message, null)
+        }
+    }
+
+    /** Приложения, которые пользователь может выбрать: те, у которых есть
+     *  запускаемый экран, как их показывает система. */
+    private fun listApps(result: MethodChannel.Result) {
+        Thread {
+            val output = try {
+                val pm = packageManager
+                val launcher = Intent(Intent.ACTION_MAIN)
+                    .addCategory(Intent.CATEGORY_LAUNCHER)
+                val seen = LinkedHashMap<String, String>()
+                for (info in pm.queryIntentActivities(launcher, 0)) {
+                    val pkg = info.activityInfo.packageName
+                    if (pkg != packageName) seen[pkg] = info.loadLabel(pm).toString()
+                }
+                seen.entries
+                    .sortedBy { it.value.lowercase() }
+                    .map { mapOf("package" to it.key, "name" to it.value) }
+            } catch (e: Exception) {
+                null
+            }
+            runOnUiThread {
+                if (output != null) result.success(output)
+                else result.error("apps_unavailable", "Список приложений недоступен", null)
+            }
+        }.apply { isDaemon = true }.start()
     }
 
     private fun start(tunConfig: String?, result: MethodChannel.Result) {

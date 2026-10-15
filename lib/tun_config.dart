@@ -140,7 +140,7 @@ String tunConfigForTest(String tunJson, {int port = 10810}) {
       'protocol': 'socks',
       'settings': {'udp': true},
       'tag': 'test-in',
-      if (sniffing != null) 'sniffing': sniffing,
+      'sniffing': ?sniffing,
     },
     ...kept,
   ];

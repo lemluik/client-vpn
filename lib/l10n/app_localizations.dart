@@ -338,6 +338,24 @@ abstract class AppLocalizations {
   /// **'Сайты пресета открываются мимо подключения'**
   String get presetOnSubtitle;
 
+  /// No description provided for @myRules.
+  ///
+  /// In ru, this message translates to:
+  /// **'Мои правила'**
+  String get myRules;
+
+  /// No description provided for @myRulesEmpty.
+  ///
+  /// In ru, this message translates to:
+  /// **'Правил пока нет'**
+  String get myRulesEmpty;
+
+  /// No description provided for @myRulesCount.
+  ///
+  /// In ru, this message translates to:
+  /// **'Правил: {count}'**
+  String myRulesCount(int count);
+
   /// No description provided for @presetSelected.
   ///
   /// In ru, this message translates to:

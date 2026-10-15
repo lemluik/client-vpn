@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:client_vpn/failover.dart';
+import 'package:client_vpn/manual_rules.dart';
 import 'package:client_vpn/profile_config.dart';
 import 'package:client_vpn/routing_presets.dart';
 import 'package:client_vpn/share_link.dart';
@@ -323,6 +324,37 @@ void main() {
     );
 
     test(
+      'правило, собранное редактором, проходит проверку ядром',
+      () async {
+        final json = buildConfigFromLinks(
+          parseLinks('$firstLink\n$secondLink').links,
+          rules: ruPreset.rulesWith([
+            const ManualRule(
+              id: 'probe',
+              title: 'Банк напрямую',
+              outbound: directTag,
+              conditions: {
+                RuleField.domain: ['sberbank.ru'],
+                RuleField.port: ['443'],
+                RuleField.network: ['tcp'],
+              },
+            ),
+          ]),
+        );
+        final result = await testConfig(json);
+
+        expect(result.exitCode, 0, reason: output(result));
+        final rules = (jsonDecode(json)['routing'] as Map)['rules'] as List;
+        // четыре правила пресета, правило пользователя и завершающее
+        expect(rules, hasLength(6));
+        expect((rules[4] as Map)['domain'], ['sberbank.ru']);
+        expect((rules[4] as Map)['port'], '443');
+        expect((rules[5] as Map)['outboundTag'], proxyTag);
+      },
+      skip: ready ? false : reason,
+    );
+
+    test(
       'geo-правило работает, потому что базы лежат рядом с ядром',
       () async {
         final config = configWith({});
@@ -347,6 +379,26 @@ void main() {
   });
 
   group('ядро отклоняет конфиг до запуска', () {
+    test(
+      'условия по имени приложения ядро не знает — только девять полей',
+      () async {
+        final config = configWith({});
+        (config['routing'] as Map)['rules'] = [
+          {
+            'type': 'field',
+            'packageName': ['org.telegram.messenger'],
+            'outboundTag': 'cvpn-direct',
+          },
+          terminalRule(proxyTag),
+        ];
+        final result = await testConfig(jsonEncode(config));
+
+        expect(result.exitCode, isNonZero);
+        expect(output(result), contains('this rule has no effective fields'));
+      },
+      skip: ready ? false : reason,
+    );
+
     test(
       'balancerTag без объявленного балансировщика',
       () async {

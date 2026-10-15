@@ -1,5 +1,6 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'manual_rules.dart';
 import 'profile_config.dart';
 
 /// Пресет маршрутизации: готовые правила «часть трафика идёт напрямую».
@@ -29,6 +30,17 @@ class RoutingPreset {
   final List<Map<String, dynamic>> rules;
 
   bool get isOff => rules.isEmpty;
+
+  /// Правила пресета плюс правила пользователя — в том порядке, который
+  /// отдаётся ядру.
+  ///
+  /// Пресет идёт первым: он описывает страну целиком, а правило пользователя —
+  /// уточнение, обычно более узкое. Ядро берёт первое совпадение, поэтому
+  /// порядок сверху вниз и есть приоритет.
+  List<Map<String, dynamic>> rulesWith(List<ManualRule> manual) => [
+    ...rules,
+    ...ManualRule.xrayRules(manual),
+  ];
 }
 
 /// «Россия напрямую»: адреса РФ и домены отечественных сервисов.

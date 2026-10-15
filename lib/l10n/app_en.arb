@@ -40,6 +40,16 @@
   "presetRu": "Russia directly",
   "presetOffSubtitle": "All traffic goes through the connection",
   "presetOnSubtitle": "The preset's sites open bypassing the connection",
+  "myRules": "My rules",
+  "myRulesEmpty": "No rules yet",
+  "myRulesCount": "Rules: {count}",
+  "@myRulesCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "presetSelected": "Preset “{name}” selected",
   "presetApplied": "Preset “{name}” applied",
   "subscriptionUpdated": "Subscription updated",

@@ -47,6 +47,16 @@
   "presetRu": "Россия напрямую",
   "presetOffSubtitle": "Весь трафик идёт через подключение",
   "presetOnSubtitle": "Сайты пресета открываются мимо подключения",
+  "myRules": "Мои правила",
+  "myRulesEmpty": "Правил пока нет",
+  "myRulesCount": "Правил: {count}",
+  "@myRulesCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "presetSelected": "Пресет «{name}» выбран",
   "@presetSelected": {
     "placeholders": {

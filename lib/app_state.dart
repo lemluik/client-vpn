@@ -10,6 +10,8 @@ import 'chat_store.dart';
 import 'deep_link.dart';
 import 'failover.dart';
 import 'log_mask.dart';
+import 'manual_rules.dart';
+import 'per_app_rules.dart';
 import 'profile_store.dart';
 import 'provider.dart';
 import 'reconnect.dart';
@@ -75,6 +77,9 @@ class AppState extends ChangeNotifier {
     ConfigWriter? configWriter,
     ChatService? chat,
     PresetStore? presets,
+    RuleStore? ruleStore,
+    PerAppStore? perApps,
+    AppExclusionsWriter? appExclusions,
     ProbeStore? probes,
     ReconnectPlan? reconnect,
     String languageCode = '',
@@ -84,6 +89,11 @@ class AppState extends ChangeNotifier {
             (Platform.isAndroid ? _passThrough : ensureConfigOnDisk),
         _chat = chat,
         _presets = presets,
+        _ruleStore = ruleStore,
+        _manualRules = ruleStore?.load() ?? const [],
+        _perApps = perApps,
+        _appExclusions = appExclusions,
+        _directApps = perApps?.load() ?? const [],
         _probes = probes,
         _reconnect = reconnect ?? ReconnectPlan(),
         _probeEndpoint = probes?.load() ?? defaultProbeEndpoint,
@@ -102,6 +112,10 @@ class AppState extends ChangeNotifier {
       createVpnCore(),
       chat: ChatService(await ChatStore.open()),
       presets: PresetStore(prefs),
+      ruleStore: RuleStore(prefs),
+      perApps: PerAppStore(prefs),
+      // Приложения «напрямую» умеет только Android: список читает VpnService.
+      appExclusions: Platform.isAndroid ? const PerAppChannel().write : null,
       probes: ProbeStore(prefs),
       languageCode: PlatformDispatcher.instance.locale.languageCode,
       networks: Connectivity().onConnectivityChanged,
@@ -123,6 +137,15 @@ class AppState extends ChangeNotifier {
   final ConfigWriter _writeConfig;
   final ChatService? _chat;
   final PresetStore? _presets;
+
+  /// Правила пользователя: хранятся на устройстве, применяются поверх пресета.
+  final RuleStore? _ruleStore;
+  List<ManualRule> _manualRules;
+
+  /// Приложения, идущие напрямую (R2.3): Android, список читает VpnService.
+  final PerAppStore? _perApps;
+  final AppExclusionsWriter? _appExclusions;
+  List<String> _directApps;
   final ProbeStore? _probes;
   String _probeEndpoint;
 
@@ -209,6 +232,35 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Правила пользователя в порядке применения.
+  List<ManualRule> get manualRules => List.unmodifiable(_manualRules);
+
+  /// Заменяет список правил и запоминает его.
+  ///
+  /// Поднятый туннель перезапускает экран — по той же причине, что и смена
+  /// пресета: правила читаются при сборке конфига.
+  Future<void> setManualRules(List<ManualRule> rules) async {
+    _manualRules = List.of(rules);
+    await _ruleStore?.save(_manualRules);
+    _failure = null;
+    notifyListeners();
+  }
+
+  /// Пакеты приложений, которые идут напрямую, мимо туннеля (R2.3).
+  List<String> get directApps => List.unmodifiable(_directApps);
+
+  /// Меняет список приложений «напрямую» и запоминает его.
+  ///
+  /// Нативной части список передаётся при подключении (см. [connect]): там,
+  /// где его и читает `VpnService`. Работает только на Android — на десктопе
+  /// ядро условия по приложению не поддерживает, и интерфейс кнопки не
+  /// показывает.
+  Future<void> setDirectApps(List<String> packages) async {
+    _directApps = List.of(packages);
+    await _perApps?.save(_directApps);
+    notifyListeners();
+  }
+
   List<String> get log => List.unmodifiable(_log);
 
   bool get canConnect =>
@@ -255,11 +307,15 @@ class AppState extends ChangeNotifier {
     try {
       final config = await _writeConfig(
         _store.activeConfig(
-          rules: _routingPreset.rules,
+          rules: _routingPreset.rulesWith(_manualRules),
           probeEndpoint: _probeEndpoint,
         ),
       );
       await _core.validate(config);
+      // Список приложений «напрямую» пишется перед каждым поднятием туннеля:
+      // VpnService читает файл при старте, и правка после подключения не
+      // требует, чтобы пользователь помнил про сохранение заранее.
+      await _appExclusions?.call(_directApps);
       await _core.start(config);
       _state = TunnelState.on;
       _reconnect.reset();

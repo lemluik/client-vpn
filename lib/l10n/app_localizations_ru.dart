@@ -138,6 +138,17 @@ class AppLocalizationsRu extends AppLocalizations {
   String get presetOnSubtitle => 'Сайты пресета открываются мимо подключения';
 
   @override
+  String get myRules => 'Мои правила';
+
+  @override
+  String get myRulesEmpty => 'Правил пока нет';
+
+  @override
+  String myRulesCount(int count) {
+    return 'Правил: $count';
+  }
+
+  @override
   String presetSelected(String name) {
     return 'Пресет «$name» выбран';
   }

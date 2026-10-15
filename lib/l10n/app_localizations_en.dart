@@ -139,6 +139,17 @@ class AppLocalizationsEn extends AppLocalizations {
       'The preset\'s sites open bypassing the connection';
 
   @override
+  String get myRules => 'My rules';
+
+  @override
+  String get myRulesEmpty => 'No rules yet';
+
+  @override
+  String myRulesCount(int count) {
+    return 'Rules: $count';
+  }
+
+  @override
   String presetSelected(String name) {
     return 'Preset “$name” selected';
   }
