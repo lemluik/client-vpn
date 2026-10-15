@@ -221,6 +221,8 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Защищено'), findsOneWidget);
+      // Подключённый диск не меняет значок: питание то же, свечение другое.
+      expect(find.byIcon(Icons.power_settings_new), findsOneWidget);
       expect(core.startCalls, 1);
       expect(core.lastConfig?.json, contains('cvpn-proxy'));
 

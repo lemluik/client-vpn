@@ -775,11 +775,9 @@ class _ConnectOrbState extends State<_ConnectOrb> {
                       child: Icon(
                         connecting
                             ? Icons.hourglass_top
-                            : connected
-                                ? Icons.lock
-                                : failed
-                                    ? Icons.refresh
-                                    : Icons.power_settings_new,
+                            : failed
+                                ? Icons.refresh
+                                : Icons.power_settings_new,
                         key: ValueKey(_state.state),
                         size: connecting ? 34 : 52,
                         color: glyph,
