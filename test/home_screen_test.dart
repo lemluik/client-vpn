@@ -214,10 +214,8 @@ void main() {
       expect(tester.getCenter(orb).dx, 400);
       // По вертикали — середина свободной области, а не низ экрана.
       expect(tester.getCenter(orb).dy, inInclusiveRange(200, 400));
-      expect(
-        tester.getCenter(orb).dy,
-        lessThan(tester.getTopLeft(find.text('Отключено')).dy),
-      );
+      // Строка статуса прижата к нижнему краю окна, а не висит под диском.
+      expect(tester.getRect(find.text('Отключено')).bottom, greaterThan(520));
 
       await tester.tap(find.text('Подключить'));
       await tester.pumpAndSettle();

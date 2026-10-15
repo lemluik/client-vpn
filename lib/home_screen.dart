@@ -85,26 +85,24 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
               if (empty)
                 Expanded(child: _EmptyState(onAdd: _showAddSheet))
-              else
-                Flexible(child: _profileList()),
-              if (_state.regions.length > 1) ...[
-                const SizedBox(height: 12),
-                _RegionPicker(
-                  regions: _state.regions,
-                  selected: _state.activeRegion?.key,
-                  onChanged: _selectRegion,
+              else ...[
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 260),
+                  child: _profileList(),
                 ),
-              ],
-              // Пустой экран без диска: подключаться не к чему, а место
-              // под объяснение и его кнопку нужно отдать целиком.
-              if (!empty) ...[
-                const SizedBox(height: 16),
-                Expanded(
-                  child: Center(
-                    child: _ConnectOrb(state: _state, onPressed: _toggle),
+                if (_state.regions.length > 1) ...[
+                  const SizedBox(height: 12),
+                  _RegionPicker(
+                    regions: _state.regions,
+                    selected: _state.activeRegion?.key,
+                    onChanged: _selectRegion,
                   ),
-                ),
-                const SizedBox(height: 12),
+                ],
+                // Два одинаковых Spacer'а ставят диск ровно в середину
+                // оставшегося места, а строка статуса остаётся у нижнего края.
+                const Spacer(),
+                _ConnectOrb(state: _state, onPressed: _toggle),
+                const Spacer(),
               ],
               _StatusLine(state: _state),
             ],
