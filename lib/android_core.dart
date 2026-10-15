@@ -111,7 +111,11 @@ class AndroidCore implements VpnCore {
 
   @override
   Future<void> recoverAfterCrash() async {
-    // Туннель Android снимает сам вместе с остановкой сервиса.
+    // Туннель Android снимает сам вместе с остановкой сервиса, но состояние
+    // сервиса переживает закрытие экрана: его надо спросить, иначе UI
+    // отрисуется «Отключён» при поднятом туннеле.
+    _running = await _channel.invokeMethod<bool>('status') == true;
+    _statusController.add(_running);
   }
 
   @override

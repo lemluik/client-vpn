@@ -71,6 +71,9 @@ class TunnelService : VpnService() {
     private fun startTunnel() {
         if (process != null) {
             TunnelBus.log("Туннель уже поднят")
+            // Статус публикуется и здесь: интерфейс мог открыться заново и
+            // спросить разрешение именно этим вызовом.
+            TunnelBus.status(true)
             return
         }
 

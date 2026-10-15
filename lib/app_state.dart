@@ -108,10 +108,12 @@ class AppState extends ChangeNotifier {
 
   /// Откатывает состояние после аварийного завершения и подтягивает подписки,
   /// которым пора обновиться.
+  ///
+  /// Вызывается при каждом старте приложения: и снятие системного прокси,
+  /// оставшегося после внешнего убийства процесса, и вопрос сервису Android
+  /// («туннель поднят?»), и подписки по интервалу.
   Future<void> recover() async {
-    if (!Platform.isAndroid) {
-      await _core.recoverAfterCrash();
-    }
+    await _core.recoverAfterCrash();
     await refreshDue();
   }
 

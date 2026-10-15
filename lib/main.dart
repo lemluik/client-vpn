@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -37,6 +38,11 @@ void main() async {
 
   final state = await AppState.create();
   runApp(ClientVpnApp(state: state));
+
+  // Восстановление идёт уже после первого кадра: снятие системного прокси,
+  // опрос сервиса Android и подписки по интервалу не должны задерживать
+  // запуск интерфейса.
+  unawaited(state.recover());
 }
 
 class ClientVpnApp extends StatefulWidget {

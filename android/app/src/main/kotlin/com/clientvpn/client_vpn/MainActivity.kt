@@ -24,13 +24,13 @@ class MainActivity : FlutterActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        TunnelBus.sink = { method, argument ->
+        TunnelBus.subscribe { method, argument ->
             runOnUiThread { channel.invokeMethod(method, argument) }
         }
     }
 
     override fun onDestroy() {
-        TunnelBus.sink = null
+        TunnelBus.unsubscribe()
         super.onDestroy()
     }
 
@@ -42,6 +42,7 @@ class MainActivity : FlutterActivity() {
                 "validate" -> validate(call.arguments as? String, result)
                 "start" -> start(call.arguments as? String, result)
                 "stop" -> stop(result)
+                "status" -> result.success(TunnelBus.lastStatus)
                 else -> result.notImplemented()
             }
         }
