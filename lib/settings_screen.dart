@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'app_state.dart';
@@ -66,7 +67,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
               SwitchListTile(
                 secondary: const Icon(Icons.play_circle_outline),
                 title: const Text('Автозапуск с системой'),
-                subtitle: const Text('Клиент откроется сам после входа в систему'),
+                subtitle: Text(
+                  defaultTargetPlatform == TargetPlatform.android
+                      ? 'Клиент откроется сам после включения телефона'
+                      : 'Клиент откроется сам после входа в систему',
+                ),
                 value: _state.autoStart,
                 onChanged: (value) async {
                   await _state.setAutoStart(value);
