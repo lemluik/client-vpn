@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'chat_service.dart';
 import 'chat_store.dart';
@@ -9,6 +10,7 @@ import 'log_mask.dart';
 import 'profile_store.dart';
 import 'provider.dart';
 import 'region.dart';
+import 'routing_presets.dart';
 import 'share_link.dart';
 import 'subscription.dart';
 import 'temp_config.dart';
@@ -37,19 +39,33 @@ class Failure {
 /// Долгие операции не останавливают отрисовку: экран слушает уведомления и
 /// показывает ход работы, кнопки выбора профиля и добавления остаются живыми.
 class AppState extends ChangeNotifier {
-  AppState(this._store, this._core, {ConfigWriter? configWriter, ChatService? chat})
-      : _writeConfig = configWriter ??
+  AppState(
+    this._store,
+    this._core, {
+    ConfigWriter? configWriter,
+    ChatService? chat,
+    PresetStore? presets,
+    String languageCode = '',
+  })  : _writeConfig = configWriter ??
             (Platform.isAndroid ? _passThrough : ensureConfigOnDisk),
-        _chat = chat {
+        _chat = chat,
+        _presets = presets,
+        _routingPreset =
+            presets?.load(languageCode) ?? defaultPresetFor(languageCode) {
     _logSubscription = _core.logs.listen(_onLog);
     _statusSubscription = _core.statusChanges.listen(_onStatus);
   }
 
-  static Future<AppState> create() async => AppState(
-        await ProfileStore.open(),
-        createVpnCore(),
-        chat: ChatService(await ChatStore.open()),
-      );
+  static Future<AppState> create() async {
+    final prefs = await SharedPreferences.getInstance();
+    return AppState(
+      await ProfileStore.open(),
+      createVpnCore(),
+      chat: ChatService(await ChatStore.open()),
+      presets: PresetStore(prefs),
+      languageCode: PlatformDispatcher.instance.locale.languageCode,
+    );
+  }
 
   static const int logLimit = 500;
 
@@ -57,6 +73,7 @@ class AppState extends ChangeNotifier {
   final VpnCore _core;
   final ConfigWriter _writeConfig;
   final ChatService? _chat;
+  final PresetStore? _presets;
 
   StreamSubscription<String>? _logSubscription;
   StreamSubscription<bool>? _statusSubscription;
@@ -66,6 +83,7 @@ class AppState extends ChangeNotifier {
   Failure? _failure;
   bool _busy = false;
   bool _stopping = false;
+  RoutingPreset _routingPreset;
 
   /// Чат поддержки, если он выпущен для активной подписки.
   ChatService? get chat => _chat;
@@ -97,6 +115,20 @@ class AppState extends ChangeNotifier {
   }
 
   List<Provider> get providers => _store.providers;
+
+  /// Выбранный пресет маршрутизации «напрямую».
+  RoutingPreset get routingPreset => _routingPreset;
+
+  /// Меняет пресет и запоминает выбор. Поднятый туннель перезапускает экран:
+  /// правила читаются при сборке конфига, поэтому смена пути рвёт соединения.
+  Future<void> setRoutingPreset(String key) async {
+    final preset = presetByKey(key);
+    if (preset.key == _routingPreset.key) return;
+    _routingPreset = preset;
+    await _presets?.save(key);
+    _failure = null;
+    notifyListeners();
+  }
 
   List<String> get log => List.unmodifiable(_log);
 
@@ -141,7 +173,9 @@ class AppState extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final config = await _writeConfig(_store.activeConfig());
+      final config = await _writeConfig(
+        _store.activeConfig(rules: _routingPreset.rules),
+      );
       await _core.validate(config);
       await _core.start(config);
       _state = TunnelState.on;

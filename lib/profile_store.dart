@@ -367,7 +367,10 @@ class ProfileStore {
 
   /// Конфиг ядра для активного профиля: из файла пользователя или собранный
   /// в памяти из ссылок.
-  VpnConfig activeConfig() {
+  ///
+  /// Правила из [rules] — выбранный пользователем пресет маршрутизации. В
+  /// файле пользователя пресет не появляется: свой config.json он собирает сам.
+  VpnConfig activeConfig({List<Map<String, dynamic>> rules = const []}) {
     final profile = active;
     if (profile == null) {
       throw LinkFormatException('Сначала добавьте подключение');
@@ -386,7 +389,7 @@ class ProfileStore {
     }
     return VpnConfig(
       name: profile.name,
-      json: buildConfigFromLinks(linksOfProfile(profile)),
+      json: buildConfigFromLinks(linksOfProfile(profile), rules: rules),
     );
   }
 

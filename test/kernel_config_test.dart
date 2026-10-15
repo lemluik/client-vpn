@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:client_vpn/profile_config.dart';
+import 'package:client_vpn/routing_presets.dart';
 import 'package:client_vpn/share_link.dart';
 import 'package:client_vpn/tun_config.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -271,6 +272,27 @@ void main() {
         );
 
         expect(result.exitCode, 0, reason: output(result));
+      },
+      skip: ready ? false : reason,
+    );
+
+    test(
+      'пресет «Россия напрямую» собран из кодов, которые есть в этих базах',
+      () async {
+        final json = buildConfigFromLinks(
+          parseLinks('$firstLink\n$secondLink').links,
+          rules: ruPreset.rules,
+        );
+        final result = await testConfig(json);
+
+        expect(result.exitCode, 0, reason: output(result));
+        final rules = (jsonDecode(json)['routing'] as Map)['rules'] as List;
+        // три правила пресета идут до завершающего
+        expect(rules, hasLength(4));
+        expect((rules[0] as Map)['outboundTag'], directTag);
+        expect((rules[1] as Map)['outboundTag'], directTag);
+        expect((rules[2] as Map)['outboundTag'], directTag);
+        expect((rules[3] as Map)['outboundTag'], proxyTag);
       },
       skip: ready ? false : reason,
     );

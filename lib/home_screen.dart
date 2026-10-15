@@ -6,6 +6,7 @@ import 'log_screen.dart';
 import 'profile_store.dart';
 import 'provider.dart';
 import 'region.dart';
+import 'routing_presets.dart';
 import 'support_chat_screen.dart';
 
 /// Главный экран: состояние туннеля, список подключений и добавление новых.
@@ -59,6 +60,11 @@ class _HomeScreenState extends State<HomeScreen> {
             tooltip: 'Добавить подключение',
             icon: const Icon(Icons.add),
             onPressed: _state.isBusy ? null : _showAddSheet,
+          ),
+          IconButton(
+            tooltip: 'Настройки',
+            icon: const Icon(Icons.tune),
+            onPressed: _state.isBusy ? null : _showSettingsSheet,
           ),
           IconButton(
             tooltip: 'Журнал',
@@ -314,6 +320,71 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
     );
+  }
+
+  /// Нижняя панель настроек: контекст главного экрана не теряется.
+  ///
+  /// Пресет нужен **до** первого подключения, поэтому выбор применяется сразу
+  /// и поднятый туннель перезапускается, а не ждёт следующего запуска.
+  Future<void> _showSettingsSheet() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(24, 0, 24, 8),
+                child: Text(
+                  'Часть трафика напрямую',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                ),
+              ),
+              for (final preset in routingPresets)
+                ListTile(
+                  title: Text(preset.label),
+                  subtitle: Text(
+                    preset.isOff
+                        ? 'Весь трафик идёт через подключение'
+                        : 'Сайты пресета открываются мимо подключения',
+                  ),
+                  trailing: preset.key == _state.routingPreset.key
+                      ? const Icon(Icons.check)
+                      : null,
+                  onTap: () async {
+                    Navigator.pop(context);
+                    await _applyPreset(preset);
+                  },
+                ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _applyPreset(RoutingPreset preset) async {
+    if (preset.key == _state.routingPreset.key) return;
+
+    if (!_state.isConnected) {
+      await _state.setRoutingPreset(preset.key);
+      _notify('Пресет «${preset.label}» выбран');
+      return;
+    }
+
+    final restart = await _confirm(
+      'Переподключиться?',
+      'Новые правила работают только в поднятом заново подключении. '
+          'Открытые соединения прервутся.',
+    );
+    if (!restart) return;
+    await _state.disconnect();
+    await _state.setRoutingPreset(preset.key);
+    await _state.connect();
+    _notify('Пресет «${preset.label}» применён');
   }
 
   Future<void> _addFromText() async {
