@@ -77,6 +77,12 @@ DEV_PATH = re.compile(r'[A-Za-z]:[\\/]{1,2}[Uu]sers[\\/]|/home/[a-z0-9._-]{2,}/|
 # у проекта в текстах только кириллица, латиница и символы разметки
 FOREIGN_SCRIPT = re.compile(r'[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af\u0600-\u06ff'
                             r'\u0e00-\u0e7f\u0590-\u05ff\u1100-\u11ff]')
+# заявление «без сбора статистики» (позиция 16 §20.1) проверяется по графу зависимостей
+TELEMETRY = re.compile(
+    r'^(?:firebase_analytics|firebase_crashlytics|firebase_performance|sentry|sentry_flutter|'
+    r'posthog|matomo_piwik|amplitude|segment_analytics|appcenter|appsflyer_sdk|mixpanel|'
+    r'countly_sdk|yandex_metrica|google_measurement|plausible|bugsnag|newrelic|datadog|'
+    r'telemetrics|telemetry|adjust|branch_sdk)\S*$')
 
 
 def mask(value):
@@ -153,10 +159,31 @@ def check_history(base):
     return [f'новая git-идентичность: {mask(x)}' for x in fresh]
 
 
+def check_dependencies(root):
+    """Позиция 16 (§20.1): «без сбора статистики» должно подтверждаться кодом.
+
+    Заявление на экране «О программе» стоит столько, сколько стоит проверка:
+    если в графе зависимостей появится аналитика, crash-репортер или телеметрия,
+    гейт падает и релиз не собирается.
+    """
+    findings = []
+    for rel in ('pubspec.yaml', 'pubspec.lock'):
+        path = os.path.join(root, rel)
+        if not os.path.exists(path):
+            continue
+        with io.open(path, encoding='utf-8') as handle:
+            for num, line in enumerate(handle, 1):
+                name = line.strip().rstrip(':')
+                if TELEMETRY.match(name):
+                    findings.append(
+                        f'{rel}:{num}: телеметрия или аналитика в зависимостях: {name}')
+    return findings
+
+
 def main(argv):
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     base = argv[argv.index('--base') + 1] if '--base' in argv else None
-    findings = check_files(root)
+    findings = check_files(root) + check_dependencies(root)
     if '--commits' in argv:
         findings += check_history(base)
     for line in findings:

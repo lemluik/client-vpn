@@ -83,5 +83,22 @@
   "alreadyRunningTitle": "The client is already running",
   "alreadyRunningBody": "The app is open in another window. A second window does not start: two instances would fight over the system proxy and break the connection.",
   "alreadyRunningClose": "Close this window",
-  "windowHiddenToTray": "The client is in the tray: the connection stays up."
+  "windowHiddenToTray": "The client is in the tray: the connection stays up.",
+  "aboutTitle": "About",
+  "aboutVersion": "Version {version}",
+  "@aboutVersion": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "aboutRepository": "Source code and releases: github.com/lemluik/client-vpn",
+  "aboutLicense": "License",
+  "aboutLicenseSubtitle": "Mozilla Public License 2.0",
+  "aboutNotices": "Third-party notices",
+  "aboutNoticesSubtitle": "Third-party libraries and their licenses",
+  "aboutNoTelemetry": "Data collection",
+  "aboutNoTelemetryBody": "The client collects no statistics and sends no data to third parties: there are no telemetry or analytics libraries in the dependencies.",
+  "aboutAssetMissing": "The file is missing from the build"
 }

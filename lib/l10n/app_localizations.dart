@@ -559,6 +559,66 @@ abstract class AppLocalizations {
   /// In ru, this message translates to:
   /// **'Клиент свёрнут в трей: подключение продолжает работать.'**
   String get windowHiddenToTray;
+
+  /// No description provided for @aboutTitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'О программе'**
+  String get aboutTitle;
+
+  /// No description provided for @aboutVersion.
+  ///
+  /// In ru, this message translates to:
+  /// **'Версия {version}'**
+  String aboutVersion(String version);
+
+  /// No description provided for @aboutRepository.
+  ///
+  /// In ru, this message translates to:
+  /// **'Исходный код и релизы: github.com/lemluik/client-vpn'**
+  String get aboutRepository;
+
+  /// No description provided for @aboutLicense.
+  ///
+  /// In ru, this message translates to:
+  /// **'Лицензия'**
+  String get aboutLicense;
+
+  /// No description provided for @aboutLicenseSubtitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Mozilla Public License 2.0'**
+  String get aboutLicenseSubtitle;
+
+  /// No description provided for @aboutNotices.
+  ///
+  /// In ru, this message translates to:
+  /// **'Уведомления о зависимостях'**
+  String get aboutNotices;
+
+  /// No description provided for @aboutNoticesSubtitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Сторонние библиотеки и их лицензии'**
+  String get aboutNoticesSubtitle;
+
+  /// No description provided for @aboutNoTelemetry.
+  ///
+  /// In ru, this message translates to:
+  /// **'Сбор статистики'**
+  String get aboutNoTelemetry;
+
+  /// No description provided for @aboutNoTelemetryBody.
+  ///
+  /// In ru, this message translates to:
+  /// **'Клиент не собирает статистику и не отправляет данные третьим сторонам: телеметрических и аналитических библиотек в зависимостях нет.'**
+  String get aboutNoTelemetryBody;
+
+  /// No description provided for @aboutAssetMissing.
+  ///
+  /// In ru, this message translates to:
+  /// **'Файл не найден в сборке'**
+  String get aboutAssetMissing;
 }
 
 class _AppLocalizationsDelegate

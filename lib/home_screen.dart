@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'about_screen.dart';
 import 'app_state.dart';
 import 'failover.dart';
 import 'l10n/app_localizations.dart';
@@ -394,6 +395,17 @@ class _HomeScreenState extends State<HomeScreen> {
                 onTap: () async {
                   Navigator.pop(context);
                   await _editProbeTarget();
+                },
+              ),
+              ListTile(
+                title: Text(l.aboutTitle),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.of(this.context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const AboutScreen(),
+                    ),
+                  );
                 },
               ),
               const SizedBox(height: 8),

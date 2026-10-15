@@ -265,4 +265,38 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get windowHiddenToTray =>
       'The client is in the tray: the connection stays up.';
+
+  @override
+  String get aboutTitle => 'About';
+
+  @override
+  String aboutVersion(String version) {
+    return 'Version $version';
+  }
+
+  @override
+  String get aboutRepository =>
+      'Source code and releases: github.com/lemluik/client-vpn';
+
+  @override
+  String get aboutLicense => 'License';
+
+  @override
+  String get aboutLicenseSubtitle => 'Mozilla Public License 2.0';
+
+  @override
+  String get aboutNotices => 'Third-party notices';
+
+  @override
+  String get aboutNoticesSubtitle => 'Third-party libraries and their licenses';
+
+  @override
+  String get aboutNoTelemetry => 'Data collection';
+
+  @override
+  String get aboutNoTelemetryBody =>
+      'The client collects no statistics and sends no data to third parties: there are no telemetry or analytics libraries in the dependencies.';
+
+  @override
+  String get aboutAssetMissing => 'The file is missing from the build';
 }

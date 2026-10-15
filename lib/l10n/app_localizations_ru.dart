@@ -264,4 +264,38 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get windowHiddenToTray =>
       'Клиент свёрнут в трей: подключение продолжает работать.';
+
+  @override
+  String get aboutTitle => 'О программе';
+
+  @override
+  String aboutVersion(String version) {
+    return 'Версия $version';
+  }
+
+  @override
+  String get aboutRepository =>
+      'Исходный код и релизы: github.com/lemluik/client-vpn';
+
+  @override
+  String get aboutLicense => 'Лицензия';
+
+  @override
+  String get aboutLicenseSubtitle => 'Mozilla Public License 2.0';
+
+  @override
+  String get aboutNotices => 'Уведомления о зависимостях';
+
+  @override
+  String get aboutNoticesSubtitle => 'Сторонние библиотеки и их лицензии';
+
+  @override
+  String get aboutNoTelemetry => 'Сбор статистики';
+
+  @override
+  String get aboutNoTelemetryBody =>
+      'Клиент не собирает статистику и не отправляет данные третьим сторонам: телеметрических и аналитических библиотек в зависимостях нет.';
+
+  @override
+  String get aboutAssetMissing => 'Файл не найден в сборке';
 }
