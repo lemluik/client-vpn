@@ -290,6 +290,30 @@ abstract class AppLocalizations {
   /// **'Часть трафика напрямую'**
   String get settingsTitle;
 
+  /// No description provided for @probeTarget.
+  ///
+  /// In ru, this message translates to:
+  /// **'Точка проб'**
+  String get probeTarget;
+
+  /// No description provided for @probeTargetSubtitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Адрес, до которого клиент меряет задержку узлов'**
+  String get probeTargetSubtitle;
+
+  /// No description provided for @probeApplied.
+  ///
+  /// In ru, this message translates to:
+  /// **'Точка проб сохранена'**
+  String get probeApplied;
+
+  /// No description provided for @restartForProbeBody.
+  ///
+  /// In ru, this message translates to:
+  /// **'Новая точка проб работает в поднятом заново подключении. Открытые соединения прервутся.'**
+  String get restartForProbeBody;
+
   /// No description provided for @presetOff.
   ///
   /// In ru, this message translates to:
@@ -433,6 +457,12 @@ abstract class AppLocalizations {
   /// In ru, this message translates to:
   /// **'Сбой'**
   String get statusFailed;
+
+  /// No description provided for @statusNoLink.
+  ///
+  /// In ru, this message translates to:
+  /// **'Нет связи'**
+  String get statusNoLink;
 
   /// No description provided for @statusOff.
   ///

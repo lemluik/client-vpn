@@ -112,6 +112,20 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsTitle => 'Part of the traffic directly';
 
   @override
+  String get probeTarget => 'Probe target';
+
+  @override
+  String get probeTargetSubtitle =>
+      'Address the client measures node latency against';
+
+  @override
+  String get probeApplied => 'Probe target saved';
+
+  @override
+  String get restartForProbeBody =>
+      'The new probe target works in a connection raised again. Open connections will drop.';
+
+  @override
   String get presetOff => 'Off';
 
   @override
@@ -195,6 +209,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get statusFailed => 'Failure';
+
+  @override
+  String get statusNoLink => 'No connection';
 
   @override
   String get statusOff => 'Off';

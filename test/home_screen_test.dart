@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:client_vpn/app_state.dart';
 import 'package:client_vpn/chat_service.dart';
 import 'package:client_vpn/chat_store.dart';
+import 'package:client_vpn/failover.dart';
 import 'package:client_vpn/home_screen.dart';
 import 'package:client_vpn/main.dart';
 import 'package:client_vpn/profile_store.dart';
@@ -277,6 +278,9 @@ void main() {
         findsOneWidget,
       );
       expect(find.text('Подключить снова'), findsOneWidget);
+      // Сбой ставит в очередь пробу и паузу подписки; фазовые часы теста
+      // не прощают незакрытых таймеров, поэтому снимаем их отключением.
+      await state.disconnect();
     });
 
     testWidgets('обрыв со стороны ядра — это сбой, а не отключение',
@@ -296,7 +300,8 @@ void main() {
 
       expect(find.text('Сбой'), findsOneWidget);
       expect(find.text('Соединение прервано'), findsOneWidget);
-      expect(find.text('Подключитесь снова: профиль сохранён'), findsOneWidget);
+      expect(find.text('Подключитесь снова или обновите подписку'), findsOneWidget);
+      await state.disconnect();
     });
 
     testWidgets('журнал живёт на отдельном экране и маскируется',
@@ -512,6 +517,72 @@ void main() {
           .toList();
       expect(taps, hasLength(1));
       expect(taps.single.arguments, 'HapticFeedbackType.mediumImpact');
+    });
+  });
+
+  group('отказоустойчивость: балансировщик региона и точка проб', () {
+    Future<AppState> stateWithProbeStore(FakeCore core) async {
+      SharedPreferences.setMockInitialValues({});
+      return AppState(
+        await ProfileStore.open(),
+        core,
+        configWriter: (config) async => config,
+        probes: ProbeStore(await SharedPreferences.getInstance()),
+      );
+    }
+
+    testWidgets('настроенная точка проб уходит в конфиг ядра',
+        (tester) async {
+      final core = FakeCore();
+      final state = await stateWithProbeStore(core);
+      addTearDown(state.dispose);
+      await state.addFromText('$linkOne\n$linkTwo');
+
+      await pumpApp(tester, state);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Настройки'));
+      await tester.pumpAndSettle();
+      expect(find.text('Точка проб'), findsOneWidget);
+
+      await tester.tap(find.text('Точка проб'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'https://example.test/ping');
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Сохранить'));
+      await tester.pumpAndSettle();
+
+      expect(state.probeEndpoint, 'https://example.test/ping');
+
+      await state.connect();
+      final json = core.lastConfig!.json;
+      expect(json, contains('"target":"https://example.test/ping"'));
+      // Два узла одного региона — правило ведёт на балансировщик (МК-6).
+      expect(json, contains('"balancerTag":"cvpn-lb"'));
+      expect(json, contains('"strategy":{"type":"leastPing"}'));
+    });
+
+    testWidgets('плохой адрес не сохраняется и объясняет причину',
+        (tester) async {
+      final state = await stateWithProbeStore(FakeCore());
+      addTearDown(state.dispose);
+      await state.addFromText(linkOne);
+
+      await pumpApp(tester, state);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Настройки'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Точка проб'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'example.test');
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Сохранить'));
+      await tester.pumpAndSettle();
+
+      expect(state.probeEndpoint, defaultProbeEndpoint);
+      expect(find.text('Адрес должен начинаться с http:// или https://'),
+          findsOneWidget);
     });
   });
 }

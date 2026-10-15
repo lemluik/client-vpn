@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'app_state.dart';
+import 'failover.dart';
 import 'l10n/app_localizations.dart';
 import 'log_screen.dart';
 import 'profile_store.dart';
@@ -370,6 +371,14 @@ class _HomeScreenState extends State<HomeScreen> {
                     await _applyPreset(preset);
                   },
                 ),
+              ListTile(
+                title: Text(l.probeTarget),
+                subtitle: Text(_state.probeEndpoint),
+                onTap: () async {
+                  Navigator.pop(context);
+                  await _editProbeTarget();
+                },
+              ),
               const SizedBox(height: 8),
             ],
           ),
@@ -407,6 +416,64 @@ class _HomeScreenState extends State<HomeScreen> {
     await _state.setRoutingPreset(preset.key);
     await _state.connect();
     _notify(l.presetApplied(label));
+  }
+
+  /// Точка проб наблюдателя (У-3): значение вводит пользователь, нейтральное
+  /// по умолчанию ничего о провайдере не сообщает.
+  Future<void> _editProbeTarget() async {
+    final l = AppLocalizations.of(context);
+    final controller = TextEditingController(text: _state.probeEndpoint);
+    final value = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(l.probeTarget),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(l.probeTargetSubtitle),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              autofocus: true,
+              keyboardType: TextInputType.url,
+              decoration: const InputDecoration(
+                hintText: defaultProbeEndpoint,
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(l.buttonCancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, controller.text),
+            child: Text(l.buttonSave),
+          ),
+        ],
+      ),
+    );
+    if (value == null) return;
+
+    final error = await _state.setProbeEndpoint(value);
+    if (error != null) {
+      _notify(error);
+      return;
+    }
+    if (!_state.isConnected) {
+      _notify(l.probeApplied);
+      return;
+    }
+
+    // Значение уже сохранено; переподключение только применяет его к каналу.
+    if (await _confirm(l.restartForPresetTitle, l.restartForProbeBody)) {
+      await _state.disconnect();
+      await _state.connect();
+    }
+    _notify(l.probeApplied);
   }
 
   Future<void> _addFromText() async {
@@ -823,6 +890,13 @@ class _ConnectOrbState extends State<_ConnectOrb> {
           colors.error.withValues(alpha: 0.18),
           l.orbRetry,
         ),
+      TunnelState.noLink => (
+          colors.errorContainer,
+          colors.error.withValues(alpha: 0.45),
+          colors.onErrorContainer,
+          colors.error.withValues(alpha: 0.18),
+          l.orbRetry,
+        ),
       TunnelState.off => (
           colors.surfaceContainerHighest,
           colors.outline,
@@ -941,6 +1015,11 @@ class _StatusLine extends StatelessWidget {
           l.statusFailed,
           Theme.of(context).colorScheme.error,
           Icons.error_outline,
+        ),
+      TunnelState.noLink => (
+          l.statusNoLink,
+          Theme.of(context).colorScheme.error,
+          Icons.wifi_off,
         ),
       TunnelState.off => (
           l.statusOff,

@@ -112,6 +112,20 @@ class AppLocalizationsRu extends AppLocalizations {
   String get settingsTitle => 'Часть трафика напрямую';
 
   @override
+  String get probeTarget => 'Точка проб';
+
+  @override
+  String get probeTargetSubtitle =>
+      'Адрес, до которого клиент меряет задержку узлов';
+
+  @override
+  String get probeApplied => 'Точка проб сохранена';
+
+  @override
+  String get restartForProbeBody =>
+      'Новая точка проб работает в поднятом заново подключении. Открытые соединения прервутся.';
+
+  @override
   String get presetOff => 'Выключено';
 
   @override
@@ -194,6 +208,9 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get statusFailed => 'Сбой';
+
+  @override
+  String get statusNoLink => 'Нет связи';
 
   @override
   String get statusOff => 'Отключено';

@@ -8,9 +8,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'chat_service.dart';
 import 'chat_store.dart';
 import 'deep_link.dart';
+import 'failover.dart';
 import 'log_mask.dart';
 import 'profile_store.dart';
 import 'provider.dart';
+import 'reconnect.dart';
 import 'region.dart';
 import 'routing_presets.dart';
 import 'share_link.dart';
@@ -19,8 +21,11 @@ import 'temp_config.dart';
 import 'vpn_config.dart';
 import 'vpn_core.dart';
 
-/// Состояние туннеля: четыре значения, которые видит пользователь.
-enum TunnelState { off, connecting, on, failure }
+/// Состояние туннеля: пять значений, которые видит пользователь.
+///
+/// `noLink` отличается от `failure` тем, что рвать пробовался не путь: связи
+/// нет совсем (сеть пропала), и показывать ошибку узла было бы неверно.
+enum TunnelState { off, connecting, on, failure, noLink }
 
 /// Подготовка конфига для ядра: на десктопе ядро читает его только с диска.
 typedef ConfigWriter = Future<VpnConfig> Function(VpnConfig config);
@@ -70,6 +75,8 @@ class AppState extends ChangeNotifier {
     ConfigWriter? configWriter,
     ChatService? chat,
     PresetStore? presets,
+    ProbeStore? probes,
+    ReconnectPlan? reconnect,
     String languageCode = '',
     Stream<List<ConnectivityResult>>? networks,
     Stream<String>? deepLinks,
@@ -77,6 +84,9 @@ class AppState extends ChangeNotifier {
             (Platform.isAndroid ? _passThrough : ensureConfigOnDisk),
         _chat = chat,
         _presets = presets,
+        _probes = probes,
+        _reconnect = reconnect ?? ReconnectPlan(),
+        _probeEndpoint = probes?.load() ?? defaultProbeEndpoint,
         _routingPreset =
             presets?.load(languageCode) ?? defaultPresetFor(languageCode) {
     _logSubscription = _core.logs.listen(_onLog);
@@ -92,6 +102,7 @@ class AppState extends ChangeNotifier {
       createVpnCore(),
       chat: ChatService(await ChatStore.open()),
       presets: PresetStore(prefs),
+      probes: ProbeStore(prefs),
       languageCode: PlatformDispatcher.instance.locale.languageCode,
       networks: Connectivity().onConnectivityChanged,
       deepLinks: deepLinkStream(),
@@ -112,11 +123,16 @@ class AppState extends ChangeNotifier {
   final ConfigWriter _writeConfig;
   final ChatService? _chat;
   final PresetStore? _presets;
+  final ProbeStore? _probes;
+  String _probeEndpoint;
 
   StreamSubscription<String>? _logSubscription;
   StreamSubscription<bool>? _statusSubscription;
   StreamSubscription<List<ConnectivityResult>>? _networkSubscription;
   Timer? _networkTimer;
+  Timer? _probeTimer;
+  Timer? _subscriptionTimer;
+  final ReconnectPlan _reconnect;
   String? _networkKey;
   StreamSubscription<String>? _deepLinkSubscription;
 
@@ -125,6 +141,10 @@ class AppState extends ChangeNotifier {
   Failure? _failure;
   bool _busy = false;
   bool _stopping = false;
+
+  /// Пользователь хочет туннель поднятым: с этого момента клиент переподключается
+  /// сам, без нажатия кнопки.
+  bool _userWantsTunnel = false;
   RoutingPreset _routingPreset;
 
   /// Чат поддержки, если он выпущен для активной подписки.
@@ -160,6 +180,23 @@ class AppState extends ChangeNotifier {
 
   /// Выбранный пресет маршрутизации «напрямую».
   RoutingPreset get routingPreset => _routingPreset;
+
+  /// Точка проб наблюдателя (У-3): нейтральная по умолчанию, значение
+  /// локальное и никуда, кроме ядра, не отправляется.
+  String get probeEndpoint => _probeEndpoint;
+
+  /// Меняет точку проб. Возвращает текст ошибки или null; поднятый туннель
+  /// перезапускает экран — конфиг с новой точкой читается только при сборке.
+  Future<String?> setProbeEndpoint(String value) async {
+    final error = probeEndpointError(value);
+    if (error != null) return error;
+    final endpoint = value.trim();
+    if (endpoint == _probeEndpoint) return null;
+    _probeEndpoint = endpoint;
+    await _probes?.save(endpoint);
+    notifyListeners();
+    return null;
+  }
 
   /// Меняет пресет и запоминает выбор. Поднятый туннель перезапускает экран:
   /// правила читаются при сборке конфига, поэтому смена пути рвёт соединения.
@@ -212,25 +249,35 @@ class AppState extends ChangeNotifier {
 
     _failure = null;
     _state = TunnelState.connecting;
+    _userWantsTunnel = true;
     notifyListeners();
 
     try {
       final config = await _writeConfig(
-        _store.activeConfig(rules: _routingPreset.rules),
+        _store.activeConfig(
+          rules: _routingPreset.rules,
+          probeEndpoint: _probeEndpoint,
+        ),
       );
       await _core.validate(config);
       await _core.start(config);
       _state = TunnelState.on;
+      _reconnect.reset();
+      _stopReconnectTimers();
       _addLog('Подключено: ${_activeLabel()}');
     } catch (error) {
       _state = TunnelState.failure;
       _failure = failureOf(error);
       _addLog('[ERR] ${_failure!.message}');
+      _armReconnect();
     }
     notifyListeners();
   }
 
   Future<void> disconnect() async {
+    _userWantsTunnel = false;
+    _reconnect.reset();
+    _stopReconnectTimers();
     _stopping = true;
     try {
       await _core.stop();
@@ -371,11 +418,39 @@ class AppState extends ChangeNotifier {
     }
     if (key == _networkKey) return;
     _networkKey = key;
-    // Сбой и подъём заново — не здесь: восстановление после обрыва
-    // относится к МК-5.
-    if (key.isEmpty || _state != TunnelState.on || _busy || _stopping) return;
+    if (key.isEmpty) {
+      // Сети нет совсем: это «нет связи» (МК-5), а не сбой узла, поэтому
+      // ошибку пути не показываем, но переподключение уже стоит в очереди.
+      if (_state == TunnelState.on ||
+          _state == TunnelState.connecting ||
+          _state == TunnelState.failure) {
+        _state = TunnelState.noLink;
+        _failure = null;
+        _armReconnect();
+        notifyListeners();
+      }
+      return;
+    }
+    if (_state == TunnelState.noLink) {
+      if (!_userWantsTunnel || _busy || _stopping) return;
+      // Сеть вернулась — подымаемся сразу, не дожидаясь очереди проб.
+      _networkTimer?.cancel();
+      _networkTimer = Timer(networkSettle, _raiseAfterOutage);
+      return;
+    }
+    if (_state != TunnelState.on || _busy || _stopping) return;
     _networkTimer?.cancel();
     _networkTimer = Timer(networkSettle, _raiseTunnelOnNewNetwork);
+  }
+
+  /// Подъём туннеля после того, как связь появилась снова (МК-5).
+  Future<void> _raiseAfterOutage() async {
+    if (!_userWantsTunnel || _state == TunnelState.on || _busy || _stopping) {
+      return;
+    }
+    _addLog('Сеть появилась — туннель поднимается заново');
+    await disconnect();
+    await connect();
   }
 
   Future<void> _raiseTunnelOnNewNetwork() async {
@@ -383,6 +458,56 @@ class AppState extends ChangeNotifier {
     _addLog('Сеть сменилась — туннель поднимается заново');
     await disconnect();
     await connect();
+  }
+
+  /// Шаг, который пользователь видит сам: сколько попыток переподключения
+  /// использовано из лестницы 1–5–30 минут.
+  int get reconnectStep => _reconnect.step;
+
+  /// Живёт ли ещё план переподключения.
+  bool get isReconnecting =>
+      _probeTimer?.isActive == true || _subscriptionTimer?.isActive == true;
+
+  /// Ставит в очередь переподключение (МК-5): проба туннеля раз в 30 секунд
+  /// плюс перечитывание подписки по паузам 1–5–30 минут.
+  void _armReconnect() {
+    if (!_userWantsTunnel || _stopping) return;
+    _probeTimer?.cancel();
+    _probeTimer = Timer(_reconnect.probeInterval, _probeLink);
+    if (_reconnect.exhausted || (_subscriptionTimer?.isActive ?? false)) return;
+    _subscriptionTimer?.cancel();
+    _subscriptionTimer = Timer(_reconnect.takePause(), _rereadSubscription);
+  }
+
+  Future<void> _probeLink() async {
+    if (!_userWantsTunnel || _busy || _stopping) return;
+    if (_state == TunnelState.noLink) {
+      // Сети нет совсем: туннель поднимает возврат связи, а не проба.
+      // Очередь держим на случай, если поток сети смолчит.
+      _armReconnect();
+      return;
+    }
+    if (_state == TunnelState.on) return;
+    _addLog('Проба связи: подключаемся снова');
+    await connect();
+  }
+
+  /// Пауза подписки: перечитать подписку и, если туннель ещё лежит, поднять
+  /// его. Успешный подъём сам гасит очередь (см. connect), поэтому повторное
+  /// вооружение здесь не нужно.
+  Future<void> _rereadSubscription() async {
+    if (!_userWantsTunnel || _busy || _stopping) return;
+    _addLog('Перечитываем подписку после сбоя');
+    await refreshDue();
+    if (_state == TunnelState.on || _state == TunnelState.noLink) return;
+    await connect();
+  }
+
+  void _stopReconnectTimers() {
+    _probeTimer?.cancel();
+    _subscriptionTimer?.cancel();
+    _probeTimer = null;
+    _subscriptionTimer = null;
   }
 
   /// Тап по ссылке подключения вне приложения: окно открывается уже с новым
@@ -409,9 +534,10 @@ class AppState extends ChangeNotifier {
       _state = TunnelState.failure;
       _failure = const Failure(
         'Соединение прервано',
-        'Подключитесь снова: профиль сохранён',
+        'Подключитесь снова или обновите подписку',
       );
       _addLog('[ERR] Соединение прервано');
+      _armReconnect();
     }
     notifyListeners();
   }
@@ -445,6 +571,7 @@ class AppState extends ChangeNotifier {
     _statusSubscription?.cancel();
     _networkTimer?.cancel();
     _networkSubscription?.cancel();
+    _stopReconnectTimers();
     _deepLinkSubscription?.cancel();
     _chat?.dispose();
     unawaited(_core.dispose());
