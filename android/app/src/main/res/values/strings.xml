@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">КлиентВПН</string>
+    <string name="tile_label">Tunnel</string>
+    <string name="tile_description">Starts and stops the tunnel with one tap</string>
+    <string name="tile_instructions">Open the shade, tap edit and drag the Tunnel tile onto the quick settings panel</string>
+</resources>

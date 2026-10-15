@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">КлиентВПН</string>
+    <string name="tile_label">Туннель</string>
+    <string name="tile_description">Поднимает и снимает туннель одним нажатием</string>
+    <string name="tile_instructions">Откройте шторку, нажмите редактировать и перетащите плитку «Туннель» на панель быстрых настроек</string>
+</resources>

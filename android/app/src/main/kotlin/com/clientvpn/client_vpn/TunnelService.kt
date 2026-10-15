@@ -4,6 +4,7 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.content.Context
 import android.content.Intent
 import android.net.VpnService
 import android.os.Build
@@ -30,7 +31,23 @@ class TunnelService : VpnService() {
         const val ACTION_STOP = "com.clientvpn.client_vpn.STOP"
         const val TUNNEL_CONFIG = "tunnel-config.json"
         const val APPS_FILE = "tunnel-apps.txt"
+
+        /** Метка свежести конфига: её пишет Dart после каждой сборки конфига
+         *  подключения. Плитка поднимает туннель нативно только пока метка
+         *  есть — смена профиля, региона, пресета или правил её снимает. */
+        const val FRESH_MARKER = "tunnel-config.fresh"
         const val XRAY_LIB = "libxray.so"
+
+        /** Ставится плиткой перед тем, как отдать сервису команду: по нему
+         *  статус понимает, что команду отдала оболочка, а не интерфейс. */
+        @Volatile
+        var fromShell = false
+
+        /** Конфиг на диске есть и он свежий — поднимать туннель из оболочки можно. */
+        fun canStartFromShell(context: Context): Boolean {
+            val dir = context.filesDir
+            return File(dir, TUNNEL_CONFIG).exists() && File(dir, FRESH_MARKER).exists()
+        }
 
         private const val SESSION = "КлиентВПН"
         private const val CHANNEL_ID = "tunnel"
@@ -48,10 +65,13 @@ class TunnelService : VpnService() {
     private var stopping = false
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Признак читается один раз: следующий вызов приходит из интерфейса.
+        val byShell = fromShell
+        fromShell = false
         when (intent?.action) {
-            ACTION_START -> startTunnel()
+            ACTION_START -> startTunnel(byShell)
             ACTION_STOP -> {
-                stopTunnel()
+                stopTunnel(byShell)
                 stopSelf()
             }
             else -> stopSelf()
@@ -69,12 +89,12 @@ class TunnelService : VpnService() {
         super.onDestroy()
     }
 
-    private fun startTunnel() {
+    private fun startTunnel(byShell: Boolean = false) {
         if (process != null) {
             TunnelBus.log("Туннель уже поднят")
             // Статус публикуется и здесь: интерфейс мог открыться заново и
             // спросить разрешение именно этим вызовом.
-            TunnelBus.status(true)
+            TunnelBus.status(true, byShell, this)
             return
         }
 
@@ -144,7 +164,7 @@ class TunnelService : VpnService() {
             // libcore закрывает в ребёнке все дескрипторы кроме stdio, поэтому
             // туннель передаётся как stdin: fd 0 ребёнок сохраняет всегда.
             Os.dup2(tunnel!!.fileDescriptor, 0)
-            launchXray(config)
+            launchXray(config, byShell)
         } catch (e: Exception) {
             closeTunnel()
             fail("Не удалось запустить ядро: ${e.message}")
@@ -161,7 +181,8 @@ class TunnelService : VpnService() {
             .filter { it.isNotEmpty() && it != packageName }
     }
 
-    private fun launchXray(config: File) {        val xray = File(applicationInfo.nativeLibraryDir, XRAY_LIB)
+    private fun launchXray(config: File, byShell: Boolean) {
+        val xray = File(applicationInfo.nativeLibraryDir, XRAY_LIB)
         if (!xray.exists()) {
             throw IllegalStateException("ядро не найдено в ${xray.parent}")
         }
@@ -195,7 +216,7 @@ class TunnelService : VpnService() {
         }, "xray-exit").apply { isDaemon = true }.start()
 
         TunnelBus.log("Туннель поднят, ядро запущено")
-        TunnelBus.status(true)
+        TunnelBus.status(true, byShell, this)
     }
 
     private fun readLogs(started: Process) {
@@ -214,7 +235,7 @@ class TunnelService : VpnService() {
         }, "xray-log").apply { isDaemon = true }.also { it.start() }
     }
 
-    private fun stopTunnel() {
+    private fun stopTunnel(byShell: Boolean = false) {
         stopping = true
         logReader?.interrupt()
         logReader = null
@@ -231,7 +252,7 @@ class TunnelService : VpnService() {
         closeTunnel()
 
         stopping = false
-        TunnelBus.status(false)
+        TunnelBus.status(false, byShell, this)
     }
 
     private fun closeTunnel() {
@@ -255,7 +276,7 @@ class TunnelService : VpnService() {
 
     private fun fail(message: String) {
         TunnelBus.log("[ERR] $message")
-        TunnelBus.status(false)
+        TunnelBus.status(false, false, this)
         stopSelf()
     }
 

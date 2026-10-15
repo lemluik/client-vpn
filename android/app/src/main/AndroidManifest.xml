@@ -7,7 +7,7 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
 
     <application
-        android:label="КлиентВПН"
+        android:label="@string/app_name"
         android:name="${applicationName}"
         android:allowBackup="false"
         android:fullBackupContent="false"
@@ -69,6 +69,26 @@
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="vpn"/>
+        </service>
+
+        <service
+            android:name=".TunnelTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_tile_tunnel"
+            android:label="@string/tile_label"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE"/>
+            </intent-filter>
+            <meta-data
+                android:name="android.service.quicksettings.ACTIVE_TILE"
+                android:value="false"/>
+            <meta-data
+                android:name="android.service.quicksettings.TOGGLEABLE_TILE"
+                android:value="true"/>
+            <property
+                android:name="android.service.quicksettings.TOOL_TIP"
+                android:value="@string/tile_description"/>
         </service>
 
         <!-- Don't delete the meta-data below.
