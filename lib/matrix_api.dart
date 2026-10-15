@@ -10,6 +10,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'app_proxy.dart';
+
 /// Предел ожидания обычного запроса: и соединение, и чтение.
 const Duration matrixTimeout = Duration(seconds: 20);
 
@@ -337,7 +339,10 @@ class ChatMessage {
 /// Настоящий обмен с узлом: HTTPS со строгой проверкой сертификата.
 /// Никаких `badCertificateCallback` и обходов — несовпадение имени это ошибка.
 Future<MatrixReply> sendMatrixRequest(MatrixRequest request) async {
-  final client = HttpClient()..connectionTimeout = matrixTimeout;
+  final client = HttpClient()
+    ..connectionTimeout = matrixTimeout
+    // Ответ узла чата идёт через ядро, когда подключение поднято (ТД-15).
+    ..findProxy = AppProxy.findProxy;
   try {
     final outgoing = await client.openUrl(request.method, request.url).timeout(request.wait);
     if (request.token != null) {

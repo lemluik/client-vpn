@@ -104,8 +104,8 @@ void main() {
       final rules = (tun['routing'] as Map)['rules'] as List;
       final last = rules.last as Map;
 
-      expect(inbounds.single['protocol'], 'tun');
-      expect(inbounds.single['tag'], 'tun-in');
+      expect(inbounds.map((inbound) => inbound['tag']), ['tun-in', 'cvpn-app']);
+      expect(inbounds.first['protocol'], 'tun');
       expect(last['outboundTag'], proxyTag);
       expect((tun['outbounds'] as List).map((o) => o['protocol']), [
         'vless',

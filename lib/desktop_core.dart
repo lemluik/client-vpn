@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
 
+import 'app_proxy.dart';
 import 'proxy_config.dart';
 import 'system_proxy.dart';
 import 'vpn_config.dart';
@@ -220,12 +221,19 @@ class DesktopCore implements VpnCore {
         });
 
     _attachToJob(_process!.pid);
+    AppProxy.attach(_proxy);
+    _logController.add(
+      AppProxy.reachesCore
+          ? 'Свой трафик приложения идёт через ядро'
+          : 'Свой трафик приложения идёт мимо канала: локальный вход не http',
+    );
 
     unawaited(
       _process!.exitCode.then((code) async {
         _logController.add('Xray остановлен (код: $code)');
         _process = null;
         _closeJob();
+        AppProxy.attach(null);
         final intentional = _intentionalStop;
         _intentionalStop = false;
         if (intentional) {
@@ -277,6 +285,7 @@ class DesktopCore implements VpnCore {
   @override
   Future<void> stop() async {
     if (_process == null) {
+      AppProxy.attach(null);
       await SystemProxy.disable();
       _statusController.add(false);
       return;
@@ -304,6 +313,7 @@ class DesktopCore implements VpnCore {
 
     _process = null;
     _closeJob();
+    AppProxy.attach(null);
     await SystemProxy.disable();
     _statusController.add(false);
     _logController.add('Xray остановлен, системный прокси отключён');

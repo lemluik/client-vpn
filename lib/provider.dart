@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:crypto/crypto.dart';
 
+import 'app_proxy.dart';
 import 'share_link.dart';
 import 'subscription.dart';
 
@@ -272,7 +273,10 @@ Future<SubscriptionResponse> fetchSubscription(String url) async {
     );
   }
 
-  final client = HttpClient()..connectionTimeout = subscriptionTimeout;
+  final client = HttpClient()
+    ..connectionTimeout = subscriptionTimeout
+    // Без этого HttpClient смотрит только переменные окружения (ТД-15).
+    ..findProxy = AppProxy.findProxy;
   try {
     final request = await client.getUrl(uri).timeout(subscriptionTimeout);
     request.followRedirects = true;

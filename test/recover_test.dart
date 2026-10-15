@@ -1,9 +1,11 @@
 import 'dart:async';
 
 import 'package:client_vpn/android_core.dart';
+import 'package:client_vpn/app_proxy.dart';
 import 'package:client_vpn/app_state.dart';
 import 'package:client_vpn/profile_store.dart';
 import 'package:client_vpn/system_proxy.dart';
+import 'package:client_vpn/tun_config.dart';
 import 'package:client_vpn/vpn_config.dart';
 import 'package:client_vpn/vpn_core.dart';
 import 'package:flutter/services.dart';
@@ -157,6 +159,19 @@ void main() {
       expect(seen, [true]);
     });
 
+    test('восстановленный туннель возвращает приложению локальный вход', () async {
+      // Снятый при закрытии экрана статус значит, что канал жив: точка входа
+      // обязана появиться снова, иначе подписка уйдёт напрямую.
+      mockNative((call) => call.method == 'status');
+      addTearDown(() => mockNative((_) => false));
+      addTearDown(() => AppProxy.attach(null));
+
+      await AndroidCore().recoverAfterCrash();
+
+      expect(AppProxy.endpoint, appProxyEndpoint());
+      expect(AppProxy.reachesCore, isTrue);
+    });
+
     test('снятый сервис возвращает «Отключено»', () async {
       mockNative((_) => false);
       addTearDown(() => mockNative((_) => false));
@@ -171,6 +186,18 @@ void main() {
 
       expect(core.isRunning, isFalse);
       expect(seen, [false]);
+    });
+
+    test('снятый туннель снимает и локальный вход приложения', () async {
+      mockNative((_) => false);
+      addTearDown(() => mockNative((_) => false));
+      addTearDown(() => AppProxy.attach(null));
+      AppProxy.attach((protocol: 'http', port: 10808));
+
+      await AndroidCore().recoverAfterCrash();
+
+      expect(AppProxy.endpoint, isNull);
+      expect(AppProxy.reachesCore, isFalse);
     });
   });
 }

@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'profile_config.dart';
+import 'proxy_config.dart';
 
 /// Протоколы, которые действительно уводят трафик на сервер.
 /// `freedom` и `blackhole` к ним не относятся: если такой outbound окажется
@@ -28,6 +29,26 @@ Map<String, dynamic> tunInbound({String name = 'tun0', int mtu = 1500}) => {
       'tag': 'tun-in',
     };
 
+/// Локальный http-вход, через который собственный трафик приложения уходит в
+/// туннель (ТД-15).
+///
+/// Протокол именно http, а не socks: `dart:io` ведёт `HttpClient` только через
+/// http-прокси, поддержки SOCKS в библиотеке нет. Порт общий с десктопной
+/// сборкой, чтобы точка входа была одна и та же на обеих платформах.
+///
+/// Вход слушает только петлевой адрес: остальным приложениям телефона он не
+/// должен отдавать канал.
+Map<String, dynamic> appProxyInbound({int port = defaultHttpPort}) => {
+      'protocol': 'http',
+      'listen': '127.0.0.1',
+      'port': port,
+      'tag': 'cvpn-app',
+    };
+
+/// Та же точка входа в виде, который нужен приложению (ТД-15).
+ProxyEndpoint appProxyEndpoint({int port = defaultHttpPort}) =>
+    (protocol: 'http', port: port);
+
 /// Верхнеуровневые блоки, которые ядро читает отдельно от маршрутизации.
 /// Без `dns` адрес не резолвится по настройкам пользователя, без
 /// `observatory`/`burstObservatory` балансировщик не видит задержек, без
@@ -41,8 +62,12 @@ const List<String> passthroughKeys = [
 
 /// Перестраивает конфиг пользователя под Android.
 ///
-/// Локальные http/socks inbound на мобильной платформе бесполезны — вместо них
-/// подставляется tun. Исходящие серверы берутся из конфига как есть, но
+/// Локальные http/socks inbound пользователя на мобильной платформе бесполезны
+/// — системный туннель поднимает VpnService, и вместо них подставляется tun.
+/// Один локальный вход всё же нужен: через него в туннель идёт собственный
+/// трафик приложения (подписка и чат), иначе `HttpClient` ушёл бы напрямую:
+/// он смотрит на переменные окружения, а не на настройки VPN.
+/// Исходящие серверы берутся из конфига как есть, но
 /// обязательно добавляется завершающее правило маршрутизации на прокси:
 /// без него трафик без правил ушёл бы в outbound по умолчанию, которым
 /// может оказаться `freedom`.
@@ -66,7 +91,7 @@ String buildTunConfig(String userJson) {
 
   return jsonEncode({
     'log': {'loglevel': 'warning'},
-    'inbounds': [tunInbound()],
+    'inbounds': [tunInbound(), appProxyInbound()],
     'outbounds': _withTag(outbounds, index, tag),
     'routing': _routing(decoded['routing'], tag),
     for (final key in passthroughKeys)
@@ -78,8 +103,8 @@ String buildTunConfig(String userJson) {
 ///
 /// `xray run -test` на Android не может открыть устройство туннеля: оно
 /// передаётся ядру через переменную окружения `xray.tun.fd` только при реальном
-/// запуске. Inbound меняется на socks — всё остальное (маршрутизация,
-/// наблюдатель, DNS) проверяется тем же кодом ядра, что и пойдёт в работу.
+/// запуске. Tun-вход меняется на socks — всё остальное, включая локальный вход
+/// приложения, остаётся в проверке тем же кодом ядра, что и пойдёт в работу.
 ///
 /// Снифинг с tun-входа переносится на замену: правило по `protocol:` без него
 /// ядро не разрешает, а в работе он включён — иначе проверка отклоняла бы
@@ -90,13 +115,24 @@ String tunConfigForTest(String tunJson, {int port = 10810}) {
     throw const FormatException('Конфиг туннеля должен быть JSON-объектом');
   }
   final map = Map<String, dynamic>.from(decoded.cast<String, dynamic>());
-  final inbounds = map['inbounds'];
-  final sniffing = inbounds is List &&
-          inbounds.isNotEmpty &&
-          inbounds.first is Map &&
-          (inbounds.first as Map)['sniffing'] != null
-      ? (inbounds.first as Map)['sniffing']
-      : null;
+  final inbounds = map['inbounds'] is List
+      ? (map['inbounds'] as List).whereType<Map>().toList()
+      : const <Map>[];
+  Map? tun;
+  for (final inbound in inbounds) {
+    if (inbound['protocol'] == 'tun') {
+      tun = inbound;
+      break;
+    }
+  }
+  final sniffing = tun?['sniffing'];
+  // Остальные входы остаются: локальный вход приложения тоже должен пройти
+  // проверку ядром.
+  final kept = [
+    for (final inbound in inbounds)
+      if (inbound['protocol'] != 'tun')
+        Map<String, dynamic>.from(inbound.cast<String, dynamic>()),
+  ];
   map['inbounds'] = [
     {
       'listen': '127.0.0.1',
@@ -105,7 +141,8 @@ String tunConfigForTest(String tunJson, {int port = 10810}) {
       'settings': {'udp': true},
       'tag': 'test-in',
       if (sniffing != null) 'sniffing': sniffing,
-    }
+    },
+    ...kept,
   ];
   return jsonEncode(map);
 }
