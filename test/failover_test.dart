@@ -70,15 +70,16 @@ void main() {
     });
 
     test(
-      'порог прилипания и запасной путь на прямое подключение не ставятся',
+      'порог прилипания измерен и равен 100 мс, запасной путь не ставится',
       () {
         final settings =
             ((regionBalancers(const ['a', 'b']).first['strategy']
                     as Map)['settings'])
                 as Object?;
 
-        // tolerance = порог прилипания: число нужно измерить на стенде.
-        expect(settings, isNull);
+        // tolerance = порог прилипания: 100 мс по замерам 16.10.2026 на двух
+        // живых узлах (медианная разница ~79 мс, разброс до 52 мс).
+        expect(settings, {'tolerance': regionToleranceMs});
         expect(
           regionBalancers(const ['a', 'b']).first.containsKey('fallbackTag'),
           false,

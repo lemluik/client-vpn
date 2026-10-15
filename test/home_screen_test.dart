@@ -559,7 +559,8 @@ void main() {
       expect(json, contains('"target":"https://example.test/ping"'));
       // Два узла одного региона — правило ведёт на балансировщик (МК-6).
       expect(json, contains('"balancerTag":"cvpn-lb"'));
-      expect(json, contains('"strategy":{"type":"leastPing"}'));
+      expect(json, contains('"strategy":{"type":"leastPing"'));
+      expect(json, contains('"tolerance":$regionToleranceMs'));
     });
 
     testWidgets('плохой адрес не сохраняется и объясняет причину',
