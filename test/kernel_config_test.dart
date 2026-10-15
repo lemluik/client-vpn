@@ -308,12 +308,16 @@ void main() {
 
         expect(result.exitCode, 0, reason: output(result));
         final rules = (jsonDecode(json)['routing'] as Map)['rules'] as List;
-        // три правила пресета идут до завершающего
-        expect(rules, hasLength(4));
-        expect((rules[0] as Map)['outboundTag'], directTag);
-        expect((rules[1] as Map)['outboundTag'], directTag);
-        expect((rules[2] as Map)['outboundTag'], directTag);
-        expect((rules[3] as Map)['outboundTag'], proxyTag);
+        // четыре правила пресета идут до завершающего
+        expect(rules, hasLength(5));
+        for (final rule in rules.take(4)) {
+          expect((rule as Map)['outboundTag'], directTag);
+        }
+        expect((rules[4] as Map)['outboundTag'], proxyTag);
+        expect((rules[2] as Map)['domain'], [
+          'geosite:category-bank-ru',
+          'geosite:category-gov-ru',
+        ]);
       },
       skip: ready ? false : reason,
     );

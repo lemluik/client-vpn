@@ -38,6 +38,13 @@ class RoutingPreset {
 /// отдельных кодов брендов. При `domainStrategy: AsIs`, который клиент ставит
 /// принудительно, правило по IP срабатывает только на адрес в буквальном виде:
 /// домены закрывает перечень `geosite:`.
+///
+/// Банки и госуслуги взяты кодами `category-bank-ru` и `category-gov-ru` из тех
+/// же geo-баз (замер 16.10.2026 по `geosite.dat` сборки ядра 26.3.27: 19 и 128
+/// доменов; в банковском перечне есть `sberbank.ru`, `vtb.ru`, `alfabank.ru`,
+/// `tbank.ru`, но нет `tinkoff.ru`, `sbol.ru`, `vtbrussia.ru`, `mossport.ru`).
+/// Чем пополнять пробелы и кто это обновляет — нерешённый вопрос Р-27, поэтому
+/// своего списка доменов здесь пока нет.
 const RoutingPreset ruPreset = RoutingPreset(
   key: 'ru',
   label: 'Россия напрямую',
@@ -61,6 +68,17 @@ const RoutingPreset ruPreset = RoutingPreset(
         'geosite:ozon',
         'geosite:wildberries',
         'geosite:x5',
+      ],
+      'outboundTag': directTag,
+    },
+    {
+      // Банки и госуслуги берутся кодами из geo-баз ядра, а не списком, который
+      // кто-то ведёт в этом репозитории: у чужого перечня есть период обновления
+      // и своя ответственность за устаревание (см. вопрос Р-27).
+      'type': 'field',
+      'domain': [
+        'geosite:category-bank-ru',
+        'geosite:category-gov-ru',
       ],
       'outboundTag': directTag,
     },

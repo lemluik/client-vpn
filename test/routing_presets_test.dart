@@ -14,7 +14,7 @@ void main() {
         () {
       final rules = ruPreset.rules;
 
-      expect(rules, hasLength(3));
+      expect(rules, hasLength(4));
       for (final rule in rules) {
         expect(rule['outboundTag'], directTag);
       }
@@ -24,7 +24,22 @@ void main() {
             code is String && code.startsWith('geosite:')),
         isTrue,
       );
-      expect((rules[2]['ip'] as List), ['geoip:private']);
+      expect((rules[2]['domain'] as List), [
+        'geosite:category-bank-ru',
+        'geosite:category-gov-ru',
+      ]);
+      expect((rules[3]['ip'] as List), ['geoip:private']);
+    });
+
+    test('пресет не содержит адресов нашего сервиса', () {
+      // Гейт У-8: пресет — данные о чужих доменах, а не прокладка под наши узлы.
+      final text = ruPreset.rules.toString().toLowerCase();
+
+      expect(text.contains('vless'), isFalse);
+      expect(text.contains('cvpn-proxy'), isFalse);
+      for (final rule in ruPreset.rules) {
+        expect(rule['outboundTag'], isNot(proxyTag));
+      }
     });
 
     test('кодов пресета нет в списках других пресетов повторно', () {
