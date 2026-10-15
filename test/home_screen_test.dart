@@ -104,13 +104,22 @@ Future<AppState> makeState({FakeCore? core}) async {
   );
 }
 
+/// Тесты ищут русские строки, поэтому язык задаём явно: локаль тестовой среды
+/// английская, и без этого интерфейс собрался бы по-английски.
+Future<void> pumpApp(WidgetTester tester, AppState state) async {
+  // Язык выбирается по списку локалей устройства, поэтому задаём именно его.
+  tester.platformDispatcher.localesTestValue = const [Locale('ru')];
+  addTearDown(tester.platformDispatcher.clearLocalesTestValue);
+  await tester.pumpWidget(ClientVpnApp(state: state));
+}
+
 void main() {
   group('главный экран', () {
     testWidgets('первый запуск: одно объяснение и одна кнопка', (tester) async {
       final state = await makeState();
       addTearDown(state.dispose);
 
-      await tester.pumpWidget(ClientVpnApp(state: state));
+      await pumpApp(tester, state);
       await tester.pumpAndSettle();
 
       expect(find.text('Быстрый доступ в интернет'), findsOneWidget);
@@ -118,6 +127,21 @@ void main() {
       expect(find.byType(FloatingActionButton), findsNothing);
       expect(find.byTooltip('Добавить подключение'), findsOneWidget);
       expect(find.text('Отключено'), findsOneWidget);
+    });
+
+    testWidgets('английская локаль устройства даёт английский интерфейс',
+        (tester) async {
+      final state = await makeState();
+      addTearDown(state.dispose);
+      tester.platformDispatcher.localesTestValue = const [Locale('en')];
+      addTearDown(tester.platformDispatcher.clearLocalesTestValue);
+
+      await tester.pumpWidget(ClientVpnApp(state: state));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Quick access to the internet'), findsOneWidget);
+      expect(find.text('Add connection'), findsOneWidget);
+      expect(find.text('Off'), findsOneWidget);
     });
 
     testWidgets('кнопка поддержки видна и без добавленного подключения',
@@ -134,7 +158,7 @@ void main() {
       );
       addTearDown(state.dispose);
 
-      await tester.pumpWidget(ClientVpnApp(state: state));
+      await pumpApp(tester, state);
       await tester.pumpAndSettle();
 
       await tester.tap(find.byTooltip('Поддержка'));
@@ -147,7 +171,7 @@ void main() {
       final state = await makeState();
       addTearDown(state.dispose);
 
-      await tester.pumpWidget(ClientVpnApp(state: state));
+      await pumpApp(tester, state);
       await tester.pumpAndSettle();
 
       await tester.tap(find.text('Добавить подключение'));
@@ -171,7 +195,7 @@ void main() {
       addTearDown(state.dispose);
       await state.addFromText(linkOne);
 
-      await tester.pumpWidget(ClientVpnApp(state: state));
+      await pumpApp(tester, state);
       await tester.pumpAndSettle();
 
       await tester.tap(find.byTooltip('Добавить подключение'));
@@ -193,7 +217,7 @@ void main() {
       addTearDown(state.dispose);
       await state.addFromText('$linkOne\n$linkTwo');
 
-      await tester.pumpWidget(ClientVpnApp(state: state));
+      await pumpApp(tester, state);
       await tester.pumpAndSettle();
 
       expect(find.text('2 профилей'), findsOneWidget);
@@ -235,7 +259,7 @@ void main() {
       addTearDown(state.dispose);
       await state.addFromText(linkOne);
 
-      await tester.pumpWidget(ClientVpnApp(state: state));
+      await pumpApp(tester, state);
       await tester.pumpAndSettle();
 
       await tester.tap(find.text('Подключить'));
@@ -260,7 +284,7 @@ void main() {
       addTearDown(state.dispose);
       await state.addFromText(linkOne);
 
-      await tester.pumpWidget(ClientVpnApp(state: state));
+      await pumpApp(tester, state);
       await tester.pumpAndSettle();
       await tester.tap(find.text('Подключить'));
       await tester.pumpAndSettle();
@@ -280,7 +304,7 @@ void main() {
       addTearDown(state.dispose);
       await state.addFromText(linkOne);
 
-      await tester.pumpWidget(ClientVpnApp(state: state));
+      await pumpApp(tester, state);
       await tester.pumpAndSettle();
 
       core.emitLog(
@@ -328,7 +352,7 @@ void main() {
       addTearDown(tester.view.reset);
       await state.addFromText(twoRegionLinks);
 
-      await tester.pumpWidget(ClientVpnApp(state: state));
+      await pumpApp(tester, state);
       await tester.pumpAndSettle();
 
       expect(find.text('Страна выхода'), findsOneWidget);
@@ -360,7 +384,7 @@ void main() {
       addTearDown(state.dispose);
       await state.addFromText(twoRegionLinks);
 
-      await tester.pumpWidget(ClientVpnApp(state: state));
+      await pumpApp(tester, state);
       await tester.pumpAndSettle();
       await tester.tap(find.text('Подключить'));
       await tester.pumpAndSettle();
@@ -386,7 +410,7 @@ void main() {
       addTearDown(state.dispose);
       await state.addFromText('$linkOne\n$linkTwo');
 
-      await tester.pumpWidget(ClientVpnApp(state: state));
+      await pumpApp(tester, state);
       await tester.pumpAndSettle();
 
       expect(find.text('Страна выхода'), findsNothing);
@@ -399,7 +423,7 @@ void main() {
       await state.addFromText(twoRegionLinks);
 
       debugDefaultTargetPlatformOverride = TargetPlatform.windows;
-      await tester.pumpWidget(ClientVpnApp(state: state));
+      await pumpApp(tester, state);
       await tester.pumpAndSettle();
 
       expect(find.text('Germany'), findsOneWidget);

@@ -9,6 +9,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
   crypto: ^3.0.6
   file_picker: ^13.1.0
   flutter_secure_storage: ^11.2.0
@@ -16,6 +18,7 @@ dependencies:
   shared_preferences: ^2.3.4
   window_manager: ^0.5.2
   connectivity_plus: ^7.3.2
+  intl: ^0.20.3
 
 dev_dependencies:
   flutter_test:
@@ -24,3 +27,5 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  # Строки интерфейса генерируются из lib/l10n по l10n.yaml.
+  generate: true

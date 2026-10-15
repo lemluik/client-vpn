@@ -6,6 +6,7 @@ import 'package:window_manager/window_manager.dart';
 
 import 'app_state.dart';
 import 'home_screen.dart';
+import 'l10n/app_localizations.dart';
 
 /// Окно и системный прокси существуют только на десктопе: на Android
 /// подключение поднимает VpnService, а window_manager там не зарегистрирован.
@@ -79,6 +80,10 @@ class _ClientVpnAppState extends State<ClientVpnApp> with WindowListener {
     return MaterialApp(
       title: 'КлиентВПН',
       debugShowCheckedModeBanner: false,
+      // Язык берётся с устройства: русская и около-русская локаль дают русский,
+      // англоязычная — английский, прочая откатывается на русский как первый.
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
       theme: ThemeData(
         colorSchemeSeed: Colors.blue,
         useMaterial3: true,

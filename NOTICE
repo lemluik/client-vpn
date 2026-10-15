@@ -24,6 +24,8 @@ This product includes software developed by third parties.
    License: BSD 3-Clause
    Source: https://github.com/flutter/flutter
            https://github.com/dart-lang/sdk
+   This includes the SDK packages used by the application: flutter and
+   flutter_localizations.
 
 3. Dart packages used by this application.
    Versions are locked in pubspec.lock, licenses verified against pub.dev:
@@ -32,6 +34,7 @@ This product includes software developed by third parties.
    |------------------------------------|---------|--------------|-------------------------------|
    | crypto                             | 3.0.7   | BSD-3-Clause | The Dart Authors              |
    | path                               | 1.9.1   | BSD-3-Clause | The Dart Authors              |
+   | intl                               | 0.20.3  | BSD-3-Clause | The Dart Authors              |
    | shared_preferences                 | 2.5.6   | BSD-3-Clause | The Flutter Authors           |
    | connectivity_plus                  | 7.3.2   | BSD-3-Clause | The Chromium Authors          |
    | connectivity_plus_platform_interface | 2.1.0   | BSD-3-Clause | The Chromium Authors          |

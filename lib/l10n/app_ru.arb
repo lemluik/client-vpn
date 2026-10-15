@@ -1,0 +1,115 @@
+{
+  "@@locale": "ru",
+  "appTitle": "КлиентВПН",
+  "tooltipRefreshSubscription": "Обновить подписку",
+  "tooltipAddConnection": "Добавить подключение",
+  "tooltipSettings": "Настройки",
+  "tooltipLog": "Журнал",
+  "tooltipSupport": "Поддержка",
+  "tooltipActions": "Действия",
+  "buttonCancel": "Отмена",
+  "buttonContinue": "Продолжить",
+  "buttonSave": "Сохранить",
+  "buttonAdd": "Добавить",
+  "buttonFetch": "Получить",
+  "switchProfileTitle": "Сменить подключение?",
+  "switchProfileBody": "Туннель будет отключён, а затем поднят заново из нового профиля.",
+  "switchRegionTitle": "Сменить страну выхода?",
+  "switchRegionBody": "Туннель будет поднят заново через другую страну. Открытые соединения прервутся.",
+  "restartForPresetTitle": "Переподключиться?",
+  "restartForPresetBody": "Новые правила работают только в поднятом заново подключении. Открытые соединения прервутся.",
+  "removeProfileTitle": "Удалить «{name}»?",
+  "@removeProfileTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "removeProfileBody": "Подключение и сохранённый кэш подписки будут удалены.",
+  "renameTitle": "Название подключения",
+  "renameHint": "Например: рабочий",
+  "addSheetTitle": "Добавьте подключение любого провайдера",
+  "addLinkTitle": "Ссылка или подписка",
+  "addLinkSubtitle": "Вставьте ключ, список ключей или подписку",
+  "addUrlTitle": "Подписка по адресу",
+  "addUrlSubtitle": "Обновляется сама по интервалу провайдера",
+  "addFileTitle": "Файл config.json",
+  "addFileSubtitle": "Для опытных: полный конфиг ядра",
+  "addLinkHint": "vless://… или несколько строк, или подписка в base64",
+  "addUrlHint": "https://провайдер.example/подписка",
+  "settingsTitle": "Часть трафика напрямую",
+  "presetOff": "Выключено",
+  "presetRu": "Россия напрямую",
+  "presetOffSubtitle": "Весь трафик идёт через подключение",
+  "presetOnSubtitle": "Сайты пресета открываются мимо подключения",
+  "presetSelected": "Пресет «{name}» выбран",
+  "@presetSelected": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "presetApplied": "Пресет «{name}» применён",
+  "@presetApplied": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "subscriptionUpdated": "Подписка обновлена",
+  "fileAdded": "Файл добавлен",
+  "connectionAdded": "Подключение добавлено",
+  "subscriptionAdded": "Подписка добавлена",
+  "profileUntitled": "Без названия",
+  "menuRename": "Переименовать",
+  "menuDelete": "Удалить",
+  "profileKindFile": "Файл ядра",
+  "profileCountOne": "Один профиль",
+  "profileCountMany": "{count} профилей",
+  "@profileCountMany": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "regionProfileCount": "Профилей: {count}",
+  "@regionProfileCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "subscriptionOne": "Подписка · один профиль",
+  "subscriptionMany": "Подписка · {count} профилей",
+  "@subscriptionMany": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "subscriptionLeftMb": "Подписка · осталось {mb} МБ",
+  "@subscriptionLeftMb": {
+    "placeholders": {
+      "mb": {
+        "type": "String"
+      }
+    }
+  },
+  "regionTitle": "Страна выхода",
+  "statusProtected": "Защищено",
+  "statusConnecting": "Подключение…",
+  "statusFailed": "Сбой",
+  "statusOff": "Отключено",
+  "orbDisconnect": "Отключить",
+  "orbConnect": "Подключить",
+  "orbRetry": "Подключить снова",
+  "emptyTitle": "Быстрый доступ в интернет",
+  "emptyBody": "Добавьте ключ от вашего провайдера или адрес подписки — клиент сам соберёт подключение. Своих серверов у клиента нет, он работает с любым провайдером.",
+  "emptyAddButton": "Добавить подключение"
+}
