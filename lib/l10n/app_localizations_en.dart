@@ -299,4 +299,41 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get aboutAssetMissing => 'The file is missing from the build';
+
+  @override
+  String get updateTitle => 'Update';
+
+  @override
+  String get updateSourceSubtitle =>
+      'Address of the release manifest. Checking is a single request without any device or profile identifier';
+
+  @override
+  String get updateSourceSaved => 'Update source saved';
+
+  @override
+  String get updateCheck => 'Check for update';
+
+  @override
+  String get updateChecking => 'Checking…';
+
+  @override
+  String updateFound(String version) {
+    return 'Version $version is available';
+  }
+
+  @override
+  String get updateOpen => 'Open download';
+
+  @override
+  String get updateCopy => 'Copy link';
+
+  @override
+  String get updateCopied => 'Link copied';
+
+  @override
+  String get updateNoLink => 'The manifest has no link for this platform';
+
+  @override
+  String get updateOpenFailed =>
+      'The browser did not open — copy the link instead';
 }

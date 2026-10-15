@@ -149,5 +149,23 @@
   "aboutNoticesSubtitle": "Сторонние библиотеки и их лицензии",
   "aboutNoTelemetry": "Сбор статистики",
   "aboutNoTelemetryBody": "Клиент не собирает статистику и не отправляет данные третьим сторонам: телеметрических и аналитических библиотек в зависимостях нет.",
-  "aboutAssetMissing": "Файл не найден в сборке"
+  "aboutAssetMissing": "Файл не найден в сборке",
+  "updateTitle": "Обновление",
+  "updateSourceSubtitle": "Адрес манифеста релиза. Проверка — один запрос, без идентификатора устройства и профиля",
+  "updateSourceSaved": "Источник обновлений сохранён",
+  "updateCheck": "Проверить обновление",
+  "updateChecking": "Проверяю…",
+  "updateFound": "Доступна версия {version}",
+  "@updateFound": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "updateOpen": "Открыть загрузку",
+  "updateCopy": "Скопировать ссылку",
+  "updateCopied": "Ссылка скопирована",
+  "updateNoLink": "Ссылка на эту платформу в манифесте не указана",
+  "updateOpenFailed": "Браузер не открылся — скопируйте ссылку"
 }

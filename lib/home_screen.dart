@@ -13,6 +13,7 @@ import 'region.dart';
 import 'routing_presets.dart';
 import 'rules_screen.dart';
 import 'support_chat_screen.dart';
+import 'update_screen.dart';
 
 /// Главный экран: состояние туннеля, список подключений и добавление новых.
 ///
@@ -395,6 +396,18 @@ class _HomeScreenState extends State<HomeScreen> {
                 onTap: () async {
                   Navigator.pop(context);
                   await _editProbeTarget();
+                },
+              ),
+              ListTile(
+                title: Text(l.updateTitle),
+                subtitle: Text(l.updateSourceSubtitle),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.of(this.context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const UpdateScreen(),
+                    ),
+                  );
                 },
               ),
               ListTile(

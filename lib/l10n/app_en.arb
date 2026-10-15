@@ -100,5 +100,23 @@
   "aboutNoticesSubtitle": "Third-party libraries and their licenses",
   "aboutNoTelemetry": "Data collection",
   "aboutNoTelemetryBody": "The client collects no statistics and sends no data to third parties: there are no telemetry or analytics libraries in the dependencies.",
-  "aboutAssetMissing": "The file is missing from the build"
+  "aboutAssetMissing": "The file is missing from the build",
+  "updateTitle": "Update",
+  "updateSourceSubtitle": "Address of the release manifest. Checking is a single request without any device or profile identifier",
+  "updateSourceSaved": "Update source saved",
+  "updateCheck": "Check for update",
+  "updateChecking": "Checking…",
+  "updateFound": "Version {version} is available",
+  "@updateFound": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "updateOpen": "Open download",
+  "updateCopy": "Copy link",
+  "updateCopied": "Link copied",
+  "updateNoLink": "The manifest has no link for this platform",
+  "updateOpenFailed": "The browser did not open — copy the link instead"
 }

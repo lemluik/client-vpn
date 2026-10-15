@@ -2,6 +2,7 @@ package com.clientvpn.client_vpn
 
 import android.app.Activity
 import android.content.Intent
+import android.net.Uri
 import android.net.VpnService
 import android.os.Build
 import android.os.Bundle
@@ -50,6 +51,7 @@ class MainActivity : FlutterActivity() {
                 "status" -> result.success(TunnelBus.lastStatus)
                 "setExcludedApps" -> setExcludedApps(call.arguments, result)
                 "listApps" -> listApps(result)
+                "openUrl" -> openUrl(call.arguments, result)
                 else -> result.notImplemented()
             }
         }
@@ -190,6 +192,29 @@ class MainActivity : FlutterActivity() {
                 else result.error("apps_unavailable", "Список приложений недоступен", null)
             }
         }.apply { isDaemon = true }.start()
+    }
+
+    /** Открывает ссылку загрузки в системном браузере. Принимаем только
+     *  `http`/`https`: адрес вводит пользователь на экране обновления. */
+    private fun openUrl(arguments: Any?, result: MethodChannel.Result) {
+        val raw = (arguments as? Map<*, *>)?.get("url") as? String
+        val uri = try {
+            Uri.parse(raw?.trim() ?: "")
+        } catch (e: Exception) {
+            null
+        }
+        if (uri == null || uri.host.isEmpty || uri.scheme != "http" && uri.scheme != "https") {
+            result.error("bad_url", "Ссылка не похожа на адрес", null)
+            return
+        }
+        try {
+            startActivity(
+                Intent(Intent.ACTION_VIEW, uri).addCategory(Intent.CATEGORY_BROWSABLE),
+            )
+            result.success(true)
+        } catch (e: Exception) {
+            result.success(false)
+        }
     }
 
     private fun start(tunConfig: String?, result: MethodChannel.Result) {

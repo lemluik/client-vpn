@@ -619,6 +619,72 @@ abstract class AppLocalizations {
   /// In ru, this message translates to:
   /// **'Файл не найден в сборке'**
   String get aboutAssetMissing;
+
+  /// No description provided for @updateTitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Обновление'**
+  String get updateTitle;
+
+  /// No description provided for @updateSourceSubtitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Адрес манифеста релиза. Проверка — один запрос, без идентификатора устройства и профиля'**
+  String get updateSourceSubtitle;
+
+  /// No description provided for @updateSourceSaved.
+  ///
+  /// In ru, this message translates to:
+  /// **'Источник обновлений сохранён'**
+  String get updateSourceSaved;
+
+  /// No description provided for @updateCheck.
+  ///
+  /// In ru, this message translates to:
+  /// **'Проверить обновление'**
+  String get updateCheck;
+
+  /// No description provided for @updateChecking.
+  ///
+  /// In ru, this message translates to:
+  /// **'Проверяю…'**
+  String get updateChecking;
+
+  /// No description provided for @updateFound.
+  ///
+  /// In ru, this message translates to:
+  /// **'Доступна версия {version}'**
+  String updateFound(String version);
+
+  /// No description provided for @updateOpen.
+  ///
+  /// In ru, this message translates to:
+  /// **'Открыть загрузку'**
+  String get updateOpen;
+
+  /// No description provided for @updateCopy.
+  ///
+  /// In ru, this message translates to:
+  /// **'Скопировать ссылку'**
+  String get updateCopy;
+
+  /// No description provided for @updateCopied.
+  ///
+  /// In ru, this message translates to:
+  /// **'Ссылка скопирована'**
+  String get updateCopied;
+
+  /// No description provided for @updateNoLink.
+  ///
+  /// In ru, this message translates to:
+  /// **'Ссылка на эту платформу в манифесте не указана'**
+  String get updateNoLink;
+
+  /// No description provided for @updateOpenFailed.
+  ///
+  /// In ru, this message translates to:
+  /// **'Браузер не открылся — скопируйте ссылку'**
+  String get updateOpenFailed;
 }
 
 class _AppLocalizationsDelegate

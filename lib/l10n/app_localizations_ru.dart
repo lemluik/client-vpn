@@ -298,4 +298,40 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get aboutAssetMissing => 'Файл не найден в сборке';
+
+  @override
+  String get updateTitle => 'Обновление';
+
+  @override
+  String get updateSourceSubtitle =>
+      'Адрес манифеста релиза. Проверка — один запрос, без идентификатора устройства и профиля';
+
+  @override
+  String get updateSourceSaved => 'Источник обновлений сохранён';
+
+  @override
+  String get updateCheck => 'Проверить обновление';
+
+  @override
+  String get updateChecking => 'Проверяю…';
+
+  @override
+  String updateFound(String version) {
+    return 'Доступна версия $version';
+  }
+
+  @override
+  String get updateOpen => 'Открыть загрузку';
+
+  @override
+  String get updateCopy => 'Скопировать ссылку';
+
+  @override
+  String get updateCopied => 'Ссылка скопирована';
+
+  @override
+  String get updateNoLink => 'Ссылка на эту платформу в манифесте не указана';
+
+  @override
+  String get updateOpenFailed => 'Браузер не открылся — скопируйте ссылку';
 }
