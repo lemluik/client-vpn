@@ -112,6 +112,19 @@ void main() {
     });
   });
 
+  group('килл-свитч', () {
+    test('без нашего маркера блокировка ничего не делает', () async {
+      // Маркер `proxy.ours` не выставлен: прокси включали не мы, значит и
+      // держать его на мёртвом порте нельзя. Кейс обязан завершиться до
+      // первой записи в реестр — настройки пользователя не трогаются.
+      SharedPreferences.setMockInitialValues({});
+      await SystemProxy.lockLeak();
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('proxy.ours'), isNull);
+    });
+  });
+
   group('Android: запрос статуса сервиса', () {
     const channel = MethodChannel('client_vpn/tunnel');
 

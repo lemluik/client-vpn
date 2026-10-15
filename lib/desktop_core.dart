@@ -9,6 +9,7 @@ import 'proxy_config.dart';
 import 'system_proxy.dart';
 import 'vpn_config.dart';
 import 'vpn_core.dart';
+import 'windows_guard.dart';
 
 /// Ядро на десктопе: процесс xray с локальным http/socks inbound
 /// плюс системный прокси, который на этот inbound переключается.
@@ -22,6 +23,16 @@ class DesktopCore implements VpnCore {
       '15c2d007954ac53ba69b80ec91242786b3c0b71d52649165b4ca1d5cc96ef8f1';
 
   Process? _process;
+
+  /// Job Object с флагом kill-on-close: ядро умирает вместе с приложением,
+  /// даже если приложение убито извне.
+  CoreKillJob? _job;
+
+  /// true, когда ядро завершается по нашей команде — тогда настройки
+  /// пользователя возвращаются. Любой другой выход считается аварией, и
+  /// прокси остаётся включённым на мёртвый порт (килл-свитч).
+  bool _intentionalStop = false;
+
   final StreamController<String> _logController =
       StreamController<String>.broadcast();
   final StreamController<bool> _statusController =
@@ -67,11 +78,13 @@ class DesktopCore implements VpnCore {
   Future<void> _verifyChecksum(File file) async {
     final actual = '${await sha256.bind(file.openRead()).first}';
     if (actual != _expectedSha256) {
-      throw Exception('Проверка целостности xray.exe не пройдена.\n'
-          'Ожидался SHA2-256 $_expectedSha256\n'
-          'Получен  SHA2-256 $actual\n'
-          'Файл повреждён или подменён — запуск отменён. '
-          'Перекачайте бинарник: bash scripts/download_xray.sh');
+      throw Exception(
+        'Проверка целостности xray.exe не пройдена.\n'
+        'Ожидался SHA2-256 $_expectedSha256\n'
+        'Получен  SHA2-256 $actual\n'
+        'Файл повреждён или подменён — запуск отменён. '
+        'Перекачайте бинарник: bash scripts/download_xray.sh',
+      );
     }
   }
 
@@ -79,8 +92,8 @@ class DesktopCore implements VpnCore {
   /// Передаётся ядру явно, потому что поиск по рабочему каталогу не работает,
   /// когда конфиг читается из временной папки профиля.
   static Map<String, String> _coreEnvironment(String xrayPath) => {
-        'XRAY_LOCATION_ASSET': p.dirname(xrayPath),
-      };
+    'XRAY_LOCATION_ASSET': p.dirname(xrayPath),
+  };
 
   @override
   Future<void> validate(VpnConfig config) async {
@@ -120,8 +133,8 @@ class DesktopCore implements VpnCore {
   /// по-английски и без указания, где взять файлы.
   static String _geoHint(String output) =>
       output.contains('geosite.dat') || output.contains('geoip.dat')
-          ? '\nGeo-базы не установлены — выполните: bash scripts/download_xray.sh'
-          : '';
+      ? '\nGeo-базы не установлены — выполните: bash scripts/download_xray.sh'
+      : '';
 
   @override
   Future<void> start(VpnConfig config) async {
@@ -196,28 +209,69 @@ class DesktopCore implements VpnCore {
         .transform(utf8.decoder)
         .transform(const LineSplitter())
         .listen((line) {
-      if (line.isNotEmpty) _logController.add(line);
-    });
+          if (line.isNotEmpty) _logController.add(line);
+        });
 
     _process!.stderr
         .transform(utf8.decoder)
         .transform(const LineSplitter())
         .listen((line) {
-      if (line.isNotEmpty) _logController.add('[ERR] $line');
-    });
+          if (line.isNotEmpty) _logController.add('[ERR] $line');
+        });
+
+    _attachToJob(_process!.pid);
 
     unawaited(
       _process!.exitCode.then((code) async {
         _logController.add('Xray остановлен (код: $code)');
         _process = null;
-        await SystemProxy.disable();
-        _logController.add('Системный прокси отключён (Xray остановлен)');
+        _closeJob();
+        final intentional = _intentionalStop;
+        _intentionalStop = false;
+        if (intentional) {
+          await SystemProxy.disable();
+          _logController.add('Системный прокси отключён (Xray остановлен)');
+        } else {
+          // Авария ядра: настройки пользователя не возвращаем — иначе трафик
+          // пойдёт напрямую мимо туннеля.
+          await SystemProxy.lockLeak();
+          _logController.add(
+            'Килл-свитч: прокси держим включённым на мёртвый порт',
+          );
+        }
         _statusController.add(false);
       }),
     );
 
     _statusController.add(true);
     _logController.add('Xray запущен (PID: ${_process!.pid})');
+  }
+
+  /// Посадка ядра в Job Object. Не удалось — говорим прямо: защита от сироты
+  /// в этом случае не работает, и подключение полагается только на our stop.
+  void _attachToJob(int pid) {
+    if (!Platform.isWindows) return;
+    final job = CoreKillJob.create();
+    if (job == null) {
+      _logController.add(
+        'Job Object недоступен: ядро может пережить приложение',
+      );
+      return;
+    }
+    if (job.assign(pid)) {
+      _job = job;
+      _logController.add('Ядро в Job Object: умрёт вместе с приложением');
+      return;
+    }
+    job.close();
+    _logController.add(
+      'Ядро не посажено в Job Object: процесс уже в чужом Job Object',
+    );
+  }
+
+  void _closeJob() {
+    _job?.close();
+    _job = null;
   }
 
   @override
@@ -229,6 +283,9 @@ class DesktopCore implements VpnCore {
     }
 
     _logController.add('Остановка Xray...');
+    // Ручку jobs закрываем после выхода процесса: закрытая раньше, она убила
+    // бы ядро сразу, не дав ему освободить порт.
+    _intentionalStop = true;
     _process!.kill(ProcessSignal.sigterm);
 
     try {
@@ -246,6 +303,7 @@ class DesktopCore implements VpnCore {
     }
 
     _process = null;
+    _closeJob();
     await SystemProxy.disable();
     _statusController.add(false);
     _logController.add('Xray остановлен, системный прокси отключён');

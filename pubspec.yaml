@@ -12,6 +12,9 @@ dependencies:
   flutter_localizations:
     sdk: flutter
   crypto: ^3.0.6
+  # Прямая зависимость: FFI-обёртки Win32 (мьютекс, Job Object) работают с
+  # `calloc` и `Utf16`. Пакет и так был в графе через flutter_secure_storage.
+  ffi: ^2.2.0
   file_picker: ^13.1.0
   flutter_secure_storage: ^11.2.0
   path: ^1.9.0

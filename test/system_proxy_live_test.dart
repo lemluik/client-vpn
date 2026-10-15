@@ -21,10 +21,17 @@ void main() {
   String? skipOf(String reason) => live ? null : reason;
 
   Future<void> writeReg(String name, String value, String type) async {
-    final result = await Process.run(
-      'reg',
-      ['add', _regPath, '/v', name, '/t', type, '/d', value, '/f'],
-    );
+    final result = await Process.run('reg', [
+      'add',
+      _regPath,
+      '/v',
+      name,
+      '/t',
+      type,
+      '/d',
+      value,
+      '/f',
+    ]);
     expect(result.exitCode, 0, reason: 'reg add $name: ${result.stderr}');
   }
 
@@ -66,6 +73,25 @@ void main() {
       );
       final prefs = await SharedPreferences.getInstance();
       expect(prefs.getString('proxy.ours'), isNull);
+    },
+    skip: skipOf('нужен VPN_LIVE_PROXY=1: кейс пишет в реестр'),
+  );
+
+  test(
+    'килл-свитч: после падения ядра прокси остаётся на мёртвом порту',
+    () async {
+      await SystemProxy.enable('127.0.0.1', 10857);
+      // Авария ядра: возвращаемые настройки пользователя не восстанавливаются.
+      await SystemProxy.lockLeak();
+
+      expect(await SystemProxy.isEnabled, isTrue);
+      expect(await SystemProxy.getProxyServer(), '127.0.0.1:10857');
+
+      // Явное отключение возвращает то, что было до нас.
+      await SystemProxy.disable();
+      expect(await SystemProxy.isEnabled, beforeEnable);
+      expect(await SystemProxy.getProxyServer(), beforeServer);
+      await restoreSnapshot();
     },
     skip: skipOf('нужен VPN_LIVE_PROXY=1: кейс пишет в реестр'),
   );

@@ -21,8 +21,9 @@ class SystemProxy {
   static const _settingsChanged = 39;
   static const _refresh = 37;
 
-  static final _internetSetOption = DynamicLibrary.open('wininet.dll')
-      .lookupFunction<_SetOptionNative, _SetOptionDart>('InternetSetOptionW');
+  static final _internetSetOption = DynamicLibrary.open(
+    'wininet.dll',
+  ).lookupFunction<_SetOptionNative, _SetOptionDart>('InternetSetOptionW');
 
   static Future<void> enable(
     String host,
@@ -73,6 +74,23 @@ class SystemProxy {
     _notify();
   }
 
+  /// Килт-свитч: при падении ядра прокси остаётся включённым и указывает на
+  /// мёртвый порт. Приложения, слушающие системный прокси, получают отказ
+  /// вместо прямого выхода в сеть — утечка мимо туннеля блокируется.
+  ///
+  /// Возврат настроек пользователя — только явный [disable] (пользователь
+  /// отключил подключение или приложение стартует после аварии и чинит
+  /// состояние через [cleanupAfterCrash]).
+  static Future<void> lockLeak() async {
+    final prefs = await SharedPreferences.getInstance();
+    final ours = prefs.getString(_oursKey);
+    if (ours == null) return; // мы ничего не включали — блокировать нечего
+
+    await _writeString('ProxyServer', ours);
+    await _writeDword('ProxyEnable', 1);
+    _notify();
+  }
+
   /// Откатывает прокси, оставшийся включённым после аварийного завершения.
   /// Трогает прокси только если он совпадает с тем, что включали мы сами —
   /// иначе можно сломать локальный прокси пользователя (Fiddler, Clash и т.п.).
@@ -111,9 +129,7 @@ class SystemProxy {
     final hasLocal = entries.any(
       (entry) => entry.toLowerCase() == _localMarker,
     );
-    return hasLocal
-        ? entries.join(';')
-        : [...entries, _localMarker].join(';');
+    return hasLocal ? entries.join(';') : [...entries, _localMarker].join(';');
   }
 
   static Future<void> _writeString(String name, String value) async {
@@ -164,8 +180,9 @@ class SystemProxy {
     ]);
     if (result.exitCode != 0) return false;
 
-    final match = RegExp(r'ProxyEnable\s+REG_DWORD\s+(0x[0-9a-fA-F]+|\d+)')
-        .firstMatch(result.stdout.toString());
+    final match = RegExp(
+      r'ProxyEnable\s+REG_DWORD\s+(0x[0-9a-fA-F]+|\d+)',
+    ).firstMatch(result.stdout.toString());
     if (match == null) return false;
 
     final value = match.group(1)!;
@@ -183,9 +200,8 @@ class SystemProxy {
     final result = await Process.run('reg', ['query', _regPath, '/v', name]);
     if (result.exitCode != 0) return null;
 
-    return RegExp('$name\\s+REG_SZ\\s+(.*)')
-        .firstMatch(result.stdout.toString())
-        ?.group(1)
-        ?.trim();
+    return RegExp(
+      '$name\\s+REG_SZ\\s+(.*)',
+    ).firstMatch(result.stdout.toString())?.group(1)?.trim();
   }
 }
