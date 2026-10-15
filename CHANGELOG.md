@@ -46,6 +46,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   cache of the last good answer, usage headers and offline start from cache
 - Journal on its own screen, masked before export: addresses and keys are replaced
   with placeholders
+- The top-level core blocks a user writes in a config — `dns`, `observatory`,
+  `burstObservatory`, `policy` — now survive into the assembled tunnel config, and that config is
+  checked by the same core before it starts (`run -test`; on Android the tun inbound is swapped for a
+  local socks, because the tunnel device does not exist yet at validation time). Geo databases come
+  with the app instead of being missing at the first `geoip:`/`geosite:` rule: `download_xray.sh`
+  fetches `geoip.dat` and `geosite.dat` with a SHA-256 check, the APK carries them together with a
+  manifest of checksums and sizes, and the first launch copies them into `filesDir`. The asset
+  directory is passed to the core in `XRAY_LOCATION_ASSET` on both platforms, because the core's
+  search by working directory does not work when the config is read from the profile's temp folder
 
 ### Fixed
 

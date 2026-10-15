@@ -138,6 +138,7 @@ bash scripts/download_xray.sh
 # Вариант B: вручную
 # https://github.com/XTLS/Xray-core/releases/tag/v26.3.27
 # Скачайте Xray-windows-64.zip, распакуйте xray.exe в assets/xray/
+# Положите туда же geoip.dat и geosite.dat (иначе правило geoip:/geosite: не работает)
 
 # 4. Добавьте в windows/runner/CMakeLists.txt перед закрывающим ):
 #
@@ -250,8 +251,8 @@ client-vpn/
 │   └── xray/
 │       └── xray.exe           # ядро для десктопа (не в git, скачивается отдельно)
 ├── scripts/
-│   ├── download_xray.sh          # Xray-core для Windows + сверка SHA-256
-│   └── download_xray_android.sh  # Xray-core для Android в jniLibs + сверка SHA-256
+│   ├── download_xray.sh          # Xray-core для Windows + geo-базы + сверка SHA-256
+│   └── download_xray_android.sh  # ядро в jniLibs + geo-базы в assets/geo + манифест сумм
 ├── test/
 │   ├── share_link_test.dart      # разбор ссылок и параметров Reality
 │   ├── subscription_test.dart    # разбор подписки
