@@ -26,7 +26,14 @@ class _NoCore implements VpnCore {
   Stream<String> get logs => const Stream<String>.empty();
 
   @override
-  Stream<bool> get statusChanges => const Stream<bool>.empty();
+  Stream<CoreStatus> get statusChanges =>
+      const Stream<CoreStatus>.empty();
+
+  @override
+  Future<void> markTunnelFresh() async {}
+
+  @override
+  Future<bool> takePendingConnect() async => false;
 
   @override
   bool get isRunning => false;
