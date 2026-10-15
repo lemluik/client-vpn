@@ -505,6 +505,42 @@ abstract class AppLocalizations {
   /// In ru, this message translates to:
   /// **'Добавить подключение'**
   String get emptyAddButton;
+
+  /// No description provided for @trayShowWindow.
+  ///
+  /// In ru, this message translates to:
+  /// **'Показать окно'**
+  String get trayShowWindow;
+
+  /// No description provided for @trayQuit.
+  ///
+  /// In ru, this message translates to:
+  /// **'Выйти'**
+  String get trayQuit;
+
+  /// No description provided for @alreadyRunningTitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Клиент уже запущен'**
+  String get alreadyRunningTitle;
+
+  /// No description provided for @alreadyRunningBody.
+  ///
+  /// In ru, this message translates to:
+  /// **'Приложение открыто в другом окне. Второе окно не поднимается: два экземпляра спорят из-за системного прокси, и подключение рвётся.'**
+  String get alreadyRunningBody;
+
+  /// No description provided for @alreadyRunningClose.
+  ///
+  /// In ru, this message translates to:
+  /// **'Закрыть это окно'**
+  String get alreadyRunningClose;
+
+  /// No description provided for @windowHiddenToTray.
+  ///
+  /// In ru, this message translates to:
+  /// **'Клиент свёрнут в трей: подключение продолжает работать.'**
+  String get windowHiddenToTray;
 }
 
 class _AppLocalizationsDelegate

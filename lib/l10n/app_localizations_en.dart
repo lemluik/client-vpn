@@ -234,4 +234,24 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get emptyAddButton => 'Add connection';
+
+  @override
+  String get trayShowWindow => 'Show window';
+
+  @override
+  String get trayQuit => 'Quit';
+
+  @override
+  String get alreadyRunningTitle => 'The client is already running';
+
+  @override
+  String get alreadyRunningBody =>
+      'The app is open in another window. A second window does not start: two instances would fight over the system proxy and break the connection.';
+
+  @override
+  String get alreadyRunningClose => 'Close this window';
+
+  @override
+  String get windowHiddenToTray =>
+      'The client is in the tray: the connection stays up.';
 }

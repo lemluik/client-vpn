@@ -233,4 +233,24 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get emptyAddButton => 'Добавить подключение';
+
+  @override
+  String get trayShowWindow => 'Показать окно';
+
+  @override
+  String get trayQuit => 'Выйти';
+
+  @override
+  String get alreadyRunningTitle => 'Клиент уже запущен';
+
+  @override
+  String get alreadyRunningBody =>
+      'Приложение открыто в другом окне. Второе окно не поднимается: два экземпляра спорят из-за системного прокси, и подключение рвётся.';
+
+  @override
+  String get alreadyRunningClose => 'Закрыть это окно';
+
+  @override
+  String get windowHiddenToTray =>
+      'Клиент свёрнут в трей: подключение продолжает работать.';
 }

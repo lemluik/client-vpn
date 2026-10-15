@@ -67,5 +67,11 @@
   "orbRetry": "Connect again",
   "emptyTitle": "Quick access to the internet",
   "emptyBody": "Add a key from your provider or a subscription address — the client builds the connection itself. The client has no servers of its own and works with any provider.",
-  "emptyAddButton": "Add connection"
+  "emptyAddButton": "Add connection",
+  "trayShowWindow": "Show window",
+  "trayQuit": "Quit",
+  "alreadyRunningTitle": "The client is already running",
+  "alreadyRunningBody": "The app is open in another window. A second window does not start: two instances would fight over the system proxy and break the connection.",
+  "alreadyRunningClose": "Close this window",
+  "windowHiddenToTray": "The client is in the tray: the connection stays up."
 }

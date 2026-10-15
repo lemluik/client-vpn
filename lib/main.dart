@@ -3,19 +3,36 @@ import 'dart:io';
 
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show SystemNavigator;
 import 'package:window_manager/window_manager.dart';
 
 import 'app_state.dart';
 import 'home_screen.dart';
 import 'l10n/app_localizations.dart';
+import 'tray_controller.dart';
+import 'windows_guard.dart';
 
 /// Окно и системный прокси существуют только на десктопе: на Android
 /// подключение поднимает VpnService, а window_manager там не зарегистрирован.
 final bool isDesktop =
     Platform.isWindows || Platform.isMacOS || Platform.isLinux;
 
+/// Мьютекс одиночного экземпляра. Держим ручку до конца процесса: при
+/// внешнем убийстве приложения операционная система закрывает её сама.
+SingleInstanceLock? _instanceLock;
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Второй экземпляр не поднимается: два процесса спорят из-за системного
+  // прокси и порта локального входа, и подключение рвётся у обоих.
+  if (Platform.isWindows) {
+    _instanceLock = SingleInstanceLock.tryAcquire();
+    if (_instanceLock == null) {
+      runApp(const AlreadyRunningApp());
+      return;
+    }
+  }
 
   if (isDesktop) {
     await windowManager.ensureInitialized();
@@ -57,24 +74,91 @@ class ClientVpnApp extends StatefulWidget {
 }
 
 class _ClientVpnAppState extends State<ClientVpnApp> with WindowListener {
+  AppTray? _tray;
+  AppLocalizations? _l10n;
+  bool _trayAttempted = false;
+  bool _trayMounted = false;
+  bool _quitting = false;
+
   @override
   void initState() {
     super.initState();
-    if (isDesktop) windowManager.addListener(this);
+    if (isDesktop) {
+      windowManager.addListener(this);
+      widget.state.addListener(_updateTrayTooltip);
+    }
   }
 
   @override
   void dispose() {
-    if (isDesktop) windowManager.removeListener(this);
+    if (isDesktop) {
+      widget.state.removeListener(_updateTrayTooltip);
+      windowManager.removeListener(this);
+    }
     super.dispose();
   }
 
   @override
   void onWindowClose() async {
+    if (_quitting) return;
+    if (_trayMounted) {
+      // Закрытие окна с треем — это сворачивание, а не разрыв: подключение
+      // продолжает работать, выход остаётся пунктом меню трея.
+      await windowManager.hide();
+      return;
+    }
+    await _shutdown();
+  }
+
+  /// Полный выход: снять туннель, убрать трей, отдать мьютекс, уничтожить окно.
+  Future<void> _shutdown() async {
+    _quitting = true;
     await widget.state.disconnect();
     widget.state.dispose();
+    await _tray?.unmount();
+    _instanceLock?.release();
     await windowManager.destroy();
   }
+
+  void _ensureTray(AppLocalizations l10n) {
+    if (_trayAttempted || !Platform.isWindows) return;
+    _trayAttempted = true;
+    final tray = AppTray(
+      onShowWindow: _showWindow,
+      onQuit: () => unawaited(_shutdown()),
+    );
+    _tray = tray;
+    unawaited(
+      tray
+          .mount(
+            tooltip: '${l10n.appTitle} — ${_statusText(l10n)}',
+            showLabel: l10n.trayShowWindow,
+            quitLabel: l10n.trayQuit,
+          )
+          .then((mounted) {
+            if (mounted) setState(() => _trayMounted = true);
+          }),
+    );
+  }
+
+  Future<void> _showWindow() async {
+    await windowManager.show();
+    await windowManager.focus();
+  }
+
+  void _updateTrayTooltip() {
+    final l10n = _l10n;
+    if (l10n == null) return;
+    unawaited(_tray?.setTooltip('${l10n.appTitle} — ${_statusText(l10n)}'));
+  }
+
+  String _statusText(AppLocalizations l10n) => switch (widget.state.state) {
+    TunnelState.on => l10n.statusProtected,
+    TunnelState.connecting => l10n.statusConnecting,
+    TunnelState.failure => l10n.statusFailed,
+    TunnelState.noLink => l10n.statusNoLink,
+    TunnelState.off => l10n.statusOff,
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -88,7 +172,16 @@ class _ClientVpnAppState extends State<ClientVpnApp> with WindowListener {
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         theme: _theme(lightDynamic, Brightness.light),
         darkTheme: _theme(darkDynamic, Brightness.dark),
-        home: HomeScreen(state: widget.state),
+        home: Builder(
+          builder: (context) {
+            // Локализация нужна и для меню трея, которое живёт вне дерева
+            // виджетов, поэтому экземпляр запоминаем при первом кадре.
+            final l10n = AppLocalizations.of(context);
+            _l10n = l10n;
+            _ensureTray(l10n);
+            return HomeScreen(state: widget.state);
+          },
+        ),
       ),
     );
   }
@@ -100,10 +193,58 @@ class _ClientVpnAppState extends State<ClientVpnApp> with WindowListener {
   static ThemeData _theme(ColorScheme? dynamic, Brightness brightness) =>
       ThemeData(
         useMaterial3: true,
-        colorScheme: dynamic ??
+        colorScheme:
+            dynamic ??
             ColorScheme.fromSeed(
               seedColor: Colors.blue,
               brightness: brightness,
             ),
       );
+}
+
+/// Экран-объяснение для второго экземпляра: молча не стартовать нельзя,
+/// пользователь решит, что приложение не открывается.
+class AlreadyRunningApp extends StatelessWidget {
+  const AlreadyRunningApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'КлиентВПН',
+      debugShowCheckedModeBanner: false,
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      home: Builder(
+        builder: (context) {
+          final l10n = AppLocalizations.of(context);
+          return Scaffold(
+            body: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.doorbell_outlined, size: 40),
+                    const SizedBox(height: 12),
+                    Text(
+                      l10n.alreadyRunningTitle,
+                      style: Theme.of(context).textTheme.titleMedium,
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(l10n.alreadyRunningBody, textAlign: TextAlign.center),
+                    const SizedBox(height: 16),
+                    FilledButton(
+                      onPressed: SystemNavigator.pop,
+                      child: Text(l10n.alreadyRunningClose),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
 }

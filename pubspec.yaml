@@ -26,6 +26,7 @@ dependencies:
   # приходит из пакета material_ui с собственным типом схемы, несовместимым
   # с ThemeData текущей версии Flutter.
   dynamic_color: 1.9.0
+  tray_manager: 0.5.2
 
 dev_dependencies:
   flutter_test:
@@ -36,3 +37,7 @@ flutter:
   uses-material-design: true
   # Строки интерфейса генерируются из lib/l10n по l10n.yaml.
   generate: true
+  assets:
+    # Иконка для трея: Windows берёт её файлом, поэтому при старте она
+    # выгружается из бандла во временный каталог.
+    - assets/tray/tray.ico
