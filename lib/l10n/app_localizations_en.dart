@@ -339,4 +339,15 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get updateOpenFailed =>
       'The browser did not open — copy the link instead';
+
+  @override
+  String get tileTitle => 'Quick settings tile';
+
+  @override
+  String get tileSubtitle =>
+      'Start and stop the tunnel without opening the app';
+
+  @override
+  String get tileFallback =>
+      'Open the shade, tap edit and drag the Tunnel tile onto the quick settings panel';
 }

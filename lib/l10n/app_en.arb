@@ -119,5 +119,8 @@
   "updateCopy": "Copy link",
   "updateCopied": "Link copied",
   "updateNoLink": "The manifest has no link for this platform",
-  "updateOpenFailed": "The browser did not open — copy the link instead"
+  "updateOpenFailed": "The browser did not open — copy the link instead",
+  "tileTitle": "Quick settings tile",
+  "tileSubtitle": "Start and stop the tunnel without opening the app",
+  "tileFallback": "Open the shade, tap edit and drag the Tunnel tile onto the quick settings panel"
 }

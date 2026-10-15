@@ -427,6 +427,15 @@ class _HomeScreenState extends State<HomeScreen> {
                   );
                 },
               ),
+              if (defaultTargetPlatform == TargetPlatform.android)
+                ListTile(
+                  title: Text(l.tileTitle),
+                  subtitle: Text(l.tileSubtitle),
+                  onTap: () async {
+                    Navigator.pop(context);
+                    await _addTile();
+                  },
+                ),
               ListTile(
                 title: Text(l.aboutTitle),
                 onTap: () {
@@ -443,6 +452,23 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  /// Системный запрос добавления плитки. На старых Android система его не
+  /// принимает — там показываем текстовую инструкцию.
+  Future<void> _addTile() async {
+    bool added = false;
+    try {
+      added = await const MethodChannel('client_vpn/tunnel')
+              .invokeMethod<bool>('addTile') ==
+          true;
+    } on Exception {
+      added = false;
+    }
+    if (added || !mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(AppLocalizations.of(context).tileFallback)),
     );
   }
 

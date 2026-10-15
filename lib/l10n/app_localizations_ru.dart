@@ -337,4 +337,15 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get updateOpenFailed => 'Браузер не открылся — скопируйте ссылку';
+
+  @override
+  String get tileTitle => 'Плитка в шторке';
+
+  @override
+  String get tileSubtitle =>
+      'Включать и выключать туннель без открытия приложения';
+
+  @override
+  String get tileFallback =>
+      'Откройте шторку, нажмите редактировать и перетащите плитку «Туннель» на панель быстрых настроек';
 }
