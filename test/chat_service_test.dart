@@ -266,12 +266,12 @@ void main() {
       final before = stateReads();
 
       node.answerSync(timeline([
-        {'body': 'Ответ дежурного', 'sender': '@owner:chat.example', 'id': r'$r1'},
+        {'body': 'Ответ оператора', 'sender': '@owner:chat.example', 'id': r'$r1'},
       ]));
       await pump();
 
       expect(stateReads(), greaterThan(before));
-      expect(chat.messages.last.body, 'Ответ дежурного');
+      expect(chat.messages.last.body, 'Ответ оператора');
     });
 
     test('личная комната выбирается по m.direct, а не как первая в ответе', () async {

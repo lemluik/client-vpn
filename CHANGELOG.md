@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - The connect button sits in the middle of the home screen instead of being pinned to the bottom:
   the profile list now keeps its natural height, two spacers center the button in the space left,
   and the connection status stays at the bottom edge of the window
+- The support team member is called an "operator" everywhere in the chat interface and texts,
+  replacing the previous wording
 
 ### Fixed
 

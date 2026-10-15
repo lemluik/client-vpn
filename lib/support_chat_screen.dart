@@ -31,7 +31,7 @@ Future<PickedImage?> pickSupportImage() async {
   return PickedImage(name: picked.name, bytes: await picked.readAsBytes());
 }
 
-/// Тип файла по расширению: узел кладёт его в `info.mimetype`, и дежурный видит
+/// Тип файла по расширению: узел кладёт его в `info.mimetype`, и оператор видит
 /// снимок тем, чем он сделан.
 String imageMimeType(String name) {
   final dot = name.lastIndexOf('.');
@@ -263,7 +263,7 @@ class _SupportChatScreenState extends State<SupportChatScreen> {
 }
 
 /// Приватность и маршрут трафика — обе вещи пользователь видит до отправки:
-/// текст читает дежурный, а чат идёт через туннель, только если туннель поднят.
+/// текст читает оператор, а чат идёт через туннель, только если туннель поднят.
 class _PrivacyNote extends StatelessWidget {
   const _PrivacyNote({required this.tunnelUp});
 
@@ -285,7 +285,7 @@ class _PrivacyNote extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              'Сообщения читает дежурный поддержки — не пишите пароли и данные карты. '
+              'Сообщения читает оператор поддержки — не пишите пароли и данные карты. '
               'Туннель ${tunnelUp ? 'поднят: чат идёт через него' : 'выключен: чат идёт напрямую'}.',
               style: Theme.of(context).textTheme.bodySmall,
             ),
@@ -512,7 +512,7 @@ class _Composer extends StatelessWidget {
                 maxLines: 4,
                 textInputAction: TextInputAction.newline,
                 decoration: const InputDecoration(
-                  hintText: 'Сообщение дежурному',
+                  hintText: 'Сообщение оператору',
                   border: OutlineInputBorder(),
                   isDense: true,
                 ),
@@ -603,7 +603,7 @@ class _SignInState extends State<_SignIn> {
           Text(
             'Учётку для чата выдаёт провайдер вместе с ключом. '
             'Регистрации в приложении нет: войти можно только готовым логином '
-            'и паролем. Сообщения читает дежурный поддержки.',
+            'и паролем. Сообщения читает оператор поддержки.',
             style: Theme.of(context).textTheme.bodyMedium,
           ),
           const SizedBox(height: 16),

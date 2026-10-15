@@ -452,7 +452,7 @@ class ChatService extends ChangeNotifier {
       arrived++;
     }
     _loadPendingImages();
-    // Дежурный меняет кнопки по ходу диалога, поэтому после входящих перечитываем
+    // Оператор меняет кнопки по ходу диалога, поэтому после входящих перечитываем
     // state-событие: набор кнопок обязан отражать текущее состояние заявки.
     if (arrived > 0 || _hasRepliesUpdate(payload, session.roomId)) {
       unawaited(_loadReplies());

@@ -169,7 +169,7 @@ Map<String, dynamic> syncWith(String sender, String body, String eventId) => {
       'next_batch': 's$eventId',
     };
 
-/// Ответ `/sync` со снимком от дежурного: клиент обязан скачать файл и показать.
+/// Ответ `/sync` со снимком от оператора: клиент обязан скачать файл и показать.
 Map<String, dynamic> syncWithImage(String sender, String eventId) => {
       'rooms': {
         'join': {
@@ -183,7 +183,7 @@ Map<String, dynamic> syncWithImage(String sender, String eventId) => {
                   'event_id': eventId,
                   'content': {
                     'msgtype': 'm.image',
-                    'body': 'снимок-дежурного.png',
+                    'body': 'снимок-оператора.png',
                     'url': 'mxc://chat.example/входящий1',
                     'info': {'mimetype': 'image/png', 'size': 70, 'w': 1, 'h': 1},
                   },
@@ -301,7 +301,7 @@ void main() {
       tester.widget<TextField>(find.byKey(const ValueKey('homeserver'))).controller!.text,
       home,
     );
-    expect(find.textContaining('дежурный'), findsWidgets);
+    expect(find.textContaining('оператор'), findsWidgets);
   });
 
   testWidgets('вход открывает ленту, отправка помечена отправленной',
@@ -318,7 +318,7 @@ void main() {
     expect(vault.values.values, contains('токен-Т'));
   });
 
-  testWidgets('сообщение дежурного появляется в ленте', (tester) async {
+  testWidgets('сообщение оператора появляется в ленте', (tester) async {
     await signIn(tester);
 
     node.answerSync(syncWith('@support:chat.example', 'Здравствуйте', '1'));
@@ -409,7 +409,7 @@ void main() {
     expect(node.bodies, ['Медленно работает']);
   });
 
-  testWidgets('дежурный сменил кнопки без нового сообщения — набор перерисован', (tester) async {
+  testWidgets('оператор сменил кнопки без нового сообщения — набор перерисован', (tester) async {
     node.quickReplies = {
       'items': [
         {'id': 'c1', 'text': 'Не подключается'},
@@ -491,7 +491,7 @@ void main() {
     node.uploadFailure = null;
   });
 
-  testWidgets('снимок дежурного скачивается и показывается', (tester) async {
+  testWidgets('снимок оператора скачивается и показывается', (tester) async {
     await signIn(tester);
 
     node.answerSync(syncWithImage('@support:chat.example', '2'));
