@@ -1,0 +1,399 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
+
+import 'chat_store.dart';
+import 'matrix_api.dart';
+
+/// Состояние чата для интерфейса. `blocked` — токен отозван или доступ кончился:
+/// сам клиент его не восстановит, выдаёт провайдер.
+enum ChatStatus { signedOut, connecting, live, retrying, blocked }
+
+/// Задержка между попытками. В испытаниях подменяется мгновенной, чтобы
+/// проверять backoff без реального ожидания.
+typedef ChatDelay = Future<void> Function(Duration delay);
+
+/// Ретраи идут по 1/2/4/8/16 с, дальше очередь ждёт сети.
+const List<Duration> chatBackoffs = [
+  Duration(seconds: 1),
+  Duration(seconds: 2),
+  Duration(seconds: 4),
+  Duration(seconds: 8),
+  Duration(seconds: 16),
+];
+
+/// Двигатель чата: один long-poll `/sync`, очередь с `txnId`, курсор на диске.
+///
+/// Всё, что видно пользователю, переживает перезапуск: `since` и очередь
+/// сохраняются в [ChatStore] на каждое изменение.
+class ChatService extends ChangeNotifier {
+  ChatService(this._store, {MatrixCaller? call, ChatDelay? delay, DateTime Function()? now})
+      : _call = call,
+        _delay = delay ?? _realDelay,
+        _now = now ?? DateTime.now;
+
+  static Future<void> _realDelay(Duration delay) => Future<void>.delayed(delay);
+
+  final ChatStore _store;
+  final MatrixCaller? _call;
+  final ChatDelay _delay;
+  final DateTime Function() _now;
+
+  ChatSession? _session;
+  MatrixClient? _client;
+  final List<ChatMessage> _messages = [];
+  List<QuickReply> _quickReplies = const [];
+  ChatStatus _status = ChatStatus.signedOut;
+  String? _error;
+  int _attempts = 0;
+  bool _running = false;
+
+  ChatStatus get status => _status;
+
+  String? get error => _error;
+
+  ChatSession? get session => _session;
+
+  bool get signedIn => _session != null && _client != null && _client!.signedIn;
+
+  List<ChatMessage> get messages => List.unmodifiable(_messages);
+
+  /// Кнопки заявки, которые лежат в комнате. Пусто — значит провайдер их не кладёт.
+  List<QuickReply> get quickReplies => List.unmodifiable(_quickReplies);
+
+  int get queued => _session?.outbox.length ?? 0;
+
+  /// Поднимает сохранённую сессию провайдера и начинает приём.
+  Future<bool> resume(String providerId) async {
+    final session = _store.sessionOf(providerId);
+    if (session == null) {
+      _status = ChatStatus.signedOut;
+      notifyListeners();
+      return false;
+    }
+    final token = await _store.tokenOf(providerId);
+    if (token == null || token.isEmpty) {
+      _session = session;
+      _hydrate(session);
+      await fail('Доступ к чату закончился', ChatStatus.blocked);
+      return false;
+    }
+    _session = session;
+    _hydrate(session);
+    _client = MatrixClient(session.homeserver, token: token, call: _call);
+    _status = ChatStatus.connecting;
+    _error = null;
+    notifyListeners();
+    _start();
+    unawaited(_loadReplies());
+    return true;
+  }
+
+  /// Вход готовой учёткой. Пароль в историю и в журнал не попадает, токен
+  /// уходит в защищённое хранилище ОС.
+  Future<String?> signIn({
+    required String providerId,
+    required String homeserver,
+    required String user,
+    required String password,
+    String? roomId,
+  }) async {
+    final bad = chatHomeserverError(homeserver);
+    if (bad != null) return bad;
+    if (user.trim().isEmpty || password.isEmpty) return 'Введите логин и пароль чата';
+
+    _status = ChatStatus.connecting;
+    _error = null;
+    notifyListeners();
+
+    final client = MatrixClient(_normalise(homeserver), call: _call);
+    try {
+      await client.versions();
+      final login = await client.login(user.trim(), password);
+      var room = roomId?.trim();
+      if (room == null || room.isEmpty) room = await _firstRoom(client);
+      if (room == null) return 'У этой учётки нет комнаты: чат ещё не выпущен';
+
+      _client = client;
+      // Новый вход — новая пара «узел + комната»: старая сессия и её токен
+      // не переносятся между узлами.
+      await _store.drop(providerId);
+      _session = ChatSession(
+        providerId: providerId,
+        homeserver: client.homeserver,
+        userId: login.userId,
+        roomId: room,
+      );
+      await _store.saveToken(providerId, login.token);
+      await _persist();
+      _messages.clear();
+      _status = ChatStatus.live;
+      notifyListeners();
+      _start();
+      unawaited(_loadReplies());
+      return null;
+    } on Object catch (error) {
+      return fail(chatErrorOf(error), error is MatrixException && error.unknownToken
+          ? ChatStatus.blocked
+          : ChatStatus.retrying);
+    }
+  }
+
+  /// Отправка: сразу в очередь и в историю со статусом «в очереди», потом на узел.
+  Future<String?> send(String text) async {
+    final session = _session;
+    if (session == null) return 'Чат не открыт';
+    final body = text.trim();
+    if (body.isEmpty) return null;
+
+    final item = OutboxItem(txnId: newTxnId(), body: body, at: _now());
+    final queued = [...session.outbox, item];
+    _session = session.copyWith(outbox: queued);
+    _messages.add(ChatMessage(
+      sender: session.userId,
+      body: body,
+      at: item.at,
+      txnId: item.txnId,
+      pending: true,
+    ));
+    await _persist();
+    notifyListeners();
+    await _flush();
+    return _error;
+  }
+
+  /// Пробует снова после «нет связи»: очередь и курсор на месте.
+  Future<void> retry() async {
+    _attempts = 0;
+    if (_status == ChatStatus.retrying) _status = ChatStatus.connecting;
+    notifyListeners();
+    if (_session != null && _client != null && !_running) _start();
+    await _flush();
+  }
+
+  /// Останавливает приём, когда экран чата закрыт: на узле лимит соединений,
+  /// и держать long-poll без пользователя в интерфейсе нельзя. Текущий запрос
+  /// доживёт до ответа узла (до 25 с), новых не заводим.
+  void stop() {
+    _running = false;
+    notifyListeners();
+  }
+
+  /// Забывает чат провайдера вместе с его записью: сессия, курсор, очередь и
+  /// токен не должны пережить удаление подписки.
+  Future<void> forget(String providerId) async {
+    final session = _session;
+    if (session != null && session.providerId == providerId) {
+      await signOut();
+      return;
+    }
+    await _store.drop(providerId);
+  }
+
+  /// Выход: сессия снимается с узла, токен стирается, история и курсор удаляются.
+  Future<void> signOut() async {
+    final session = _session;
+    _running = false;
+    if (_client != null && session != null) {
+      try {
+        await _client!.logout();
+      } on Object {
+        // Узел мог уже отозвать токен: локально всё равно всё стираем.
+      }
+    }
+    _messages.clear();
+    _quickReplies = const [];
+    _client = null;
+    _session = null;
+    _status = ChatStatus.signedOut;
+    _error = null;
+    if (session != null) await _store.drop(session.providerId);
+    notifyListeners();
+  }
+
+  /// Текст ошибки относится к прошлой попытке: на чистой форме входа он только
+  /// путает — пользователь ещё ничего не ввёл.
+  void clearError() {
+    if (_error == null) return;
+    _error = null;
+    notifyListeners();
+  }
+
+  Future<String?> fail(String text, ChatStatus state) async {
+    _error = text;
+    _status = state;
+    final session = _session;
+    if (session != null) _session = session.copyWith(lastError: text);
+    notifyListeners();
+    return text;
+  }
+
+  void _start() {
+    if (_running) return;
+    _running = true;
+    unawaited(_loop());
+  }
+
+  /// Последовательный цикл: отправка очереди, затем одно долгосрочное
+  /// соединение. Параллельных `sync` не заводим — на узле лимит соединений.
+  Future<void> _loop() async {
+    while (_running && _session != null && _client != null) {
+      await _flush();
+      if (!_running) break;
+      final session = _session!;
+      try {
+        final reply = await _client!.sync(since: session.since);
+        _attempts = 0;
+        _absorb(reply.json);
+        _status = ChatStatus.live;
+        _error = null;
+        notifyListeners();
+      } on Object catch (error) {
+        if (error is MatrixException && error.unknownToken) {
+          await fail('Доступ к чату закончился', ChatStatus.blocked);
+          _running = false;
+          break;
+        }
+        _attempts++;
+        if (_attempts > chatBackoffs.length) {
+          await fail('${chatErrorOf(error)} — очередь ждёт сети', ChatStatus.retrying);
+          _running = false;
+          break;
+        }
+        _status = ChatStatus.retrying;
+        _error = chatErrorOf(error);
+        notifyListeners();
+        await _delay(chatBackoffs[_attempts - 1]);
+      }
+    }
+  }
+
+  /// Отправляет очередь по одной. Повтор идёт с прежним `txnId` — узел
+  /// дедуплицирует, так что ретрай не плодит дублей.
+  Future<void> _flush() async {
+    final existing = _session;
+    final client = _client;
+    if (existing == null || client == null || existing.outbox.isEmpty) return;
+    var session = existing;
+
+    for (final item in List.of(session.outbox)) {
+      try {
+        await client.send(session.roomId, item.body, item.txnId);
+        session = session.copyWith(
+          outbox: session.outbox.where((left) => left.txnId != item.txnId).toList(),
+        );
+        _markSent(item.txnId);
+        _session = session;
+        await _persist();
+        notifyListeners();
+      } on Object catch (error) {
+        if (error is MatrixException && error.unknownToken) {
+          await fail('Доступ к чату закончился', ChatStatus.blocked);
+          return;
+        }
+        if (error is MatrixException && error.rateLimited) {
+          await _delay(chatBackoffs[0]);
+        }
+        _markFailed(item.txnId, chatErrorOf(error));
+        return;
+      }
+    }
+  }
+
+  void _absorb(Map<String, dynamic> payload) {
+    final session = _session;
+    if (session == null) return;
+    final next = payload['next_batch'];
+    if (next is String && next.isNotEmpty) {
+      _session = session.copyWith(since: next);
+      unawaited(_persist());
+    }
+    var arrived = 0;
+    for (final message in messagesFor(session, payload)) {
+      if (_messages.any((old) => old.eventId.isNotEmpty && old.eventId == message.eventId)) {
+        continue;
+      }
+      _messages.add(message);
+      arrived++;
+    }
+    // Дежурный меняет кнопки по ходу диалога, поэтому после входящих перечитываем
+    // state-событие: набор кнопок обязан отражать текущее состояние заявки.
+    if (arrived > 0) unawaited(_loadReplies());
+  }
+
+  /// Кнопки заявки — факультативные: у провайдера их может не быть, а ответ узла
+  /// может не успеть прийти. Ни один из вариантов не роняет чат.
+  Future<void> _loadReplies() async {
+    final client = _client;
+    final room = _session?.roomId;
+    if (client == null || room == null || !client.signedIn) return;
+    try {
+      final found = await client.quickReplies(room);
+      if (found.isEmpty || _session?.roomId != room) return;
+      _quickReplies = found;
+      notifyListeners();
+    } on Object {
+      // Нет события — нет кнопок; текст в поле ввода никуда не девается.
+    }
+  }
+
+  Future<String?> _firstRoom(MatrixClient client) async {
+    final reply = await client.sync();
+    final join = reply.json['rooms'];
+    if (join is! Map) return null;
+    final rooms = join['join'];
+    if (rooms is! Map || rooms.isEmpty) return null;
+    for (final direct in directRoomsFromSync(reply.json)) {
+      if (rooms.containsKey(direct)) return direct;
+    }
+    return '${rooms.keys.first}';
+  }
+
+  /// Возвращает в ленту то, что не успело уйти: очередь переживает перезапуск.
+  void _hydrate(ChatSession session) {
+    _messages
+      ..clear()
+      ..addAll(session.outbox.map((item) => ChatMessage(
+            sender: session.userId,
+            body: item.body,
+            at: item.at,
+            txnId: item.txnId,
+            pending: true,
+          )));
+  }
+
+  void _markSent(String txnId) {
+    for (var i = 0; i < _messages.length; i++) {
+      if (_messages[i].pending && _messages[i].txnId == txnId) {
+        _messages[i] = _messages[i].copyWith(pending: false);
+      }
+    }
+  }
+
+  void _markFailed(String txnId, String reason) {
+    for (var i = 0; i < _messages.length; i++) {
+      if (_messages[i].pending && _messages[i].txnId == txnId) {
+        _messages[i] = _messages[i].copyWith(failed: true);
+      }
+    }
+    _error = reason;
+    notifyListeners();
+  }
+
+  Future<void> _persist() async {
+    final session = _session;
+    if (session != null) await _store.save(session);
+  }
+
+  /// Порт и схему оставляем как есть, убираем только хвостовой слэш.
+  String _normalise(String value) {
+    final trimmed = value.trim();
+    return trimmed.endsWith('/') ? trimmed.substring(0, trimmed.length - 1) : trimmed;
+  }
+
+  @override
+  void dispose() {
+    _running = false;
+    super.dispose();
+  }
+}

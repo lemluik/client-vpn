@@ -9,6 +9,11 @@ const String _intervalHeader = 'profile-update-interval';
 const String _usageHeader = 'subscription-userinfo';
 const String _supportHeader = 'support-url';
 
+/// Настройки чата поддержки приходят теми же заголовками, что и остальное:
+/// адрес узла Matrix и комната. В код клиента адреса провайдера не вписываются.
+const String _chatHomeserverHeader = 'chat-homeserver';
+const String _chatRoomHeader = 'chat-room';
+
 /// Остаток трафика и срок доступа из заголовка `subscription-userinfo`.
 ///
 /// Провайдер присылает байты и секунды эпохи. Срок сравниваем с переданным
@@ -74,6 +79,8 @@ class Subscription {
     this.title,
     this.updateInterval,
     this.supportUrl,
+    this.chatHomeserver,
+    this.chatRoomId,
     this.usage,
   });
 
@@ -88,6 +95,12 @@ class Subscription {
 
   /// Адрес поддержки провайдера из `support-url`.
   final String? supportUrl;
+
+  /// Узел чата из `chat-homeserver`: полный `https://хост:порт`.
+  final String? chatHomeserver;
+
+  /// Комната чата из `chat-room`: без него клиент берёт первую комнату из `/sync`.
+  final String? chatRoomId;
 
   final SubscriptionUsage? usage;
 
@@ -116,6 +129,8 @@ Subscription parseSubscription(
     title: _decodedTitle(normalized[_titleHeader]),
     updateInterval: hours == null || hours <= 0 ? null : Duration(hours: hours),
     supportUrl: _nonEmpty(normalized[_supportHeader]),
+    chatHomeserver: _nonEmpty(normalized[_chatHomeserverHeader]),
+    chatRoomId: _nonEmpty(normalized[_chatRoomHeader]),
     usage: SubscriptionUsage.parse(normalized[_usageHeader]),
   );
 }

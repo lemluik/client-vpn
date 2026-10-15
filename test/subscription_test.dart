@@ -96,6 +96,36 @@ void main() {
       expect(subscription.usage?.expire, isNull);
     });
 
+    test('узел и комната чата читаются из заголовков', () {
+      final subscription = parseSubscription(
+        firstLink,
+        headers: const {
+          'CHAT-HOMESERVER': 'https://chat.example:8448',
+          'chat-room': '  !abc:chat.example  ',
+        },
+      );
+
+      expect(subscription.chatHomeserver, 'https://chat.example:8448');
+      expect(subscription.chatRoomId, '!abc:chat.example');
+    });
+
+    test('без заголовков чата подписка остаётся рабочей', () {
+      final subscription = parseSubscription(firstLink);
+
+      expect(subscription.links, hasLength(1));
+      expect(subscription.chatHomeserver, isNull);
+      expect(subscription.chatRoomId, isNull);
+    });
+
+    test('пустой заголовок чата не превращается в адрес', () {
+      final subscription = parseSubscription(
+        firstLink,
+        headers: const {'chat-homeserver': '   '},
+      );
+
+      expect(subscription.chatHomeserver, isNull);
+    });
+
     test('имя подписки принимается и в открытом виде', () {
       final subscription = parseSubscription(
         firstLink,

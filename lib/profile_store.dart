@@ -163,6 +163,10 @@ class ProfileStore {
     return null;
   }
 
+  /// Провайдер профиля по его идентификатору: при удалении записи нужно
+  /// стереть и её чат, а чат привязан к провайдеру.
+  String? providerOfProfile(String profileId) => _byId(profileId)?.providerId;
+
   bool get isEmpty => _profiles.isEmpty;
 
   /// Профили из подписок, которым пора обновиться.

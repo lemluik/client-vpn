@@ -9,6 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Support chat over Matrix, built into the client: the homeserver and the room come
+  from the provider (`chat-homeserver` and `chat-room` subscription headers, or typed
+  in by hand until the provider sends them), the account is issued by the provider —
+  there is no self-registration. The access token is kept in the OS secure store
+  (Keystore on Android, Credential Manager on Windows) and never in app preferences,
+  so a config export carries no chat credentials. One long-poll at a time, backoff
+  1/2/4/8/16 s, and an outbox that survives a restart: an unsent message keeps its
+  transaction id and is retried under the same id, so the node cannot double it.
+  A rejected token ends the session with a plain "chat access has expired" instead of
+  a silent retry loop. TLS is strict everywhere; the chat never loosens it. The chat
+  is reachable from the top bar even with no connection added — that is the case
+  where support is needed most — and its history is scoped per provider, so removing
+  a provider erases the chat data that came with it. The conversation is private by
+  room membership, not by an interface filter: the client takes the room the node
+  lists under `m.direct` instead of the first joined room, so another client's
+  messages never arrive in this session at all. The ticket buttons above the input
+  come from the room itself, its `support.quick_replies` state event, so the provider
+  owns the category texts and the client keeps none of them
 - Exit country selection. The client groups subscription profiles by the node name
   the provider sends (`🇪🇺 Europe 1`, `🇪🇺 Europe 2`, `🇰🇬 Kyrgyzstan 1` -> two
   countries) and shows a picker when a profile has more than one group. The label

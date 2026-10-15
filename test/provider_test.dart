@@ -152,6 +152,29 @@ void main() {
       });
       expect(restored.updateIntervalHours, defaultUpdateIntervalHours);
     });
+
+    test('узел и комната чата переживают сохранение', () {
+      const provider = Provider(
+        id: 'a',
+        url: 'https://example.org/sub',
+        chatHomeserver: 'https://chat.example:8448',
+        chatRoomId: '!abc:chat.example',
+      );
+
+      final restored = Provider.fromJson(provider.toJson());
+
+      expect(restored.chatHomeserver, 'https://chat.example:8448');
+      expect(restored.chatRoomId, '!abc:chat.example');
+    });
+
+    test('запись без чата остаётся без чата', () {
+      final restored = Provider.fromJson({
+        'id': 'a',
+        'url': 'https://example.org/sub',
+      });
+      expect(restored.chatHomeserver, isNull);
+      expect(restored.chatRoomId, isNull);
+    });
   });
 
   group('refreshProvider', () {
@@ -228,6 +251,70 @@ void main() {
       );
       expect(result.error, isNot(contains('example.org')));
       expect(result.error, isNot(contains('500')));
+    });
+  });
+
+  group('чат поддержки у провайдера', () {
+    test('узел и комната приходят из заголовков подписки', () async {
+      final result = await refreshProvider(
+        sampleProvider(),
+        fetch: responds(headers: {
+          'chat-homeserver': 'https://chat.example:8448',
+          'chat-room': '!abc:chat.example',
+        }),
+        now: fixedNow,
+      );
+
+      expect(result.ok, isTrue);
+      expect(result.provider.chatHomeserver, 'https://chat.example:8448');
+      expect(result.provider.chatRoomId, '!abc:chat.example');
+    });
+
+    test('провайдер без заголовков чата не держит прежний узел', () async {
+      final withChat = sampleProvider().copyWith(
+        chatHomeserver: 'https://chat.example:8448',
+        chatRoomId: '!abc:chat.example',
+      );
+
+      final result =
+          await refreshProvider(withChat, fetch: responds(), now: fixedNow);
+
+      expect(result.provider.chatHomeserver, isNull);
+      expect(result.provider.chatRoomId, isNull);
+    });
+
+    test('узел сменился, а комнату не прислали — старая комната забывается',
+        () async {
+      final withRoom = sampleProvider().copyWith(
+        chatHomeserver: 'https://старый.example:8448',
+        chatRoomId: '!старая:старый.example',
+      );
+
+      final result = await refreshProvider(
+        withRoom,
+        fetch: responds(headers: {'chat-homeserver': 'https://chat.example:8448'}),
+        now: fixedNow,
+      );
+
+      expect(result.provider.chatHomeserver, 'https://chat.example:8448');
+      expect(result.provider.chatRoomId, isNull);
+    });
+
+    test('сбой сети оставляет известные параметры чата', () async {
+      final withChat = sampleProvider().copyWith(
+        chatHomeserver: 'https://chat.example:8448',
+        chatRoomId: '!abc:chat.example',
+      );
+
+      final result = await refreshProvider(
+        withChat,
+        fetch: failsWith(const SocketException('нет связи')),
+        now: fixedNow,
+      );
+
+      expect(result.ok, isFalse);
+      expect(result.provider.chatHomeserver, 'https://chat.example:8448');
+      expect(result.provider.chatRoomId, '!abc:chat.example');
     });
   });
 

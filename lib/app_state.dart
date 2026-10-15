@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
+import 'chat_service.dart';
+import 'chat_store.dart';
 import 'log_mask.dart';
 import 'profile_store.dart';
 import 'provider.dart';
@@ -35,21 +37,26 @@ class Failure {
 /// Долгие операции не останавливают отрисовку: экран слушает уведомления и
 /// показывает ход работы, кнопки выбора профиля и добавления остаются живыми.
 class AppState extends ChangeNotifier {
-  AppState(this._store, this._core, {ConfigWriter? configWriter})
+  AppState(this._store, this._core, {ConfigWriter? configWriter, ChatService? chat})
       : _writeConfig = configWriter ??
-            (Platform.isAndroid ? _passThrough : ensureConfigOnDisk) {
+            (Platform.isAndroid ? _passThrough : ensureConfigOnDisk),
+        _chat = chat {
     _logSubscription = _core.logs.listen(_onLog);
     _statusSubscription = _core.statusChanges.listen(_onStatus);
   }
 
-  static Future<AppState> create() async =>
-      AppState(await ProfileStore.open(), createVpnCore());
+  static Future<AppState> create() async => AppState(
+        await ProfileStore.open(),
+        createVpnCore(),
+        chat: ChatService(await ChatStore.open()),
+      );
 
   static const int logLimit = 500;
 
   final ProfileStore _store;
   final VpnCore _core;
   final ConfigWriter _writeConfig;
+  final ChatService? _chat;
 
   StreamSubscription<String>? _logSubscription;
   StreamSubscription<bool>? _statusSubscription;
@@ -59,6 +66,9 @@ class AppState extends ChangeNotifier {
   Failure? _failure;
   bool _busy = false;
   bool _stopping = false;
+
+  /// Чат поддержки, если он выпущен для активной подписки.
+  ChatService? get chat => _chat;
 
   TunnelState get state => _state;
 
@@ -220,7 +230,13 @@ class AppState extends ChangeNotifier {
     if (_state == TunnelState.on && _store.active?.id == id) {
       await disconnect();
     }
+    final providerId = _store.providerOfProfile(id);
     await _store.remove(id);
+    // Данные чата принадлежат записи провайдера: не стало провайдера —
+    // не стало сессии, курсора, очереди и токена.
+    if (providerId != null && _store.providerOf(providerId) == null) {
+      await _chat?.forget(providerId);
+    }
     if (_store.active == null) _failure = null;
     notifyListeners();
   }
@@ -310,6 +326,7 @@ class AppState extends ChangeNotifier {
   void dispose() {
     _logSubscription?.cancel();
     _statusSubscription?.cancel();
+    _chat?.dispose();
     unawaited(_core.dispose());
     unawaited(clearWorkingDirectory());
     super.dispose();

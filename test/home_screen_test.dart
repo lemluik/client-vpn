@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:client_vpn/app_state.dart';
+import 'package:client_vpn/chat_service.dart';
+import 'package:client_vpn/chat_store.dart';
 import 'package:client_vpn/main.dart';
 import 'package:client_vpn/profile_store.dart';
 import 'package:client_vpn/vpn_config.dart';
@@ -79,6 +81,19 @@ class FakeCore implements VpnCore {
   }
 }
 
+/// Хранилище токенов без содержимого: тест проверяет путь до формы входа,
+/// а не шифрование — оно разобрано в chat_store_test.
+class _NullVault implements TokenVault {
+  @override
+  Future<String?> read(String key) async => null;
+
+  @override
+  Future<void> write(String key, String value) async {}
+
+  @override
+  Future<void> erase(String key) async {}
+}
+
 Future<AppState> makeState({FakeCore? core}) async {
   SharedPreferences.setMockInitialValues({});
   return AppState(
@@ -105,6 +120,29 @@ void main() {
       expect(find.text('Отключено'), findsOneWidget);
     });
 
+    testWidgets('кнопка поддержки видна и без добавленного подключения',
+        (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final state = AppState(
+        await ProfileStore.open(),
+        FakeCore(),
+        configWriter: (config) async => config,
+        chat: ChatService(ChatStore(
+          await SharedPreferences.getInstance(),
+          _NullVault(),
+        )),
+      );
+      addTearDown(state.dispose);
+
+      await tester.pumpWidget(ClientVpnApp(state: state));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Поддержка'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Чат поддержки'), findsOneWidget);
+      expect(find.byKey(const ValueKey('homeserver')), findsOneWidget);
+    });
     testWidgets('ссылка из буфера поднимает профиль без файла', (tester) async {
       final state = await makeState();
       addTearDown(state.dispose);

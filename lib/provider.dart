@@ -52,6 +52,8 @@ class Provider {
     this.name = '',
     this.updateIntervalHours = defaultUpdateIntervalHours,
     this.supportUrl,
+    this.chatHomeserver,
+    this.chatRoomId,
     this.lastUpdated,
     this.usage,
     this.cachedBody,
@@ -63,6 +65,12 @@ class Provider {
   final String name;
   final int updateIntervalHours;
   final String? supportUrl;
+
+  /// Узел чата поддержки из заголовка подписки. Null, если провайдер чат не даёт.
+  final String? chatHomeserver;
+
+  /// Комната чата: если провайдер её прислал, клиент не ищет её сам.
+  final String? chatRoomId;
   final DateTime? lastUpdated;
   final SubscriptionUsage? usage;
   final String? cachedBody;
@@ -92,12 +100,16 @@ class Provider {
     String? name,
     int? updateIntervalHours,
     String? supportUrl,
+    String? chatHomeserver,
+    String? chatRoomId,
     DateTime? lastUpdated,
     SubscriptionUsage? usage,
     String? cachedBody,
     String? lastError,
     bool clearError = false,
     bool clearSupportUrl = false,
+    bool clearChat = false,
+    bool clearChatRoom = false,
     bool clearUsage = false,
   }) {
     return Provider(
@@ -106,6 +118,10 @@ class Provider {
       name: name ?? this.name,
       updateIntervalHours: updateIntervalHours ?? this.updateIntervalHours,
       supportUrl: clearSupportUrl ? null : (supportUrl ?? this.supportUrl),
+      chatHomeserver: clearChat ? null : (chatHomeserver ?? this.chatHomeserver),
+      chatRoomId: clearChat || clearChatRoom
+          ? null
+          : (chatRoomId ?? this.chatRoomId),
       lastUpdated: lastUpdated ?? this.lastUpdated,
       usage: clearUsage ? null : (usage ?? this.usage),
       cachedBody: cachedBody ?? this.cachedBody,
@@ -119,6 +135,8 @@ class Provider {
         'name': name,
         'interval': updateIntervalHours,
         'support': supportUrl,
+        'chat': chatHomeserver,
+        'chat_room': chatRoomId,
         'updated': lastUpdated?.toIso8601String(),
         'usage': _usageToJson(usage),
         'cache': cachedBody,
@@ -143,6 +161,8 @@ class Provider {
           ? interval
           : defaultUpdateIntervalHours,
       supportUrl: _text(json['support']),
+      chatHomeserver: _text(json['chat']),
+      chatRoomId: _text(json['chat_room']),
       lastUpdated: updated == null ? null : DateTime.tryParse(updated),
       usage: usage is Map<String, dynamic> ? _usageFromJson(usage) : null,
       cachedBody: _text(json['cache']),
@@ -186,6 +206,10 @@ Future<RefreshResult> refreshProvider(
       updateIntervalHours: interval?.inHours,
       supportUrl: subscription.supportUrl,
       clearSupportUrl: subscription.supportUrl == null,
+      chatHomeserver: subscription.chatHomeserver,
+      chatRoomId: subscription.chatRoomId,
+      clearChat: subscription.chatHomeserver == null,
+      clearChatRoom: subscription.chatRoomId == null,
       usage: subscription.usage,
       clearUsage: subscription.usage == null,
       cachedBody: subscription.links.map((link) => link.source).join('\n'),

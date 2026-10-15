@@ -6,6 +6,7 @@ import 'log_screen.dart';
 import 'profile_store.dart';
 import 'provider.dart';
 import 'region.dart';
+import 'support_chat_screen.dart';
 
 /// Главный экран: состояние туннеля, список подключений и добавление новых.
 ///
@@ -63,6 +64,11 @@ class _HomeScreenState extends State<HomeScreen> {
             tooltip: 'Журнал',
             icon: const Icon(Icons.article_outlined),
             onPressed: _openLog,
+          ),
+          IconButton(
+            tooltip: 'Поддержка',
+            icon: const Icon(Icons.forum_outlined),
+            onPressed: _openChat,
           ),
           const SizedBox(width: 4),
         ],
@@ -232,6 +238,18 @@ class _HomeScreenState extends State<HomeScreen> {
     Navigator.push(
       context,
       MaterialPageRoute<void>(builder: (context) => LogScreen(state: _state)),
+    );
+  }
+
+  /// Чат поддержки открыт для записей провайдера: узел и комнату даёт подписка,
+  /// а учётку выдаёт провайдер вместе с ключом.
+  void _openChat() {
+    Navigator.push(
+      context,
+      MaterialPageRoute<void>(
+        builder: (context) =>
+            SupportChatScreen(state: _state, provider: _state.activeProvider),
+      ),
     );
   }
 
