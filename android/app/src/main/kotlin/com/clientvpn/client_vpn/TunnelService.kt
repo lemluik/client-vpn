@@ -8,11 +8,14 @@ import android.content.Intent
 import android.net.VpnService
 import android.os.Build
 import android.os.ParcelFileDescriptor
+import android.os.SystemClock
 import android.system.Os
 import android.system.OsConstants
 import java.io.BufferedReader
 import java.io.File
 import java.io.InputStreamReader
+import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
 
 /**
@@ -32,17 +35,33 @@ class TunnelService : VpnService() {
         const val APPS_FILE = "tunnel-apps.txt"
         const val XRAY_LIB = "libxray.so"
 
-        private const val SESSION = "КлиентВПН"
+        private const val SESSION = "Нейтрино"
         private const val CHANNEL_ID = "tunnel"
         private const val NOTIFICATION_ID = 1
         private const val MTU = 1500
         private const val TUN_FD_ENV = "xray.tun.fd"
         private const val ASSET_ENV = "XRAY_LOCATION_ASSET"
+
+        /** Интерфейс туннеля VpnService: `tun0`, `tun1`… — но не `tunl0`
+         *  (это IP-туннель ядра, к нашему VPN отношения не имеет). */
+        private val TUN_IFACE = Regex("tun\\d+")
+
+        /** Период обновления уведомления со скоростью, мс. */
+        private const val TRAFFIC_INTERVAL_MS = 1000L
     }
 
     private var process: Process? = null
     private var tunnel: ParcelFileDescriptor? = null
     private var logReader: Thread? = null
+
+    /** Замер трафика туннеля: счётчики `/proc/net/dev` на старте сессии
+     *  (база) и на прошлом тике (для скорости). */
+    private var trafficTimer: ScheduledExecutorService? = null
+    private var baseRx = 0L
+    private var baseTx = 0L
+    private var lastRx = 0L
+    private var lastTx = 0L
+    private var lastTs = 0L
 
     @Volatile
     private var stopping = false
@@ -196,6 +215,7 @@ class TunnelService : VpnService() {
 
         TunnelBus.log("Туннель поднят, ядро запущено")
         TunnelBus.status(true)
+        startTrafficMonitor()
     }
 
     private fun readLogs(started: Process) {
@@ -216,6 +236,7 @@ class TunnelService : VpnService() {
 
     private fun stopTunnel() {
         stopping = true
+        stopTrafficMonitor()
         logReader?.interrupt()
         logReader = null
 
@@ -270,6 +291,17 @@ class TunnelService : VpnService() {
             manager.createNotificationChannel(channel)
         }
 
+        startForeground(
+            NOTIFICATION_ID,
+            notificationBuilder()
+                .setContentTitle(SESSION)
+                .setContentText("Трафик идёт через туннель")
+                .build(),
+        )
+    }
+
+    /** База уведомления: иконка, тап открывает приложение, неснимаемое. */
+    private fun notificationBuilder(): Notification.Builder {
         val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         val open = PendingIntent.getActivity(
             this,
@@ -277,23 +309,105 @@ class TunnelService : VpnService() {
             Intent(this, MainActivity::class.java),
             flags,
         )
-
         val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             Notification.Builder(this, CHANNEL_ID)
         } else {
             @Suppress("DEPRECATION")
             Notification.Builder(this)
         }
+        return builder
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentIntent(open)
+            .setOngoing(true)
+    }
 
-        startForeground(
+    /** Обновляет уведомление текущей скоростью и трафиком за сессию.
+     *  В свёрнутом виде — строка скорости, в развёрнутом — скорость и сессия. */
+    private fun postNotification(upSpeed: Double, downSpeed: Double, sessUp: Long, sessDown: Long) {
+        val speedLine = "↑ ${formatSpeed(upSpeed)} · ↓ ${formatSpeed(downSpeed)}"
+        val sessionLine =
+            "За сессию: ↑ ${formatBytes(sessUp.toDouble())} · ↓ ${formatBytes(sessDown.toDouble())}"
+        getSystemService(NotificationManager::class.java).notify(
             NOTIFICATION_ID,
-            builder
+            notificationBuilder()
                 .setContentTitle(SESSION)
-                .setContentText("Трафик идёт через туннель")
-                .setSmallIcon(R.drawable.ic_notification)
-                .setContentIntent(open)
-                .setOngoing(true)
+                .setContentText(speedLine)
+                .setStyle(Notification.BigTextStyle().bigText("$speedLine\n$sessionLine"))
                 .build(),
         )
     }
+
+    // ---- Замер трафика туннеля ----
+
+    private fun startTrafficMonitor() {
+        stopTrafficMonitor()
+        val counters = readTunCounters()
+        baseRx = counters?.first ?: 0L
+        baseTx = counters?.second ?: 0L
+        lastRx = baseRx
+        lastTx = baseTx
+        lastTs = SystemClock.elapsedRealtime()
+        trafficTimer = Executors.newSingleThreadScheduledExecutor { runnable ->
+            Thread(runnable, "tun-traffic").apply { isDaemon = true }
+        }.also { executor ->
+            executor.scheduleAtFixedRate(
+                {
+                    // Один сбой замера не должен ронять поток расписания.
+                    try {
+                        trafficTick()
+                    } catch (e: Exception) {
+                    }
+                },
+                TRAFFIC_INTERVAL_MS,
+                TRAFFIC_INTERVAL_MS,
+                TimeUnit.MILLISECONDS,
+            )
+        }
+    }
+
+    private fun stopTrafficMonitor() {
+        trafficTimer?.shutdownNow()
+        trafficTimer = null
+    }
+
+    private fun trafficTick() {
+        val counters = readTunCounters() ?: return
+        val rx = counters.first
+        val tx = counters.second
+        val now = SystemClock.elapsedRealtime()
+        val seconds = (now - lastTs) / 1000.0
+        val downSpeed = if (seconds > 0) (rx - lastRx).coerceAtLeast(0) / seconds else 0.0
+        val upSpeed = if (seconds > 0) (tx - lastTx).coerceAtLeast(0) / seconds else 0.0
+        lastRx = rx
+        lastTx = tx
+        lastTs = now
+        postNotification(upSpeed, downSpeed, (tx - baseTx).coerceAtLeast(0), (rx - baseRx).coerceAtLeast(0))
+    }
+
+    /** Байты принятого (rx — входящий) и отправленного (tx — исходящий)
+     *  ядром xray через сокеты. SELinux не даёт читать `/proc/net/dev` из
+     *  песочницы приложения, поэтому берём счётчики по UID через
+     *  TrafficStats — xray работает как дочерний процесс с тем же UID. */
+    private fun readTunCounters(): Pair<Long, Long>? {
+        return try {
+            val uid = android.os.Process.myUid()
+            val rx = android.net.TrafficStats.getUidRxBytes(uid)
+            val tx = android.net.TrafficStats.getUidTxBytes(uid)
+            if (rx < 0 || tx < 0) null else rx to tx
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private fun formatBytes(bytes: Double): String {
+        if (bytes < 1024) return "${bytes.toLong()} Б"
+        val kb = bytes / 1024
+        if (kb < 1024) return String.format("%.1f КБ", kb)
+        val mb = kb / 1024
+        if (mb < 1024) return String.format("%.1f МБ", mb)
+        return String.format("%.2f ГБ", mb / 1024)
+    }
+
+    private fun formatSpeed(bytesPerSecond: Double): String =
+        "${formatBytes(bytesPerSecond)}/с"
 }
