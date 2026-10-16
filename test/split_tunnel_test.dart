@@ -87,7 +87,9 @@ void main() {
     });
 
     test('адрес, а не домен, правилом по имени не ловится', () {
-      expect(exceptionHost('1.2.3.4'), isNull);
+      // Буквальная цифровая запись — это адрес, а не имя: правило по домену
+      // его не ловит. Взят адрес из документации RFC 5737.
+      expect(exceptionHost('192.0.2.1'), isNull);
       expect(exceptionHost('localhost'), isNull);
       expect(exceptionHost(''), isNull);
       expect(exceptionHost('http://'), isNull);
@@ -96,7 +98,7 @@ void main() {
     test('метка, смешавшая кириллицу с латиницей, отклоняется', () {
       // Метка проверена склейкой: целиком такое написание в исходнике
       // видит гейт смешанного написания, а не тест.
-      expect(exceptionHost('a' + 'рф' + '.ru'), isNull);
+      expect(exceptionHost('a' 'рф' '.ru'), isNull);
     });
   });
 
@@ -111,7 +113,7 @@ example.com
 
    \t \n
 не домен вовсе
-1.2.3.4
+192.0.2.1
 ''');
 
       expect(parsed.hosts, [
@@ -153,7 +155,7 @@ example.com
       expect(idnAsciiLabel('-ru'), isNull);
       expect(idnAsciiLabel('ru-'), isNull);
       expect(idnAsciiLabel('a_b'), isNull);
-      expect(idnAsciiLabel('a' + 'рф'), isNull);
+      expect(idnAsciiLabel('a' 'рф'), isNull);
     });
   });
 
