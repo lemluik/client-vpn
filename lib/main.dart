@@ -11,6 +11,7 @@ import 'close_prompt.dart';
 import 'home_screen.dart';
 import 'l10n/app_localizations.dart';
 import 'settings_store.dart';
+import 'traffic.dart';
 import 'tray_controller.dart';
 import 'windows_guard.dart';
 
@@ -173,7 +174,7 @@ class _ClientVpnAppState extends State<ClientVpnApp> with WindowListener {
     unawaited(
       tray
           .mount(
-            tooltip: '${l10n.appTitle} — ${_statusText(l10n)}',
+            tooltip: _tooltipText(l10n),
             showLabel: l10n.trayShowWindow,
             quitLabel: l10n.trayQuit,
           )
@@ -191,7 +192,19 @@ class _ClientVpnAppState extends State<ClientVpnApp> with WindowListener {
   void _updateTrayTooltip() {
     final l10n = _l10n;
     if (l10n == null) return;
-    unawaited(_tray?.setTooltip('${l10n.appTitle} — ${_statusText(l10n)}'));
+    unawaited(_tray?.setTooltip(_tooltipText(l10n)));
+  }
+
+  /// Подсказка трея одной строкой: `szTip` в NOTIFYICONDATA переводов строк
+  /// не показывает, поэтому статус, скорость и итог сессии разделяются «·».
+  /// `setTitle` на Windows не работает и трей роняет — только `setToolTip`.
+  String _tooltipText(AppLocalizations l10n) {
+    final base = '${l10n.appTitle} — ${_statusText(l10n)}';
+    final traffic = widget.state.traffic;
+    if (traffic == null || !widget.state.isConnected) return base;
+    return '$base · '
+        '${l10n.trafficRate(formatBytes(traffic.upSpeed), formatBytes(traffic.downSpeed))} · '
+        '${l10n.trafficSession(formatBytes(traffic.totalUp), formatBytes(traffic.totalDown))}';
   }
 
   String _statusText(AppLocalizations l10n) => switch (widget.state.state) {

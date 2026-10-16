@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'autostart.dart';
 import 'chat_service.dart';
 import 'chat_store.dart';
+import 'core_stats.dart';
 import 'deep_link.dart';
 import 'failover.dart';
 import 'log_mask.dart';
@@ -22,6 +23,7 @@ import 'settings_store.dart';
 import 'share_link.dart';
 import 'subscription.dart';
 import 'temp_config.dart';
+import 'traffic.dart';
 import 'vpn_config.dart';
 import 'vpn_core.dart';
 
@@ -164,6 +166,8 @@ class AppState extends ChangeNotifier {
 
   StreamSubscription<String>? _logSubscription;
   StreamSubscription<bool>? _statusSubscription;
+  StreamSubscription<TrafficSnapshot>? _trafficSubscription;
+  TrafficSnapshot? _traffic;
   StreamSubscription<List<ConnectivityResult>>? _networkSubscription;
   Timer? _networkTimer;
   Timer? _probeTimer;
@@ -214,6 +218,11 @@ class AppState extends ChangeNotifier {
   bool get isConnected => _state == TunnelState.on;
 
   String? get endpoint => _core.endpointLabel;
+
+  /// Трафик туннеля: скорость и итог сессии. На Android этим занимается
+  /// уведомление службы, поэтому там всегда null; на десктопе — снимок
+  /// раз в секунду, пока туннель поднят.
+  TrafficSnapshot? get traffic => _traffic;
 
   List<StoredProfile> get profiles => _store.profiles;
 
@@ -727,9 +736,12 @@ class AppState extends ChangeNotifier {
     if (running) {
       _state = TunnelState.on;
       _failure = null;
+      _startTrafficWatch();
     } else if (_stopping || _state != TunnelState.on) {
+      _stopTrafficWatch();
       _state = TunnelState.off;
     } else {
+      _stopTrafficWatch();
       // Ядро остановилось само: для пользователя это сбой, а не отключение.
       _state = TunnelState.failure;
       _failure = const Failure(
@@ -759,6 +771,24 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Секундный опрос счётчиков ядра — зеркало таймера TunnelService.kt.
+  /// На Android и без поднятого API статистики опрос не начинается: там
+  /// трафик показывает уведомление службы, а тестовые ядра API не поднимают.
+  void _startTrafficWatch() {
+    _stopTrafficWatch();
+    if (Platform.isAndroid || CoreStats.apiPort == null) return;
+    _trafficSubscription = TrafficPoller().watch().listen((snapshot) {
+      _traffic = snapshot;
+      notifyListeners();
+    });
+  }
+
+  void _stopTrafficWatch() {
+    _trafficSubscription?.cancel();
+    _trafficSubscription = null;
+    _traffic = null;
+  }
+
   String _skipReason(Subscription subscription) {
     if (subscription.skipped.isEmpty) return 'Не найдено ни одного профиля';
     final first = subscription.skipped.first;
@@ -769,6 +799,7 @@ class AppState extends ChangeNotifier {
   void dispose() {
     _logSubscription?.cancel();
     _statusSubscription?.cancel();
+    _stopTrafficWatch();
     _networkTimer?.cancel();
     _networkSubscription?.cancel();
     _stopReconnectTimers();

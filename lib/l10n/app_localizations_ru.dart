@@ -221,6 +221,16 @@ class AppLocalizationsRu extends AppLocalizations {
   String get statusOff => 'Отключено';
 
   @override
+  String trafficRate(String up, String down) {
+    return '↑ $up/с · ↓ $down/с';
+  }
+
+  @override
+  String trafficSession(String up, String down) {
+    return 'За сессию: ↑ $up · ↓ $down';
+  }
+
+  @override
   String get orbDisconnect => 'Отключить';
 
   @override

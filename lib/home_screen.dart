@@ -10,6 +10,7 @@ import 'provider.dart';
 import 'region.dart';
 import 'settings_screen.dart';
 import 'support_chat_screen.dart';
+import 'traffic.dart';
 
 /// Главный экран: состояние туннеля, список подключений и добавление новых.
 ///
@@ -867,6 +868,7 @@ class _StatusLine extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
+    final traffic = state.traffic;
     final (text, color, icon) = switch (state.state) {
       TunnelState.on => (
         l.statusProtected,
@@ -895,21 +897,52 @@ class _StatusLine extends StatelessWidget {
       ),
     };
 
-    return Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 18, color: color),
-        const SizedBox(width: 8),
-        Text(
-          text,
-          style: TextStyle(color: color, fontWeight: FontWeight.w600),
+        Row(
+          children: [
+            Icon(icon, size: 18, color: color),
+            const SizedBox(width: 8),
+            Text(
+              text,
+              style: TextStyle(color: color, fontWeight: FontWeight.w600),
+            ),
+            if (state.endpoint != null && state.isConnected) ...[
+              const Spacer(),
+              Flexible(
+                child: Text(
+                  state.endpoint!,
+                  style: Theme.of(context).textTheme.bodySmall,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ],
         ),
-        if (state.endpoint != null && state.isConnected) ...[
-          const Spacer(),
-          Flexible(
+        // Трафик туннеля: зеркало Android-уведомления — скорость и итог
+        // сессии (Д2-W1). На Android снимков нет, строки не появляются.
+        if (traffic != null && state.isConnected) ...[
+          const SizedBox(height: 2),
+          Padding(
+            padding: const EdgeInsets.only(left: 26),
             child: Text(
-              state.endpoint!,
+              l.trafficRate(
+                formatBytes(traffic.upSpeed),
+                formatBytes(traffic.downSpeed),
+              ),
               style: Theme.of(context).textTheme.bodySmall,
-              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(left: 26),
+            child: Text(
+              l.trafficSession(
+                formatBytes(traffic.totalUp),
+                formatBytes(traffic.totalDown),
+              ),
+              style: Theme.of(context).textTheme.bodySmall,
             ),
           ),
         ],
