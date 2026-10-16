@@ -1,5 +1,6 @@
 # CI открытого клиента: анализ, тесты, гейты на каждый push и pull request,
-# артефакты — только на тег. Бесплатные раннеры, кэш pub и Gradle включён.
+# артефакты и GitHub Release — только на тег. Бесплатные раннеры, кэш pub и Gradle включён.
+# Тег с дефисом (репетиция или rc) даёт черновик релиза, который видно только владельцу.
 #
 # Что здесь сознательно сделано не так, как звучала задача:
 # — гейт нейтральности с именами наших узлов и домена в этом репозитории не
@@ -26,10 +27,11 @@ on:
 permissions:
   contents: read
 
-# новый push в ту же ветку отменяет предыдущий прогон — минуты не горят
+# новый push в ту же ветку отменяет предыдущий прогон — минуты не горят.
+# Тег не отменяем: посреди публикации релиза это оставило бы недописанный Release
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
 env:
   FLUTTER_VERSION: '3.47.7'
@@ -178,3 +180,51 @@ jobs:
             client-vpn-windows-${{ github.ref_name }}.zip
             SHA256SUMS.txt
           if-no-files-found: error
+
+  release:
+    name: Публикация GitHub Release
+    needs: [android, windows]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      # в обоих артефактах файл SHA256SUMS.txt называется одинаково, поэтому каждый
+      # артефакт скачивается в свой каталог, а сводка для Release считается заново
+      - uses: actions/download-artifact@v8
+        with:
+          name: client-vpn-android-${{ github.ref_name }}
+          path: from-android
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: client-vpn-windows-${{ github.ref_name }}
+          path: from-windows
+
+      - name: Собрать файлы релиза
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          test -s "from-android/app-release.apk"
+          ls from-windows/"client-vpn-windows-${TAG}.zip" >/dev/null
+          mkdir dist
+          cp from-android/app-release.apk "dist/client-vpn-${TAG}-android.apk"
+          cp from-windows/"client-vpn-windows-${TAG}.zip" "dist/client-vpn-${TAG}-windows.zip"
+          cp from-android/LICENSE from-android/NOTICE dist/
+          cd dist
+          sha256sum "client-vpn-${TAG}-android.apk" "client-vpn-${TAG}-windows.zip" \
+            LICENSE NOTICE > SHA256SUMS.txt
+
+      - name: Опубликовать релиз
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          # тег с дефисом — репетиция или rc:publishаем черновиком, наружу не светим
+          case "$TAG" in
+            *-*) set -- --draft --prerelease ;;
+            *) set -- ;;
+          esac
+          gh release create "$TAG" "$@" --title "$TAG" --generate-notes dist/*
