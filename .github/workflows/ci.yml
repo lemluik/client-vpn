@@ -190,6 +190,10 @@ jobs:
     permissions:
       contents: write
     steps:
+      # gh release берёт репозиторий из git-контекста, поэтому без checkout он падает
+      # в «failed to run git: not a git repository»
+      - uses: actions/checkout@v7
+
       # в обоих артефактах файл SHA256SUMS.txt называется одинаково, поэтому каждый
       # артефакт скачивается в свой каталог, а сводка для Release считается заново
       - uses: actions/download-artifact@v8
@@ -222,9 +226,10 @@ jobs:
         run: |
           set -euo pipefail
           TAG="${GITHUB_REF_NAME}"
-          # тег с дефисом — репетиция или rc:publishаем черновиком, наружу не светим
+          # тег с дефисом — репетиция или rc: публикуем черновиком, наружу не светим
           case "$TAG" in
             *-*) set -- --draft --prerelease ;;
             *) set -- ;;
           esac
-          gh release create "$TAG" "$@" --title "$TAG" --generate-notes dist/*
+          gh release create "$TAG" "$@" --repo "$GITHUB_REPOSITORY" \
+            --title "$TAG" --generate-notes dist/*
