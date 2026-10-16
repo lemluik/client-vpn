@@ -20,6 +20,10 @@ class AppTray with TrayListener {
   /// Ставит иконку и меню. Возвращает false, если трей недоступен (например,
   /// иконку не удалось распаковать из assets) — интерфейс тогда работает без
   /// него, а закрытие окна остаётся выходом.
+  ///
+  /// Подсказка на иконке — это `setToolTip`: Windows-реализация плагина не
+  /// знает `setTitle` (он для macOS) и бросает `MissingPluginException`, а
+  /// непойманное исключение оставляет наполовину поднятый трей.
   Future<bool> mount({
     required String tooltip,
     required String showLabel,
@@ -28,33 +32,37 @@ class AppTray with TrayListener {
     final iconPath = await _materializeIcon();
     if (iconPath == null) return false;
 
-    trayManager.addListener(this);
-    await trayManager.setIcon(iconPath);
-    await trayManager.setTitle(tooltip);
-    await trayManager.setContextMenu(
-      Menu(
-        items: [
-          MenuItem(
-            key: 'show',
-            label: showLabel,
-            onClick: (_) => onShowWindow(),
-          ),
-          MenuItem.separator(),
-          MenuItem(key: 'quit', label: quitLabel, onClick: (_) => onQuit()),
-        ],
-      ),
-    );
+    try {
+      trayManager.addListener(this);
+      await trayManager.setIcon(iconPath);
+      await trayManager.setToolTip(tooltip);
+      await trayManager.setContextMenu(
+        Menu(
+          items: [
+            MenuItem(
+              key: 'show',
+              label: showLabel,
+              onClick: (_) => onShowWindow(),
+            ),
+            MenuItem.separator(),
+            MenuItem(key: 'quit', label: quitLabel, onClick: (_) => onQuit()),
+          ],
+        ),
+      );
+    } catch (_) {
+      await unmount();
+      return false;
+    }
     _mounted = true;
     return true;
   }
 
   /// Подсказка на иконке: пользователь видит состояние, не открывая окно.
   Future<void> setTooltip(String tooltip) async {
-    if (_mounted) await trayManager.setTitle(tooltip);
+    if (_mounted) await trayManager.setToolTip(tooltip);
   }
 
   Future<void> unmount() async {
-    if (!_mounted) return;
     _mounted = false;
     trayManager.removeListener(this);
     await trayManager.destroy();
