@@ -66,6 +66,11 @@
 - ✅ Сохранение и восстановление ваших прежних настроек системного прокси
 - ✅ Откат прокси при остановке Xray, закрытии окна и после сбоя
 - ✅ Ожидание свободного локального порта перед запуском ядра — перезапуск сразу после отключения не роняет новое соединение
+- ✅ Раздельное туннелирование: адреса `.ru` и других зон идут напрямую, остальное — через туннель; список настраивается
+- ✅ Редактор правил маршрутизации: ручные правила домена и IP, пресеты (всё через туннель / всё напрямую / раздельное), per-app на Android
+- ✅ Иконка в системном трее (Windows): левый клик показывает окно, правый — меню «Показать / Выйти»; подсказка на иконке следит за состоянием туннеля
+- ✅ Запрос при закрытии окна (Windows): свернуть в трей или выйти — с запоминанием выбора
+- ✅ Проверка обновлений: клиент спрашивает GitHub Releases о новой версии и показывает экран с описанием и ссылкой на релиз
 
 ### Ограничения текущей версии
 
@@ -77,7 +82,7 @@
 - ⚠️ Windows не рисует флаги из пар региональных индикаторов — там показывается полное название страны без значка
 - ⚠️ Нет автоматического переключения на другой узел при сбое — выбор страны остаётся ручным
 - ⚠️ Чат поддержки: только текст — без вложений, звонков и сквозного шифрования; учётку выпускает провайдер, самостоятельной регистрации на узлах нет
-- ⚠️ Нет автообновления
+- ⚠️ Обновление — по уведомлению в приложении: клиент проверяет GitHub Releases и показывает экран с описанием версии, но устанавливается обновление вручную (скачиванием APK или zip из релиза)
 - ⚠️ Android: автозапуск открывает приложение после загрузки системы, но окно может отложиться до разблокировки (Android 10+ не разрешает показывать интерфейс из фона), а туннель из приёмника не поднимается — согласие на VPN-профиль подтверждает только пользователь
 
 ## Установка
@@ -86,7 +91,7 @@
 
 **Windows**
 
-1. Скачайте `ClientVPN-v0.2.1-Windows-x64.zip` из [Releases](https://github.com/lemluik/client-vpn/releases)
+1. Скачайте `ClientVPN-v0.3.0-Windows-x64.zip` из [Releases](https://github.com/lemluik/client-vpn/releases)
 2. Распакуйте в любую папку
 3. Запустите `client_vpn.exe`
 
@@ -95,15 +100,12 @@
 
 **Android**
 
-1. Скачайте `ClientVPN-v0.2.0-Android-arm64-v8a.apk` из [Releases](https://github.com/lemluik/client-vpn/releases)
+1. Скачайте `ClientVPN-v0.3.0-Android-arm64-v8a.apk` из [Releases](https://github.com/lemluik/client-vpn/releases)
 2. Установите файл (Android запросит разрешение на установку из неизвестных источников)
 3. Откройте приложение и добавьте подключение — ядро уже внутри APK
 
 > [!NOTE]
 > При первом подключении система запросит разрешение на создание VPN-туннеля.
-
-> [!IMPORTANT]
-> APK в релизах пока собран до мультирегиона; сборки с выбором страны выхода и подписками выйдут следующим тегом.
 
 ## Использование
 
@@ -119,7 +121,7 @@
 
 ### Требования
 
-- [Flutter SDK](https://docs.flutter.dev/get-started/install/windows) (stable, ≥3.6.0)
+- [Flutter SDK](https://docs.flutter.dev/get-started/install/windows) (stable, ≥3.32.0 / Dart 3.8.0)
 - [Visual Studio 2022](https://visualstudio.microsoft.com/) с workload **«Разработка классических приложений на C++»** — для сборки под Windows. Нужен ещё и компонент **ATL** (`Microsoft.VisualStudio.Component.VC.ATL`): без него сборка падает на `atlstr.h`
 - Android SDK + NDK — только для сборки под Android (`flutter doctor` показывает принятые лицензии)
 - [Git](https://git-scm.com/)
@@ -232,54 +234,86 @@ client-vpn/
 │   ├── app_state.dart         # состояние туннеля, профилей и журнала
 │   ├── share_link.dart        # разбор ссылок vless/trojan/vmess
 │   ├── deep_link.dart         # ссылка извне: тап по vless:// на Android
+│   ├── open_link.dart         # открытие ссылок из приложения
 │   ├── subscription.dart      # разбор подписки: URL, base64, столбик ссылок
 │   ├── provider.dart          # провайдер подписки: загрузка, кэш, заголовки трафика
 │   ├── profile_store.dart     # хранение подключений и выбор страны выхода
 │   ├── profile_config.dart    # сборка конфига ядра из набора профилей
 │   ├── region.dart            # группы узлов по стране и порядок выбора
+│   ├── settings_store.dart    # настройки: тема, автозапуск, автоподключение, close action
+│   ├── settings_screen.dart   # экран настроек (шестерёнка)
+│   ├── tray_controller.dart   # иконка в системном трее (native API tray_manager 0.8.0)
+│   ├── close_prompt.dart      # запрос при закрытии окна
+│   ├── autostart.dart         # автозапуск с системой (реестр Windows / BootReceiver Android)
+│   ├── routing_presets.dart   # пресеты маршрутизации: direct, proxy, split
+│   ├── manual_rules.dart      # пользовательские правила маршрутизации
+│   ├── per_app_rules.dart     # правила по приложениям (Android)
+│   ├── split_screen.dart      # раздельное туннелирование по адресам
+│   ├── rules_screen.dart      # редактор правил маршрутизации
+│   ├── direct_apps_screen.dart # выбор приложений для прямого доступа
+│   ├── update_check.dart      # проверка обновлений (GitHub Releases API)
+│   ├── update_screen.dart     # экран доступного обновления
+│   ├── about_screen.dart      # о приложении: версии, лицензии
+│   ├── reconnect.dart         # автопереподключение при сбое
+│   ├── failover.dart          # переключение на резервный узел
+│   ├── chat_service.dart      # сервис чата поддержки (Matrix)
+│   ├── chat_store.dart        # хранилище сообщений и состояния чата
+│   ├── matrix_api.dart        # HTTP-клиент Matrix (login, sync, send, media)
+│   ├── support_chat_screen.dart # экран чата поддержки
 │   ├── log_screen.dart        # журнал на отдельном экране
 │   ├── log_mask.dart          # маскирование адресов и ключей в журнале
-│   ├── temp_config.dart       # служебный конфиг ядра во временной папке
 │   ├── vpn_core.dart          # общий для платформ интерфейс ядра
 │   ├── vpn_config.dart        # выбор, проверка и хранение config.json
 │   ├── desktop_core.dart      # Windows/macOS/Linux: прокси + системные настройки
 │   ├── android_core.dart      # Android: туннель через VpnService
 │   ├── tun_config.dart        # сборка конфига с туннельным inbound
 │   ├── proxy_config.dart      # разбор локальных inbound
-│   └── system_proxy.dart      # системный прокси (реестр)
+│   ├── app_proxy.dart         # управление системным прокси приложения
+│   ├── system_proxy.dart      # системный прокси (реестр Windows)
+│   ├── windows_guard.dart     # Win32-защита: мьютекс, Job Object, анти-двойник
+│   └── temp_config.dart       # служебный конфиг ядра во временной папке
 ├── android/
-│   └── app/src/main/kotlin/…/ # MainActivity, TunnelService, TunnelBus
+│   └── app/src/main/kotlin/…/ # MainActivity, TunnelService, TunnelBus, BootReceiver
 ├── assets/
-│   └── xray/
-│       └── xray.exe           # ядро для десктопа (не в git, скачивается отдельно)
+│   ├── xray/
+│   │   └── xray.exe           # ядро для десктопа (не в git, скачивается отдельно)
+│   └── tray/
+│       └── tray.ico           # иконка трея
 ├── scripts/
 │   ├── download_xray.sh          # Xray-core для Windows + geo-базы + сверка SHA-256
 │   └── download_xray_android.sh  # ядро в jniLibs + geo-базы в assets/geo + манифест сумм
-├── test/
+├── test/                         # 418 тестов (33 файла)
 │   ├── share_link_test.dart      # разбор ссылок и параметров Reality
 │   ├── subscription_test.dart    # разбор подписки
 │   ├── provider_test.dart        # загрузка подписки, кэш и офлайн-старт
 │   ├── region_test.dart          # страны из имён узлов и выбор региона
 │   ├── profile_store_test.dart   # хранение подключений и переключений
 │   ├── profile_config_test.dart  # сборка конфига ядра
-│   ├── temp_config_test.dart     # служебный конфиг и его удаление
-│   ├── log_mask_test.dart        # маскирование журнала
-│   ├── home_screen_test.dart     # экран: добавление, выбор страны, кнопка
-│   ├── proxy_config_test.dart    # разбор локальных inbound
-│   └── tun_config_test.dart      # сборка туннельного конфига
+│   ├── settings_screen_test.dart # экран настроек и переключатели
+│   ├── close_prompt_test.dart    # запрос при закрытии и close action
+│   ├── tray_controller_test.dart # трей: FakeTrayPort, отказы на каждом шаге
+│   ├── split_tunnel_test.dart    # раздельное туннелирование
+│   ├── routing_presets_test.dart # пресеты маршрутизации
+│   ├── manual_rules_test.dart    # пользовательские правила
+│   ├── update_check_test.dart    # проверка обновлений
+│   ├── chat_service_test.dart    # сервис чата
+│   ├── matrix_api_test.dart      # Matrix HTTP API
+│   ├── kernel_config_test.dart   # сборка конфига настоящим ядром (требует xray.exe)
+│   └── ...                       # остальные тесты по имени модуля
 ├── .github/
-│   ├── ISSUE_TEMPLATE/        # шаблоны issues
-│   └── dependabot.yml         # обновления зависимостей
-├── analysis_options.yaml      # Dart lint rules
-├── pubspec.yaml               # Flutter dependencies
-├── LICENSE                    # MPL-2.0
-├── NOTICE                     # Лицензии сторонних компонентов
-├── README.md                  # Этот файл
-├── CONTRIBUTING.md            # Как контрибьютить
-├── CODE_OF_CONDUCT.md         # Кодекс поведения
-├── SECURITY.md                # Политика безопасности
-├── CHANGELOG.md               # История версий
-└── .editorconfig              # Единый стиль файлов
+│   ├── workflows/ci.yml     # CI: анализ, тесты, гейты, сборка, релиз
+│   ├── ISSUE_TEMPLATE/      # шаблоны issues
+│   └── dependabot.yml       # обновления зависимостей
+├── analysis_options.yaml    # Dart lint rules
+├── pubspec.yaml             # Flutter dependencies
+├── LICENSE                  # MPL-2.0
+├── NOTICE                   # Лицензии сторонних компонентов
+├── README.md                # Этот файл
+├── CONTRIBUTING.md          # Как контрибьютить
+├── CODE_OF_CONDUCT.md       # Кодекс поведения
+├── SECURITY.md              # Политика безопасности
+├── CHANGELOG.md             # История версий
+└── .editorconfig            # Единый стиль файлов
 ```
 
 ## Известные проблемы
