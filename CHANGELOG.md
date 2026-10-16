@@ -40,6 +40,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- The tray tooltip now uses the method the Windows plugin actually implements.
+  `setTitle` only exists on macOS, so on Windows mounting the tray threw
+  `MissingPluginException`, the app believed no tray was available, and closing the
+  window quit without asking — the prompt added above never appeared. A tray the
+  platform rejects is now unwound instead of left half-mounted.
 - Recovery after a core failure is wired to startup. It was written and never called, so on Windows
   the system proxy could stay enabled after the core process was killed externally — every browser
   then fails to open pages until the setting is cleared by hand. The app now asks the core what state
