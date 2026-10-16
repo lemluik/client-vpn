@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Closing the window asks what to do instead of guessing: minimize to the tray keeps the tunnel
+  running, quit tears it down, and the checkbox remembers which one was chosen. Both answers stay
+  editable in settings, and a remembered minimize still quits when no tray icon could be mounted,
+  because a hidden window with no way back is indistinguishable from a crash
 - Settings screen behind the gear button in the top-left corner of the home screen: theme
   (system, light, dark), start with the system, auto-connect to the connection that last worked,
   and the list of saved profiles where one can be selected, renamed or removed
