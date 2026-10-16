@@ -43,9 +43,10 @@ This product includes software developed by third parties.
    | window_manager                         | 0.5.2   | MIT          | the package authors         |
    | dynamic_color                          | 1.9.0   | Apache-2.0   | Material Foundation Authors |
    | ffi                                    | 2.2.0   | MIT          | the package authors         |
-   | tray_manager                           | 0.5.2   | MIT          | LiJianying                  |
-   | menu_base                              | 0.1.1   | MIT          | LiJianying                  |
-   | shortid                                | 0.1.2   | BSD-3-Clause | 0xff00ff                    |
+   | tray_manager                           | 0.8.0   | MIT          | LiJianying                  |
+   | nativeapi                              | 0.5.2   | MIT          | LiJianying                  |
+   | nativeapi_flutter                      | 0.5.2   | MIT          | LiJianying                  |
+   | cnativeapi                             | 0.5.2   | MIT          | LiJianying                  |
    | material_color_utilities               | 0.13.0  | Apache-2.0   | Material Foundation Authors |
    | nm                                     | 0.6.0   | MPL-2.0      | the package authors         |
 
@@ -59,11 +60,16 @@ This product includes software developed by third parties.
    used unmodified, so the Mozilla Public License obligations reach only the
    unmodified upstream files.
 
-   `tray_manager` 0.5.2 was chosen over 0.8.0 on purpose: 0.8.0 forces
-   `objective_c` and `record_use` upgrades that touch the macOS port, and this
-   repository has no CI to re-verify them. Version 0.5.2 adds only
-   `menu_base` and `shortid`. `ffi` was already in the graph and became a
-   direct dependency for the Win32 wrappers (mutex, Job Object).
+   `tray_manager` 0.8.0 talks to the operating system through `nativeapi`,
+   `nativeapi_flutter` and `cnativeapi` (all MIT, same author as
+   `tray_manager`; the MIT text is reproduced above). `cnativeapi` carries the
+   C sources of the native tray library, which are compiled into the Windows
+   and Android artifacts at build time; they are used unmodified. The
+   migration dropped `menu_base` and `shortid`, which only the removed
+   legacy API needed, and moved `objective_c` and `record_use` forward — both
+   serve the macOS port, which this repository does not build. `ffi` was
+   already in the graph and became a direct dependency for the Win32 wrappers
+   (mutex, Job Object).
 
    Platform components used at runtime: the Android VpnService API
    (Apache License 2.0, part of the Android Open Source Project) and the

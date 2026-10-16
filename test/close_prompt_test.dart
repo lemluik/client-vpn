@@ -3,9 +3,7 @@ import 'dart:async';
 import 'package:client_vpn/close_prompt.dart';
 import 'package:client_vpn/l10n/app_localizations.dart';
 import 'package:client_vpn/settings_store.dart';
-import 'package:client_vpn/tray_controller.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -146,53 +144,4 @@ void main() {
     });
   });
 
-  group('трей', () {
-    /// Записывает вызовы, уходящие в нативный плагин трея.
-    Future<List<String>> stubTray({
-      Object? Function(MethodCall)? on,
-    }) async {
-      final calls = <String>[];
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(const MethodChannel('tray_manager'), (
-            call,
-          ) async {
-            calls.add(call.method);
-            return on?.call(call);
-          });
-      addTearDown(
-        () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-            .setMockMethodCallHandler(
-              const MethodChannel('tray_manager'),
-              null,
-            ),
-      );
-      return calls;
-    }
-
-    Future<bool> mountTray() =>
-        AppTray(onShowWindow: () {}, onQuit: () {}).mount(
-          tooltip: 'КлиентВПН — отключено',
-          showLabel: 'Показать',
-          quitLabel: 'Выйти',
-        );
-
-    test('подсказка ставится методом, который есть у Windows', () async {
-      // Живая сборка 16.10 закрытие окна молча выходила: плагин не знает
-      // macOS-ного `setTitle`, бросает MissingPluginException, и трей так и
-      // не поднимался. Тест ловит подмену метода на канале.
-      final calls = await stubTray();
-      expect(await mountTray(), isTrue);
-
-      expect(calls, contains('setToolTip'));
-      expect(calls, isNot(contains('setTitle')));
-    });
-
-    test('отказ нативного трея не оставляет его наполовину поднятым', () async {
-      await stubTray(
-        on: (call) =>
-            call.method == 'setToolTip' ? throw MissingPluginException() : null,
-      );
-      expect(await mountTray(), isFalse);
-    });
-  });
 }
