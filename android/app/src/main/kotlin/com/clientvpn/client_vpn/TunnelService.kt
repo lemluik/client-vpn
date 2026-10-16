@@ -290,7 +290,7 @@ class TunnelService : VpnService() {
             builder
                 .setContentTitle(SESSION)
                 .setContentText("Трафик идёт через туннель")
-                .setSmallIcon(R.drawable.ic_vpn_key)
+                .setSmallIcon(R.drawable.ic_notification)
                 .setContentIntent(open)
                 .setOngoing(true)
                 .build(),
