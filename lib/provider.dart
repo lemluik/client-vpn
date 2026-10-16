@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:crypto/crypto.dart';
 
+import 'app_proxy.dart';
 import 'share_link.dart';
 import 'subscription.dart';
 
@@ -58,6 +59,7 @@ class Provider {
     this.usage,
     this.cachedBody,
     this.lastError,
+    this.frozen = false,
   });
 
   final String id;
@@ -75,6 +77,10 @@ class Provider {
   final SubscriptionUsage? usage;
   final String? cachedBody;
   final String? lastError;
+
+  /// Провайдер заморозил подписку (`x-sub-status: frozen`): обновления не
+  /// применяются, пока флаг не снимут (МК-5, P1-8 на стороне клиента).
+  final bool frozen;
 
   /// Имя для интерфейса: провайдер может не прислать заголовок с названием.
   String get displayName => name.isNotEmpty ? name : url;
@@ -106,6 +112,7 @@ class Provider {
     SubscriptionUsage? usage,
     String? cachedBody,
     String? lastError,
+    bool? frozen,
     bool clearError = false,
     bool clearSupportUrl = false,
     bool clearChat = false,
@@ -126,6 +133,7 @@ class Provider {
       usage: clearUsage ? null : (usage ?? this.usage),
       cachedBody: cachedBody ?? this.cachedBody,
       lastError: clearError ? null : (lastError ?? this.lastError),
+      frozen: frozen ?? this.frozen,
     );
   }
 
@@ -141,6 +149,7 @@ class Provider {
         'usage': _usageToJson(usage),
         'cache': cachedBody,
         'error': lastError,
+        'frozen': frozen,
       };
 
   /// Разбирает сохранённого провайдера. Битая запись — это [FormatException],
@@ -167,6 +176,7 @@ class Provider {
       usage: usage is Map<String, dynamic> ? _usageFromJson(usage) : null,
       cachedBody: _text(json['cache']),
       lastError: _text(json['error']),
+      frozen: json['frozen'] == true,
     );
   }
 }
@@ -200,6 +210,24 @@ Future<RefreshResult> refreshProvider(
   }
 
   final interval = subscription.updateInterval;
+  if (subscription.frozen) {
+    // Заморозка (МК-5): профили остаются те, что были, — провайдер отдаёт
+    // последнюю хорошую версию, и менять кэш нет смысла.
+    return RefreshResult(
+      provider.copyWith(
+        name: subscription.title,
+        updateIntervalHours: interval?.inHours,
+        supportUrl: subscription.supportUrl,
+        clearSupportUrl: subscription.supportUrl == null,
+        usage: subscription.usage,
+        clearUsage: subscription.usage == null,
+        lastUpdated: now,
+        clearError: true,
+        frozen: true,
+      ),
+    );
+  }
+
   return RefreshResult(
     provider.copyWith(
       name: subscription.title,
@@ -215,6 +243,7 @@ Future<RefreshResult> refreshProvider(
       cachedBody: subscription.links.map((link) => link.source).join('\n'),
       lastUpdated: now,
       clearError: true,
+      frozen: false,
     ),
   );
 }
@@ -244,7 +273,10 @@ Future<SubscriptionResponse> fetchSubscription(String url) async {
     );
   }
 
-  final client = HttpClient()..connectionTimeout = subscriptionTimeout;
+  final client = HttpClient()
+    ..connectionTimeout = subscriptionTimeout
+    // Без этого HttpClient смотрит только переменные окружения (ТД-15).
+    ..findProxy = AppProxy.findProxy;
   try {
     final request = await client.getUrl(uri).timeout(subscriptionTimeout);
     request.followRedirects = true;

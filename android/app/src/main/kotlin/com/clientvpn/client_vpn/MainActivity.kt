@@ -2,6 +2,7 @@ package com.clientvpn.client_vpn
 
 import android.app.Activity
 import android.content.Intent
+import android.net.Uri
 import android.net.VpnService
 import android.os.Build
 import android.os.Bundle
@@ -15,6 +16,7 @@ class MainActivity : FlutterActivity() {
 
     companion object {
         private const val CHANNEL = "client_vpn/tunnel"
+        private const val DEEP_LINK_CHANNEL = "client_vpn/deep_link"
         private const val APP_CHANNEL = "client_vpn/app"
         private const val USER_CONFIG = "user-config.json"
         private const val CONSENT_REQUEST = 4242
@@ -23,15 +25,19 @@ class MainActivity : FlutterActivity() {
     private lateinit var channel: MethodChannel
     private var pendingConsent: MethodChannel.Result? = null
 
+    private var deepLinkChannel: MethodChannel? = null
+    private var pendingLink: String? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        TunnelBus.sink = { method, argument ->
+        pendingLink = linkOf(intent)
+        TunnelBus.subscribe { method, argument ->
             runOnUiThread { channel.invokeMethod(method, argument) }
         }
     }
 
     override fun onDestroy() {
-        TunnelBus.sink = null
+        TunnelBus.unsubscribe()
         super.onDestroy()
     }
 
@@ -43,7 +49,28 @@ class MainActivity : FlutterActivity() {
                 "validate" -> validate(call.arguments as? String, result)
                 "start" -> start(call.arguments as? String, result)
                 "stop" -> stop(result)
+                "status" -> result.success(TunnelBus.lastStatus)
+                "setExcludedApps" -> setExcludedApps(call.arguments, result)
+                "listApps" -> listApps(result)
+                "openUrl" -> openUrl(call.arguments, result)
                 else -> result.notImplemented()
+            }
+        }
+
+        deepLinkChannel = MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            DEEP_LINK_CHANNEL,
+        ).apply {
+            setMethodCallHandler { call, result ->
+                when (call.method) {
+                    // Ссылка холодного старта забирается один раз, чтобы
+                    // пересоздание движка не добавило её повторно.
+                    "takePending" -> {
+                        result.success(pendingLink)
+                        pendingLink = null
+                    }
+                    else -> result.notImplemented()
+                }
             }
         }
 
@@ -64,6 +91,30 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+    }
+
+    /** Тап по ссылке, когда приложение уже живёт: singleTop даёт новый интент
+     *  вместо второго экземпляра активности. */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        val link = linkOf(intent) ?: return
+        val deepLinks = deepLinkChannel
+        if (deepLinks == null) {
+            pendingLink = link
+            return
+        }
+        runOnUiThread { deepLinks.invokeMethod("link", link) }
+    }
+
+    /** Наружу отдаём только стандартные схемы протоколов: MAIN-интент и
+     *  прочие системные ссылки ссылкой подключения не являются. */
+    private fun linkOf(intent: Intent?): String? {
+        val data = intent?.data ?: return null
+        return when (data.scheme) {
+            "vless", "trojan", "vmess" -> data.toString()
+            else -> null
+        }
     }
 
     /** Прогоняет конфиг пользователя через `xray run -test` — как на десктопе. */
@@ -119,6 +170,71 @@ class MainActivity : FlutterActivity() {
             null
         } else {
             output.trim().ifEmpty { "код ${process.exitValue()}" }
+        }
+    }
+
+    /** Список устанавливаемый вне туннеля приложений (R2.3): одна строка на
+     *  имя пакета. Пишется до подключения — туннель читает его при поднятии. */
+    private fun setExcludedApps(arguments: Any?, result: MethodChannel.Result) {
+        val packages = (arguments as? List<*>)?.filterIsInstance<String>()
+            ?: emptyList()
+        try {
+            File(filesDir, TunnelService.APPS_FILE)
+                .writeText(packages.joinToString("\n"))
+            result.success(null)
+        } catch (e: Exception) {
+            result.error("write_failed", e.message, null)
+        }
+    }
+
+    /** Приложения, которые пользователь может выбрать: те, у которых есть
+     *  запускаемый экран, как их показывает система. */
+    private fun listApps(result: MethodChannel.Result) {
+        Thread {
+            val output = try {
+                val pm = packageManager
+                val launcher = Intent(Intent.ACTION_MAIN)
+                    .addCategory(Intent.CATEGORY_LAUNCHER)
+                val seen = LinkedHashMap<String, String>()
+                for (info in pm.queryIntentActivities(launcher, 0)) {
+                    val pkg = info.activityInfo.packageName
+                    if (pkg != packageName) seen[pkg] = info.loadLabel(pm).toString()
+                }
+                seen.entries
+                    .sortedBy { it.value.lowercase() }
+                    .map { mapOf("package" to it.key, "name" to it.value) }
+            } catch (e: Exception) {
+                null
+            }
+            runOnUiThread {
+                if (output != null) result.success(output)
+                else result.error("apps_unavailable", "Список приложений недоступен", null)
+            }
+        }.apply { isDaemon = true }.start()
+    }
+
+    /** Открывает ссылку загрузки в системном браузере. Принимаем только
+     *  `http`/`https`: адрес вводит пользователь на экране обновления. */
+    private fun openUrl(arguments: Any?, result: MethodChannel.Result) {
+        val raw = (arguments as? Map<*, *>)?.get("url") as? String
+        val uri = try {
+            Uri.parse(raw?.trim() ?: "")
+        } catch (e: Exception) {
+            null
+        }
+        if (uri == null || uri.host.isNullOrEmpty() ||
+            (uri.scheme != "http" && uri.scheme != "https")
+        ) {
+            result.error("bad_url", "Ссылка не похожа на адрес", null)
+            return
+        }
+        try {
+            startActivity(
+                Intent(Intent.ACTION_VIEW, uri).addCategory(Intent.CATEGORY_BROWSABLE),
+            )
+            result.success(true)
+        } catch (e: Exception) {
+            result.success(false)
         }
     }
 

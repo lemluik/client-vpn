@@ -3,6 +3,8 @@ import 'dart:convert';
 
 import 'package:flutter/services.dart';
 
+import 'app_proxy.dart';
+import 'proxy_config.dart';
 import 'tun_config.dart';
 import 'vpn_config.dart';
 import 'vpn_core.dart';
@@ -25,6 +27,15 @@ class AndroidCore implements VpnCore {
   String? _endpoint;
   String? _tunJson;
 
+  /// Локальный http-вход поднятого туннеля — точка для собственного трафика
+  /// приложения (ТД-15). Пока конфиг не собран, берётся то же значение, которое
+  /// в него ставится.
+  ProxyEndpoint? _local;
+
+  /// Поднимает или снимает путь приложения через ядро.
+  void _ownTraffic(bool running) =>
+      AppProxy.attach(running ? (_local ?? appProxyEndpoint()) : null);
+
   @override
   Stream<String> get logs => _logController.stream;
 
@@ -44,6 +55,7 @@ class AndroidCore implements VpnCore {
         if (line is String && line.isNotEmpty) _logController.add(line);
       case 'status':
         _running = call.arguments == true;
+        _ownTraffic(_running);
         _statusController.add(_running);
       default:
         break;
@@ -59,6 +71,7 @@ class AndroidCore implements VpnCore {
       throw Exception('Конфиг не читается: ${e.message}');
     }
     _tunJson = tunJson;
+    _local = parseProxyInbound(tunJson);
     _endpoint = _describeOutbound(config.json);
 
     // Проверяется именно тот конфиг, который пойдёт в туннель, а не конфиг
@@ -102,16 +115,23 @@ class AndroidCore implements VpnCore {
         'Подтвердите запрос системы и повторите подключение.',
       );
     }
+    _ownTraffic(true);
   }
 
   @override
   Future<void> stop() async {
     await _channel.invokeMethod<void>('stop');
+    _ownTraffic(false);
   }
 
   @override
   Future<void> recoverAfterCrash() async {
-    // Туннель Android снимает сам вместе с остановкой сервиса.
+    // Туннель Android снимает сам вместе с остановкой сервиса, но состояние
+    // сервиса переживает закрытие экрана: его надо спросить, иначе UI
+    // отрисуется «Отключён» при поднятом туннеле.
+    _running = await _channel.invokeMethod<bool>('status') == true;
+    _ownTraffic(_running);
+    _statusController.add(_running);
   }
 
   @override

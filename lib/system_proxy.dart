@@ -11,13 +11,19 @@ class SystemProxy {
       r'HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings';
   static const _savedServerKey = 'proxy.saved_server';
   static const _savedEnableKey = 'proxy.saved_enable';
+  static const _savedOverrideKey = 'proxy.saved_override';
   static const _oursKey = 'proxy.ours';
+
+  /// Локальные адреса не должны уходить через прокси: без этой метки браузер
+  /// проксирует и `http://localhost`, и адреса локальной сети.
+  static const _localMarker = '<local>';
 
   static const _settingsChanged = 39;
   static const _refresh = 37;
 
-  static final _internetSetOption = DynamicLibrary.open('wininet.dll')
-      .lookupFunction<_SetOptionNative, _SetOptionDart>('InternetSetOptionW');
+  static final _internetSetOption = DynamicLibrary.open(
+    'wininet.dll',
+  ).lookupFunction<_SetOptionNative, _SetOptionDart>('InternetSetOptionW');
 
   static Future<void> enable(
     String host,
@@ -28,6 +34,12 @@ class SystemProxy {
 
     await _saveOriginal();
     await _writeString('ProxyServer', server);
+    // Исключения дописываются к текущим, а не заменяются: набор пользователя
+    // возвращается при отключении в том же виде.
+    await _writeString(
+      'ProxyOverride',
+      withLocalMarker(await getProxyOverride()),
+    );
     await _writeDword('ProxyEnable', 1);
 
     final prefs = await SharedPreferences.getInstance();
@@ -42,16 +54,40 @@ class SystemProxy {
 
     final savedServer = prefs.getString(_savedServerKey);
     final savedEnable = prefs.getBool(_savedEnableKey) ?? false;
+    final savedOverride = prefs.getString(_savedOverrideKey);
 
     await _writeDword('ProxyEnable', savedEnable ? 1 : 0);
     if (savedServer != null && savedServer.isNotEmpty) {
       await _writeString('ProxyServer', savedServer);
     }
+    if (savedOverride != null) {
+      // Пустое значение тоже возвращается: иначе `<local>` остался бы записан
+      // после отключения.
+      await _writeString('ProxyOverride', savedOverride);
+    }
 
     await prefs.remove(_oursKey);
     await prefs.remove(_savedServerKey);
     await prefs.remove(_savedEnableKey);
+    await prefs.remove(_savedOverrideKey);
 
+    _notify();
+  }
+
+  /// Килт-свитч: при падении ядра прокси остаётся включённым и указывает на
+  /// мёртвый порт. Приложения, слушающие системный прокси, получают отказ
+  /// вместо прямого выхода в сеть — утечка мимо туннеля блокируется.
+  ///
+  /// Возврат настроек пользователя — только явный [disable] (пользователь
+  /// отключил подключение или приложение стартует после аварии и чинит
+  /// состояние через [cleanupAfterCrash]).
+  static Future<void> lockLeak() async {
+    final prefs = await SharedPreferences.getInstance();
+    final ours = prefs.getString(_oursKey);
+    if (ours == null) return; // мы ничего не включали — блокировать нечего
+
+    await _writeString('ProxyServer', ours);
+    await _writeDword('ProxyEnable', 1);
     _notify();
   }
 
@@ -71,6 +107,7 @@ class SystemProxy {
     await prefs.remove(_oursKey);
     await prefs.remove(_savedServerKey);
     await prefs.remove(_savedEnableKey);
+    await prefs.remove(_savedOverrideKey);
   }
 
   static Future<void> _saveOriginal() async {
@@ -78,7 +115,21 @@ class SystemProxy {
     if (prefs.containsKey(_savedEnableKey)) return;
 
     await prefs.setString(_savedServerKey, await getProxyServer() ?? '');
+    await prefs.setString(_savedOverrideKey, await getProxyOverride() ?? '');
     await prefs.setBool(_savedEnableKey, await isEnabled);
+  }
+
+  /// Добавляет `<local>` к списку исключений, не дублируя его.
+  static String withLocalMarker(String? current) {
+    final entries = (current ?? '')
+        .split(';')
+        .map((entry) => entry.trim())
+        .where((entry) => entry.isNotEmpty)
+        .toList();
+    final hasLocal = entries.any(
+      (entry) => entry.toLowerCase() == _localMarker,
+    );
+    return hasLocal ? entries.join(';') : [...entries, _localMarker].join(';');
   }
 
   static Future<void> _writeString(String name, String value) async {
@@ -129,8 +180,9 @@ class SystemProxy {
     ]);
     if (result.exitCode != 0) return false;
 
-    final match = RegExp(r'ProxyEnable\s+REG_DWORD\s+(0x[0-9a-fA-F]+|\d+)')
-        .firstMatch(result.stdout.toString());
+    final match = RegExp(
+      r'ProxyEnable\s+REG_DWORD\s+(0x[0-9a-fA-F]+|\d+)',
+    ).firstMatch(result.stdout.toString());
     if (match == null) return false;
 
     final value = match.group(1)!;
@@ -139,18 +191,17 @@ class SystemProxy {
         : int.parse(value) != 0;
   }
 
-  static Future<String?> getProxyServer() async {
-    final result = await Process.run('reg', [
-      'query',
-      _regPath,
-      '/v',
-      'ProxyServer',
-    ]);
+  static Future<String?> getProxyServer() async => _readString('ProxyServer');
+
+  static Future<String?> getProxyOverride() async =>
+      _readString('ProxyOverride');
+
+  static Future<String?> _readString(String name) async {
+    final result = await Process.run('reg', ['query', _regPath, '/v', name]);
     if (result.exitCode != 0) return null;
 
-    return RegExp(r'ProxyServer\s+REG_SZ\s+(.+)')
-        .firstMatch(result.stdout.toString())
-        ?.group(1)
-        ?.trim();
+    return RegExp(
+      '$name\\s+REG_SZ\\s+(.*)',
+    ).firstMatch(result.stdout.toString())?.group(1)?.trim();
   }
 }

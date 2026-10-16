@@ -1,0 +1,272 @@
+{
+  "@@locale": "ru",
+  "appTitle": "КлиентВПН",
+  "tooltipRefreshSubscription": "Обновить подписку",
+  "tooltipAddConnection": "Добавить подключение",
+  "tooltipSettings": "Настройки",
+  "tooltipLog": "Журнал",
+  "tooltipSupport": "Поддержка",
+  "tooltipActions": "Действия",
+  "buttonCancel": "Отмена",
+  "buttonContinue": "Продолжить",
+  "buttonSave": "Сохранить",
+  "buttonAdd": "Добавить",
+  "buttonFetch": "Получить",
+  "switchProfileTitle": "Сменить подключение?",
+  "switchProfileBody": "Туннель будет отключён, а затем поднят заново из нового профиля.",
+  "switchRegionTitle": "Сменить страну выхода?",
+  "switchRegionBody": "Туннель будет поднят заново через другую страну. Открытые соединения прервутся.",
+  "restartForPresetTitle": "Переподключиться?",
+  "restartForPresetBody": "Новые правила работают только в поднятом заново подключении. Открытые соединения прервутся.",
+  "removeProfileTitle": "Удалить «{name}»?",
+  "@removeProfileTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "removeProfileBody": "Подключение и сохранённый кэш подписки будут удалены.",
+  "renameTitle": "Название подключения",
+  "renameHint": "Например: рабочий",
+  "addSheetTitle": "Добавьте подключение любого провайдера",
+  "addLinkTitle": "Ссылка или подписка",
+  "addLinkSubtitle": "Вставьте ключ, список ключей или подписку",
+  "addUrlTitle": "Подписка по адресу",
+  "addUrlSubtitle": "Обновляется сама по интервалу провайдера",
+  "addFileTitle": "Файл config.json",
+  "addFileSubtitle": "Для опытных: полный конфиг ядра",
+  "addLinkHint": "vless://… или несколько строк, или подписка в base64",
+  "addUrlHint": "https://провайдер.example/подписка",
+  "probeTarget": "Точка проб",
+  "probeTargetSubtitle": "Адрес, до которого клиент меряет задержку узлов",
+  "probeApplied": "Точка проб сохранена",
+  "restartForProbeBody": "Новая точка проб работает в поднятом заново подключении. Открытые соединения прервутся.",
+  "presetOff": "Выключено",
+  "presetRu": "Россия напрямую",
+  "presetOffSubtitle": "Весь трафик идёт через подключение",
+  "presetOnSubtitle": "Сайты пресета открываются мимо подключения",
+  "myRules": "Мои правила",
+  "myRulesEmpty": "Правил пока нет",
+  "myRulesCount": "Правил: {count}",
+  "@myRulesCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "presetSelected": "Пресет «{name}» выбран",
+  "@presetSelected": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "presetApplied": "Пресет «{name}» применён",
+  "@presetApplied": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "subscriptionUpdated": "Подписка обновлена",
+  "fileAdded": "Файл добавлен",
+  "connectionAdded": "Подключение добавлено",
+  "subscriptionAdded": "Подписка добавлена",
+  "profileUntitled": "Без названия",
+  "menuRename": "Переименовать",
+  "menuDelete": "Удалить",
+  "profileCountOne": "Один профиль",
+  "profileCountMany": "{count} профилей",
+  "@profileCountMany": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "regionProfileCount": "Профилей: {count}",
+  "@regionProfileCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "subscriptionOne": "Подписка · один профиль",
+  "subscriptionMany": "Подписка · {count} профилей",
+  "@subscriptionMany": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "subscriptionLeftMb": "Подписка · осталось {mb} МБ",
+  "@subscriptionLeftMb": {
+    "placeholders": {
+      "mb": {
+        "type": "String"
+      }
+    }
+  },
+  "regionTitle": "Страна выхода",
+  "statusProtected": "Защищено",
+  "statusConnecting": "Подключение…",
+  "statusFailed": "Сбой",
+  "statusNoLink": "Нет связи",
+  "statusOff": "Отключено",
+  "orbDisconnect": "Отключить",
+  "orbConnect": "Подключить",
+  "orbRetry": "Подключить снова",
+  "emptyTitle": "Быстрый доступ в интернет",
+  "emptyBody": "Добавьте ключ от вашего провайдера или адрес подписки — клиент сам соберёт подключение. Своих серверов у клиента нет, он работает с любым провайдером.",
+  "emptyAddButton": "Добавить подключение",
+  "trayShowWindow": "Показать окно",
+  "trayQuit": "Выйти",
+  "alreadyRunningTitle": "Клиент уже запущен",
+  "alreadyRunningBody": "Приложение открыто в другом окне. Второе окно не поднимается: два экземпляра спорят из-за системного прокси, и подключение рвётся.",
+  "alreadyRunningClose": "Закрыть это окно",
+  "windowHiddenToTray": "Клиент свёрнут в трей: подключение продолжает работать.",
+  "closeWindowSection": "При закрытии окна",
+  "closeWindowChoiceAsk": "Спрашивать",
+  "closeWindowChoiceTray": "Сворачивать в трей",
+  "closeWindowChoiceQuit": "Выходить",
+  "closeWindowTitle": "Закрыть окно?",
+  "closeWindowBody": "Свернуть в трей — подключение продолжит работать, клиент останется в трее. Выход снимет туннель и закроет приложение.",
+  "closeWindowTray": "Свернуть в трей",
+  "closeWindowQuit": "Выйти",
+  "closeWindowRemember": "Запомнить выбор",
+  "aboutTitle": "О программе",
+  "aboutVersion": "Версия {version}",
+  "@aboutVersion": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "aboutRepository": "Исходный код и релизы: github.com/lemluik/client-vpn",
+  "aboutLicense": "Лицензия",
+  "aboutLicenseSubtitle": "Mozilla Public License 2.0",
+  "aboutNotices": "Уведомления о зависимостях",
+  "aboutNoticesSubtitle": "Сторонние библиотеки и их лицензии",
+  "aboutNoTelemetry": "Сбор статистики",
+  "aboutNoTelemetryBody": "Клиент не собирает статистику и не отправляет данные третьим сторонам: телеметрических и аналитических библиотек в зависимостях нет.",
+  "aboutAssetMissing": "Файл не найден в сборке",
+  "updateTitle": "Обновление",
+  "updateSourceSubtitle": "Адрес манифеста релиза. Проверка — один запрос, без идентификатора устройства и профиля",
+  "updateSourceSaved": "Источник обновлений сохранён",
+  "updateCheck": "Проверить обновление",
+  "updateChecking": "Проверяю…",
+  "updateFound": "Доступна версия {version}",
+  "@updateFound": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "updateOpen": "Открыть загрузку",
+  "updateCopy": "Скопировать ссылку",
+  "updateCopied": "Ссылка скопирована",
+  "updateNoLink": "Ссылка на эту платформу в манифесте не указана",
+  "updateOpenFailed": "Браузер не открылся — скопируйте ссылку",
+  "settingsScreenTitle": "Настройки",
+  "settingsThemeSection": "Оформление",
+  "themeSystem": "Системная",
+  "themeLight": "Светлая",
+  "themeDark": "Тёмная",
+  "settingsLaunchSection": "Запуск",
+  "settingsAutoStart": "Автозапуск с системой",
+  "settingsAutoStartAndroid": "Клиент откроется сам после включения телефона",
+  "settingsAutoStartDesktop": "Клиент откроется сам после входа в систему",
+  "settingsAutoStartOn": "Клиент будет запускаться с системой",
+  "settingsAutoStartOff": "Автозапуск выключен",
+  "settingsAutoConnect": "Автоподключение при запуске",
+  "settingsAutoConnectPending": "Станет доступно после первого успешного подключения",
+  "settingsAutoConnectProfile": "Поднимаем то же подключение: {name}",
+  "@settingsAutoConnectProfile": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsAutoConnectMissing": "Подключение больше не найдено",
+  "settingsProfilesSection": "Профили ({count})",
+  "@settingsProfilesSection": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "settingsProfilesEmpty": "Подключений пока нет — добавьте их на главном экране.",
+  "profileKindLinks": "Ссылки",
+  "profileKindSubscription": "Подписка",
+  "profileKindFile": "Файл config.json",
+  "settingsRoutingSection": "Куда идёт трафик",
+  "settingsServiceSection": "Обслуживание",
+  "splitHomeDirect": "Сайты домашнего региона напрямую",
+  "splitHomeDirectZones": "Зоны: {zones}. Остальное — через подключение.",
+  "@splitHomeDirectZones": {
+    "placeholders": {
+      "zones": {
+        "type": "String"
+      }
+    }
+  },
+  "splitHomeDirectUnknown": "Домашний регион по языку устройства не определён",
+  "splitExceptions": "Адреса-исключения",
+  "splitExceptionsCount": "напрямую: {direct}, в туннель: {tunnel}",
+  "@splitExceptionsCount": {
+    "placeholders": {
+      "direct": {
+        "type": "int"
+      },
+      "tunnel": {
+        "type": "int"
+      }
+    }
+  },
+  "splitExceptionsEmpty": "Списка пока нет",
+  "splitScreenTitle": "Раздельное туннелирование",
+  "splitHowItWorks": "Адрес из списка идёт вопреки правилам домашнего региона: «напрямую» мимо туннеля или «в туннель» назло своей зоне. Ссылку можно вставить целиком — из неё возьмём только имя хоста.",
+  "splitPasteTitle": "Вставить пачкой",
+  "splitPasteHint": "По одному адресу на строку: https://example.com/path, example.org",
+  "splitDirection": "Куда направить эти адреса",
+  "splitToDirect": "напрямую",
+  "splitToTunnel": "в туннель",
+  "splitAdded": "Добавлено {added}, повторов {duplicates}, пропущено {skipped}",
+  "@splitAdded": {
+    "placeholders": {
+      "added": {
+        "type": "int"
+      },
+      "duplicates": {
+        "type": "int"
+      },
+      "skipped": {
+        "type": "int"
+      }
+    }
+  },
+  "splitNothingAdded": "Ни одного адреса не разобрано, пропущено {skipped}",
+  "@splitNothingAdded": {
+    "placeholders": {
+      "skipped": {
+        "type": "int"
+      }
+    }
+  },
+  "splitHostRemoved": "Адрес убран из списка",
+  "splitHostMoved": "Направление изменено",
+  "splitSaved": "Список сохранён",
+  "splitApplied": "Список применён, подключение поднято заново",
+  "splitDirectRuleTitle": "Исключения: напрямую",
+  "splitTunnelRuleTitle": "Исключения: в туннель"
+}

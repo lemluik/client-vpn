@@ -12,3 +12,9 @@ GeneratedPluginRegistrant.java
 key.properties
 **/*.keystore
 **/*.jks
+
+# Релизный ключ подписи Android (позиция ТД-2): файл создаёт владелец,
+# в репозиторий он попадать не должен ни при каких обстоятельствах.
+key.properties
+*.keystore
+*.jks

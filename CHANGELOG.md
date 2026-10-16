@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Closing the window asks what to do instead of guessing: minimize to the tray keeps the tunnel
+  running, quit tears it down, and the checkbox remembers which one was chosen. Both answers stay
+  editable in settings, and a remembered minimize still quits when no tray icon could be mounted,
+  because a hidden window with no way back is indistinguishable from a crash
 - Settings screen behind the gear button in the top-left corner of the home screen: theme
   (system, light, dark), start with the system, auto-connect to the connection that last worked,
   and the list of saved profiles where one can be selected, renamed or removed
@@ -21,6 +25,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- The home screen toolbar is balanced by how often each action is used: settings and log sit on the
+  left, add-connection and support chat on the right. The log used to be wedged between the two
+  actions people reach for daily, and the right side carried three buttons against one on the left.
+- The profiles section is first on the settings screen, above theme and startup: the list of saved
+  connections is what the screen is opened for, and at the bottom it sat behind everything else.
+- One settings entry point instead of two: the second toolbar button on the home screen opened a
+  sheet with rules, probe target, updates and about, while the gear opened a screen holding the
+  same routing choice under a different label. The sheet is gone and every item it held lives on
+  the settings screen; the routing choice is shown once — as the home-region switch when the device
+  language resolves to a region, otherwise as the preset list
 - The connect button sits in the middle of the home screen instead of being pinned to the bottom:
   the profile list now keeps its natural height, two spacers center the button in the space left,
   and the connection status stays at the bottom edge of the window
@@ -31,9 +45,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
-- Recovery after a core failure is not wired to anything yet: on Windows the system proxy can stay
-  enabled after the core process is killed, and a subscription is refreshed only when its button is
-  pressed, not on the interval the provider advertises
+- The tray tooltip now uses the method the Windows plugin actually implements.
+  `setTitle` only exists on macOS, so on Windows mounting the tray threw
+  `MissingPluginException`, the app believed no tray was available, and closing the
+  window quit without asking — the prompt added above never appeared. A tray the
+  platform rejects is now unwound instead of left half-mounted.
+- Recovery after a core failure is wired to startup. It was written and never called, so on Windows
+  the system proxy could stay enabled after the core process was killed externally — every browser
+  then fails to open pages until the setting is cleared by hand. The app now asks the core what state
+  it is in and rolls the proxy back; the same path drives the interval-based subscription refresh,
+  which until now only happened when its button was pressed.
+- The system proxy prefers the `http` inbound over `socks`. Measured on Xray-core 26.3.27 with
+  headless Chrome: a `socks=127.0.0.1:port` entry makes the browser resolve the destination itself
+  and hand the kernel an address, so DNS leaks to the local resolver; a bare `host:port` entry hands
+  over the domain and the server resolves it.
+- `ProxyOverride` gets the `<local>` exception while the proxy is enabled, and the user's own
+  exceptions come back when it is disabled — including the case where the rollback runs after a
+  crash. Browsers bypass loopback anyway; the marker is for clients that do read the list.
+- Android: reopening the screen while the tunnel is up no longer shows «Disconnected» with the
+  control stuck at «Connecting». The service outlives the screen, and nothing used to ask it for the
+  real state: the status bus now replays the last state on re-subscription, the Dart side asks the
+  service on startup, and the "tunnel is already up" branch publishes the status before returning.
+- Known gap, not fixed here: the app's own requests (subscription fetch, refresh and chat) still go
+  direct even while the tunnel is up, because the HTTP client reads proxy settings from environment
+  variables rather than from the system — on both platforms. Closing it needs a local inbound on
+  Android, where the tunnel config replaces local inbounds with the tun device.
 
 ## [0.3.0] - 2026-10-15
 

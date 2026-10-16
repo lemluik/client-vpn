@@ -1,15 +1,23 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'autostart.dart';
 import 'chat_service.dart';
 import 'chat_store.dart';
+import 'deep_link.dart';
+import 'failover.dart';
 import 'log_mask.dart';
+import 'manual_rules.dart';
+import 'per_app_rules.dart';
 import 'profile_store.dart';
 import 'provider.dart';
+import 'reconnect.dart';
 import 'region.dart';
+import 'routing_presets.dart';
 import 'settings_store.dart';
 import 'share_link.dart';
 import 'subscription.dart';
@@ -17,8 +25,11 @@ import 'temp_config.dart';
 import 'vpn_config.dart';
 import 'vpn_core.dart';
 
-/// Состояние туннеля: четыре значения, которые видит пользователь.
-enum TunnelState { off, connecting, on, failure }
+/// Состояние туннеля: пять значений, которые видит пользователь.
+///
+/// `noLink` отличается от `failure` тем, что рвать пробовался не путь: связи
+/// нет совсем (сеть пропала), и показывать ошибку узла было бы неверно.
+enum TunnelState { off, connecting, on, failure, noLink }
 
 /// Подготовка конфига для ядра: на десктопе ядро читает его только с диска.
 typedef ConfigWriter = Future<VpnConfig> Function(VpnConfig config);
@@ -34,6 +45,30 @@ class Failure {
   final String action;
 }
 
+/// Сети, смена которых рвёт установленные соединения ядра.
+///
+/// `none` и `vpn` в подпись не входят: в первую переподнимать туннель некуда,
+/// второе — собственный туннель клиента не должен считаться сменой сети.
+const Set<ConnectivityResult> networkTransports = {
+  ConnectivityResult.bluetooth,
+  ConnectivityResult.ethernet,
+  ConnectivityResult.mobile,
+  ConnectivityResult.other,
+  ConnectivityResult.wifi,
+};
+
+/// Сеть в виде строки для сравнения: `'wifi'`, `'mobile'`, `''` — связи нет.
+String networkKey(List<ConnectivityResult> networks) {
+  final names =
+      networks
+          .where(networkTransports.contains)
+          .map((network) => network.name)
+          .toSet()
+          .toList()
+        ..sort();
+  return names.join(',');
+}
+
 /// Связка хранилища профилей и ядра для экрана.
 ///
 /// Долгие операции не останавливают отрисовку: экран слушает уведомления и
@@ -46,24 +81,67 @@ class AppState extends ChangeNotifier {
     ConfigWriter? configWriter,
     ChatService? chat,
     Autostart? autostart,
-  })  : _writeConfig = configWriter ??
-            (Platform.isAndroid ? _passThrough : ensureConfigOnDisk),
-        _chat = chat,
-        _settings = settings,
-        _autostart = autostart ?? const UnsupportedAutostart() {
+    PresetStore? presets,
+    RuleStore? ruleStore,
+    PerAppStore? perApps,
+    AppExclusionsWriter? appExclusions,
+    ProbeStore? probes,
+    ReconnectPlan? reconnect,
+    String languageCode = '',
+    Stream<List<ConnectivityResult>>? networks,
+    Stream<String>? deepLinks,
+  }) : _writeConfig =
+           configWriter ??
+           (Platform.isAndroid ? _passThrough : ensureConfigOnDisk),
+       _chat = chat,
+       _settings = settings,
+       _autostart = autostart ?? const UnsupportedAutostart(),
+       _presets = presets,
+       _ruleStore = ruleStore,
+       _manualRules = ruleStore?.load() ?? const [],
+       _perApps = perApps,
+       _appExclusions = appExclusions,
+       _directApps = perApps?.load() ?? const [],
+       _probes = probes,
+       _reconnect = reconnect ?? ReconnectPlan(),
+       _probeEndpoint = probes?.load() ?? defaultProbeEndpoint,
+       _languageCode = languageCode,
+       _routingPreset =
+           presets?.load(languageCode) ?? defaultPresetFor(languageCode) {
     _logSubscription = _core.logs.listen(_onLog);
     _statusSubscription = _core.statusChanges.listen(_onStatus);
+    _networkSubscription = networks?.listen(_onNetworks);
+    _deepLinkSubscription = deepLinks?.listen(_onDeepLink);
   }
 
-  static Future<AppState> create() async => AppState(
-        await ProfileStore.open(),
-        createVpnCore(),
-        settings: await SettingsStore.open(),
-        autostart: Autostart.platform(),
-        chat: ChatService(await ChatStore.open()),
-      );
+  static Future<AppState> create() async {
+    final prefs = await SharedPreferences.getInstance();
+    return AppState(
+      await ProfileStore.open(),
+      createVpnCore(),
+      settings: await SettingsStore.open(),
+      autostart: Autostart.platform(),
+      chat: ChatService(await ChatStore.open()),
+      presets: PresetStore(prefs),
+      ruleStore: RuleStore(prefs),
+      perApps: PerAppStore(prefs),
+      // Приложения «напрямую» умеет только Android: список читает VpnService.
+      appExclusions: Platform.isAndroid ? const PerAppChannel().write : null,
+      probes: ProbeStore(prefs),
+      languageCode: PlatformDispatcher.instance.locale.languageCode,
+      networks: Connectivity().onConnectivityChanged,
+      deepLinks: deepLinkStream(),
+    );
+  }
 
   static const int logLimit = 500;
+
+  /// Окно, за которое события о смене сети успевают закончиться.
+  ///
+  /// Переход Wi-Fi ↔ LTE приходит не одним событием, а серией, поэтому
+  /// переподъём откладывается. Значение 2 с взято как заведомо бо́льшее, чем
+  /// разрыв между событиями; живой замер на телефоне ещё не выполнен.
+  static const Duration networkSettle = Duration(seconds: 2);
 
   final ProfileStore _store;
   final VpnCore _core;
@@ -71,9 +149,28 @@ class AppState extends ChangeNotifier {
   final ChatService? _chat;
   final SettingsStore _settings;
   final Autostart _autostart;
+  final PresetStore? _presets;
+
+  /// Правила пользователя: хранятся на устройстве, применяются поверх пресета.
+  final RuleStore? _ruleStore;
+  List<ManualRule> _manualRules;
+
+  /// Приложения, идущие напрямую (R2.3): Android, список читает VpnService.
+  final PerAppStore? _perApps;
+  final AppExclusionsWriter? _appExclusions;
+  List<String> _directApps;
+  final ProbeStore? _probes;
+  String _probeEndpoint;
 
   StreamSubscription<String>? _logSubscription;
   StreamSubscription<bool>? _statusSubscription;
+  StreamSubscription<List<ConnectivityResult>>? _networkSubscription;
+  Timer? _networkTimer;
+  Timer? _probeTimer;
+  Timer? _subscriptionTimer;
+  final ReconnectPlan _reconnect;
+  String? _networkKey;
+  StreamSubscription<String>? _deepLinkSubscription;
 
   final List<String> _log = [];
   TunnelState _state = TunnelState.off;
@@ -81,6 +178,15 @@ class AppState extends ChangeNotifier {
   bool _busy = false;
   bool _stopping = false;
   bool? _autoStart;
+
+  /// Пользователь хочет туннель поднятым: с этого момента клиент переподключается
+  /// сам, без нажатия кнопки.
+  bool _userWantsTunnel = false;
+  RoutingPreset _routingPreset;
+
+  /// Язык устройства: по нему определяется домашний регион переключателя
+  /// «сайты домашнего региона напрямую».
+  final String _languageCode;
 
   /// Чат поддержки, если он выпущен для активной подписки.
   ChatService? get chat => _chat;
@@ -90,6 +196,9 @@ class AppState extends ChangeNotifier {
   ThemeChoice get themeChoice => _settings.themeChoice;
 
   bool get autoConnect => _settings.autoConnect;
+
+  /// Крестик на окне: спросить, свернуть в трей или выйти.
+  CloseAction get closeAction => _settings.closeAction;
 
   /// Платформа без поддержки автозапуска прячет настройку целиком.
   bool get autostartSupported => _autostart.supported;
@@ -124,6 +233,121 @@ class AppState extends ChangeNotifier {
 
   List<Provider> get providers => _store.providers;
 
+  /// Выбранный пресет маршрутизации «напрямую».
+  RoutingPreset get routingPreset => _routingPreset;
+
+  /// Точка проб наблюдателя (У-3): нейтральная по умолчанию, значение
+  /// локальное и никуда, кроме ядра, не отправляется.
+  String get probeEndpoint => _probeEndpoint;
+
+  /// Меняет точку проб. Возвращает текст ошибки или null; поднятый туннель
+  /// перезапускает экран — конфиг с новой точкой читается только при сборке.
+  Future<String?> setProbeEndpoint(String value) async {
+    final error = probeEndpointError(value);
+    if (error != null) return error;
+    final endpoint = value.trim();
+    if (endpoint == _probeEndpoint) return null;
+    _probeEndpoint = endpoint;
+    await _probes?.save(endpoint);
+    notifyListeners();
+    return null;
+  }
+
+  /// Меняет пресет и запоминает выбор. Поднятый туннель перезапускает экран:
+  /// правила читаются при сборке конфига, поэтому смена пути рвёт соединения.
+  Future<void> setRoutingPreset(String key) async {
+    final preset = presetByKey(key);
+    if (preset.key == _routingPreset.key) return;
+    _routingPreset = preset;
+    await _presets?.save(key);
+    _failure = null;
+    notifyListeners();
+  }
+
+  /// Пресет домашнего региона: тот, что подходит языку устройства.
+  RoutingPreset get homePreset => defaultPresetFor(_languageCode);
+
+  /// Есть ли у домашнего региона доменные зоны: без них переключателю нечего
+  /// включать, и интерфейс прячет пункт.
+  bool get homeRegionKnown => homePreset.hasHomeDomains;
+
+  /// Включено ли «сайты домашнего региона напрямую».
+  ///
+  /// Это не отдельный флаг: переключатель и список-замена на экране настроек
+  /// управляют тем же выбранным пресетом (`routing.preset.v1`). Два хранимых
+  /// значения неизбежно разошлись бы, и пользователь получил бы экран, который
+  /// показывает не то, что реально ушло в ядро.
+  bool get homeRegionDirect =>
+      !_routingPreset.isOff && _routingPreset.hasHomeDomains;
+
+  /// Включает или выключает правила домашнего региона.
+  Future<void> setHomeRegionDirect(bool value) async {
+    if (value == homeRegionDirect) return;
+    await setRoutingPreset(
+      value
+          ? (_routingPreset.hasHomeDomains
+                ? _routingPreset.key
+                : homePreset.key)
+          : offPreset.key,
+    );
+  }
+
+  /// Адреса-исключения, которые идут мимо домашнего региона напрямую.
+  List<String> get splitDirectHosts =>
+      ManualRule.splitHosts(_manualRules, ManualRule.splitDirectId);
+
+  /// Адреса-исключения, которые возвращаются в туннель.
+  List<String> get splitTunnelHosts =>
+      ManualRule.splitHosts(_manualRules, ManualRule.splitTunnelId);
+
+  /// Заменяет списки исключений, сохраняя остальные правила пользователя.
+  ///
+  /// Названия правил приходят из интерфейса: правило — данные, а подпись на
+  /// нём — строка, и она обязана быть переведена.
+  Future<void> setSplitHosts({
+    required List<String> direct,
+    required List<String> tunnel,
+    required String directTitle,
+    required String tunnelTitle,
+  }) => setManualRules(
+    ManualRule.withSplitHosts(
+      _manualRules,
+      direct: direct,
+      tunnel: tunnel,
+      directTitle: directTitle,
+      tunnelTitle: tunnelTitle,
+    ),
+  );
+
+  /// Правила пользователя в порядке применения.
+  List<ManualRule> get manualRules => List.unmodifiable(_manualRules);
+
+  /// Заменяет список правил и запоминает его.
+  ///
+  /// Поднятый туннель перезапускает экран — по той же причине, что и смена
+  /// пресета: правила читаются при сборке конфига.
+  Future<void> setManualRules(List<ManualRule> rules) async {
+    _manualRules = List.of(rules);
+    await _ruleStore?.save(_manualRules);
+    _failure = null;
+    notifyListeners();
+  }
+
+  /// Пакеты приложений, которые идут напрямую, мимо туннеля (R2.3).
+  List<String> get directApps => List.unmodifiable(_directApps);
+
+  /// Меняет список приложений «напрямую» и запоминает его.
+  ///
+  /// Нативной части список передаётся при подключении (см. [connect]): там,
+  /// где его и читает `VpnService`. Работает только на Android — на десктопе
+  /// ядро условия по приложению не поддерживает, и интерфейс кнопки не
+  /// показывает.
+  Future<void> setDirectApps(List<String> packages) async {
+    _directApps = List.of(packages);
+    await _perApps?.save(_directApps);
+    notifyListeners();
+  }
+
   List<String> get log => List.unmodifiable(_log);
 
   bool get canConnect =>
@@ -134,10 +358,12 @@ class AppState extends ChangeNotifier {
 
   /// Откатывает состояние после аварийного завершения и подтягивает подписки,
   /// которым пора обновиться.
+  ///
+  /// Вызывается при каждом старте приложения: и снятие системного прокси,
+  /// оставшегося после внешнего убийства процесса, и вопрос сервису Android
+  /// («туннель поднят?»), и подписки по интервалу.
   Future<void> recover() async {
-    if (!Platform.isAndroid) {
-      await _core.recoverAfterCrash();
-    }
+    await _core.recoverAfterCrash();
     await refreshDue();
   }
 
@@ -159,6 +385,12 @@ class AppState extends ChangeNotifier {
 
   Future<void> setTheme(ThemeChoice value) async {
     await _settings.setTheme(value);
+    notifyListeners();
+  }
+
+  /// Запомнить или передумать, что делать с крестиком на окне.
+  Future<void> setCloseAction(CloseAction value) async {
+    await _settings.setCloseAction(value);
     notifyListeners();
   }
 
@@ -186,7 +418,9 @@ class AppState extends ChangeNotifier {
   /// приложение подключённым к кнопке — пользователь нажмёт сам.
   Future<void> autoConnectOnLaunch() async {
     final id = _settings.lastProfileId;
-    if (!_settings.autoConnect || id == null || _state != TunnelState.off) return;
+    if (!_settings.autoConnect || id == null || _state != TunnelState.off) {
+      return;
+    }
 
     StoredProfile? profile;
     for (final candidate in _store.profiles) {
@@ -206,13 +440,25 @@ class AppState extends ChangeNotifier {
 
     _failure = null;
     _state = TunnelState.connecting;
+    _userWantsTunnel = true;
     notifyListeners();
 
     try {
-      final config = await _writeConfig(_store.activeConfig());
+      final config = await _writeConfig(
+        _store.activeConfig(
+          rules: _routingPreset.rulesWith(_manualRules),
+          probeEndpoint: _probeEndpoint,
+        ),
+      );
       await _core.validate(config);
+      // Список приложений «напрямую» пишется перед каждым поднятием туннеля:
+      // VpnService читает файл при старте, и правка после подключения не
+      // требует, чтобы пользователь помнил про сохранение заранее.
+      await _appExclusions?.call(_directApps);
       await _core.start(config);
       _state = TunnelState.on;
+      _reconnect.reset();
+      _stopReconnectTimers();
       final profile = _store.active;
       if (profile != null) await _settings.rememberProfile(profile.id);
       _addLog('Подключено: ${_activeLabel()}');
@@ -220,11 +466,15 @@ class AppState extends ChangeNotifier {
       _state = TunnelState.failure;
       _failure = failureOf(error);
       _addLog('[ERR] ${_failure!.message}');
+      _armReconnect();
     }
     notifyListeners();
   }
 
   Future<void> disconnect() async {
+    _userWantsTunnel = false;
+    _reconnect.reset();
+    _stopReconnectTimers();
     _stopping = true;
     try {
       await _core.stop();
@@ -354,6 +604,125 @@ class AppState extends ChangeNotifier {
 
   void _onLog(String line) => _addLog(line);
 
+  /// Реакция на событие о сети: `'wifi' → 'mobile'` при поднятом туннеле
+  /// откладывает переподъём, а серия событий схлопывается в один.
+  void _onNetworks(List<ConnectivityResult> networks) {
+    final key = networkKey(networks);
+    // Первое событие только задаёт отправную точку: до него состояние сети
+    // неизвестно, и переподнимать туннель по нему было бы ошибкой.
+    if (_networkKey == null) {
+      _networkKey = key;
+      return;
+    }
+    if (key == _networkKey) return;
+    _networkKey = key;
+    if (key.isEmpty) {
+      // Сети нет совсем: это «нет связи» (МК-5), а не сбой узла, поэтому
+      // ошибку пути не показываем, но переподключение уже стоит в очереди.
+      if (_state == TunnelState.on ||
+          _state == TunnelState.connecting ||
+          _state == TunnelState.failure) {
+        _state = TunnelState.noLink;
+        _failure = null;
+        _armReconnect();
+        notifyListeners();
+      }
+      return;
+    }
+    if (_state == TunnelState.noLink) {
+      if (!_userWantsTunnel || _busy || _stopping) return;
+      // Сеть вернулась — подымаемся сразу, не дожидаясь очереди проб.
+      _networkTimer?.cancel();
+      _networkTimer = Timer(networkSettle, _raiseAfterOutage);
+      return;
+    }
+    if (_state != TunnelState.on || _busy || _stopping) return;
+    _networkTimer?.cancel();
+    _networkTimer = Timer(networkSettle, _raiseTunnelOnNewNetwork);
+  }
+
+  /// Подъём туннеля после того, как связь появилась снова (МК-5).
+  Future<void> _raiseAfterOutage() async {
+    if (!_userWantsTunnel || _state == TunnelState.on || _busy || _stopping) {
+      return;
+    }
+    _addLog('Сеть появилась — туннель поднимается заново');
+    await disconnect();
+    await connect();
+  }
+
+  Future<void> _raiseTunnelOnNewNetwork() async {
+    if (_state != TunnelState.on || _busy || _stopping) return;
+    _addLog('Сеть сменилась — туннель поднимается заново');
+    await disconnect();
+    await connect();
+  }
+
+  /// Шаг, который пользователь видит сам: сколько попыток переподключения
+  /// использовано из лестницы 1–5–30 минут.
+  int get reconnectStep => _reconnect.step;
+
+  /// Живёт ли ещё план переподключения.
+  bool get isReconnecting =>
+      _probeTimer?.isActive == true || _subscriptionTimer?.isActive == true;
+
+  /// Ставит в очередь переподключение (МК-5): проба туннеля раз в 30 секунд
+  /// плюс перечитывание подписки по паузам 1–5–30 минут.
+  void _armReconnect() {
+    if (!_userWantsTunnel || _stopping) return;
+    _probeTimer?.cancel();
+    _probeTimer = Timer(_reconnect.probeInterval, _probeLink);
+    if (_reconnect.exhausted || (_subscriptionTimer?.isActive ?? false)) return;
+    _subscriptionTimer?.cancel();
+    _subscriptionTimer = Timer(_reconnect.takePause(), _rereadSubscription);
+  }
+
+  Future<void> _probeLink() async {
+    if (!_userWantsTunnel || _busy || _stopping) return;
+    if (_state == TunnelState.noLink) {
+      // Сети нет совсем: туннель поднимает возврат связи, а не проба.
+      // Очередь держим на случай, если поток сети смолчит.
+      _armReconnect();
+      return;
+    }
+    if (_state == TunnelState.on) return;
+    _addLog('Проба связи: подключаемся снова');
+    await connect();
+  }
+
+  /// Пауза подписки: перечитать подписку и, если туннель ещё лежит, поднять
+  /// его. Успешный подъём сам гасит очередь (см. connect), поэтому повторное
+  /// вооружение здесь не нужно.
+  Future<void> _rereadSubscription() async {
+    if (!_userWantsTunnel || _busy || _stopping) return;
+    _addLog('Перечитываем подписку после сбоя');
+    await refreshDue();
+    if (_state == TunnelState.on || _state == TunnelState.noLink) return;
+    await connect();
+  }
+
+  void _stopReconnectTimers() {
+    _probeTimer?.cancel();
+    _subscriptionTimer?.cancel();
+    _probeTimer = null;
+    _subscriptionTimer = null;
+  }
+
+  /// Тап по ссылке подключения вне приложения: окно открывается уже с новым
+  /// профилем, поэтому экран в этом не участвует и подтверждения не просит.
+  void _onDeepLink(String link) => unawaited(_addFromDeepLink(link));
+
+  Future<void> _addFromDeepLink(String link) async {
+    final reason = await addFromText(link);
+    // Ссылка держит ключ узла, а причина отказа повторяет саму строку:
+    // в журнал она попадает только через маскирование.
+    _addLog(
+      reason == null
+          ? 'Подключение добавлено по ссылке'
+          : maskSecrets('Ссылка не добавлена: $reason'),
+    );
+  }
+
   void _onStatus(bool running) {
     if (running) {
       _state = TunnelState.on;
@@ -365,9 +734,10 @@ class AppState extends ChangeNotifier {
       _state = TunnelState.failure;
       _failure = const Failure(
         'Соединение прервано',
-        'Подключитесь снова: профиль сохранён',
+        'Подключитесь снова или обновите подписку',
       );
       _addLog('[ERR] Соединение прервано');
+      _armReconnect();
     }
     notifyListeners();
   }
@@ -399,6 +769,10 @@ class AppState extends ChangeNotifier {
   void dispose() {
     _logSubscription?.cancel();
     _statusSubscription?.cancel();
+    _networkTimer?.cancel();
+    _networkSubscription?.cancel();
+    _stopReconnectTimers();
+    _deepLinkSubscription?.cancel();
     _chat?.dispose();
     unawaited(_core.dispose());
     unawaited(clearWorkingDirectory());

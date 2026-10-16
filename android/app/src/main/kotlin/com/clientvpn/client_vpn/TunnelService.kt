@@ -29,6 +29,7 @@ class TunnelService : VpnService() {
         const val ACTION_START = "com.clientvpn.client_vpn.START"
         const val ACTION_STOP = "com.clientvpn.client_vpn.STOP"
         const val TUNNEL_CONFIG = "tunnel-config.json"
+        const val APPS_FILE = "tunnel-apps.txt"
         const val XRAY_LIB = "libxray.so"
 
         private const val SESSION = "КлиентВПН"
@@ -71,6 +72,9 @@ class TunnelService : VpnService() {
     private fun startTunnel() {
         if (process != null) {
             TunnelBus.log("Туннель уже поднят")
+            // Статус публикуется и здесь: интерфейс мог открыться заново и
+            // спросить разрешение именно этим вызовом.
+            TunnelBus.status(true)
             return
         }
 
@@ -109,6 +113,20 @@ class TunnelService : VpnService() {
             return
         }
 
+        // Правила «это приложение идёт напрямую» (R2.3). Ядро Xray не умеет
+        // условие по имени пакета — замер 16.10.2026: правило с `packageName`
+        // отвергается на старте («this rule has no effective fields»), поэтому
+        // отбор делает сам VpnService списком исключений.
+        for (app in excludedApps()) {
+            try {
+                builder.addDisallowedApplication(app)
+            } catch (e: Exception) {
+                // Приложение могло быть удалено после выбора: туннель из-за
+                // одного имени поднимать неверно.
+                TunnelBus.log("Не исключено из туннеля $app: ${e.message}")
+            }
+        }
+
         val descriptor = try {
             builder.establish()
         } catch (e: Exception) {
@@ -133,8 +151,17 @@ class TunnelService : VpnService() {
         }
     }
 
-    private fun launchXray(config: File) {
-        val xray = File(applicationInfo.nativeLibraryDir, XRAY_LIB)
+    /** Имена пакетов, выбранные пользователем как «напрямую». Одна строка на
+     *  приложение; файл пишет Dart перед подключением. */
+    private fun excludedApps(): List<String> {
+        val file = File(filesDir, APPS_FILE)
+        if (!file.exists()) return emptyList()
+        return file.readLines()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() && it != packageName }
+    }
+
+    private fun launchXray(config: File) {        val xray = File(applicationInfo.nativeLibraryDir, XRAY_LIB)
         if (!xray.exists()) {
             throw IllegalStateException("ядро не найдено в ${xray.parent}")
         }

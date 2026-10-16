@@ -1,7 +1,9 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'app_state.dart';
+import 'l10n/app_localizations.dart';
 import 'log_screen.dart';
 import 'profile_store.dart';
 import 'provider.dart';
@@ -11,8 +13,9 @@ import 'support_chat_screen.dart';
 
 /// Главный экран: состояние туннеля, список подключений и добавление новых.
 ///
-/// Журнал и способ входа сырым файлом убраны отсюда: первый экран отвечает на
-/// вопрос «подключено ли», а не «что пишет ядро».
+/// Настройки, журнал-инструменты и «что куда идёт» живут на экране настроек:
+/// первый экран отвечает на вопрос «подключено ли», а не «как маршрутизирован
+/// трафик».
 class HomeScreen extends StatefulWidget {
   const HomeScreen({required this.state, super.key});
 
@@ -44,35 +47,45 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final empty = _state.profiles.isEmpty;
+    final l = AppLocalizations.of(context);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('КлиентВПН'),
+        title: Text(l.appTitle),
         centerTitle: true,
-        leading: IconButton(
-          tooltip: 'Настройки',
-          icon: const Icon(Icons.settings_outlined),
-          onPressed: _openSettings,
+        // Редкие действия — слева, частые — справа: настройки и журнал нужны не
+        // каждый день, а добавление подключения и чат поддержки живут на
+        // переднем плане. По две кнопки с каждой стороны, заголовок по центру.
+        leadingWidth: 96,
+        leading: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              tooltip: l.tooltipSettings,
+              icon: const Icon(Icons.settings_outlined),
+              onPressed: _openSettings,
+            ),
+            IconButton(
+              tooltip: l.tooltipLog,
+              icon: const Icon(Icons.article_outlined),
+              onPressed: _openLog,
+            ),
+          ],
         ),
         actions: [
           if (!empty && _state.activeProvider != null)
             IconButton(
-              tooltip: 'Обновить подписку',
+              tooltip: l.tooltipRefreshSubscription,
               icon: const Icon(Icons.refresh),
               onPressed: _state.isBusy ? null : _refreshActive,
             ),
           IconButton(
-            tooltip: 'Добавить подключение',
+            tooltip: l.tooltipAddConnection,
             icon: const Icon(Icons.add),
             onPressed: _state.isBusy ? null : _showAddSheet,
           ),
           IconButton(
-            tooltip: 'Журнал',
-            icon: const Icon(Icons.article_outlined),
-            onPressed: _openLog,
-          ),
-          IconButton(
-            tooltip: 'Поддержка',
+            tooltip: l.tooltipSupport,
             icon: const Icon(Icons.forum_outlined),
             onPressed: _openChat,
           ),
@@ -152,10 +165,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _select(String id) async {
     if (_state.isConnected) {
-      final leave = await _confirm(
-        'Сменить подключение?',
-        'Туннель будет отключён, а затем поднят заново из нового профиля.',
-      );
+      final l = AppLocalizations.of(context);
+      final leave = await _confirm(l.switchProfileTitle, l.switchProfileBody);
       if (!leave) return;
       await _state.disconnect();
     }
@@ -163,8 +174,9 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _refreshActive() async {
+    final l = AppLocalizations.of(context);
     final error = await _state.refreshActive();
-    _notify(error ?? 'Подписка обновлена');
+    _notify(error ?? l.subscriptionUpdated);
   }
 
   /// Смена страны рвёт установленные соединения, поэтому на поднятом туннеле
@@ -175,11 +187,8 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
 
-    final leave = await _confirm(
-      'Сменить страну выхода?',
-      'Туннель будет поднят заново через другую страну. '
-          'Открытые соединения прервутся.',
-    );
+    final l = AppLocalizations.of(context);
+    final leave = await _confirm(l.switchRegionTitle, l.switchRegionBody);
     if (!leave) return;
     await _state.disconnect();
     await _state.selectRegion(key);
@@ -187,24 +196,25 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _rename(StoredProfile profile) async {
+    final l = AppLocalizations.of(context);
     final controller = TextEditingController(text: profile.name);
     final name = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Название подключения'),
+        title: Text(l.renameTitle),
         content: TextField(
           controller: controller,
           autofocus: true,
-          decoration: const InputDecoration(hintText: 'Например: рабочий'),
+          decoration: InputDecoration(hintText: l.renameHint),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Отмена'),
+            child: Text(l.buttonCancel),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, controller.text),
-            child: const Text('Сохранить'),
+            child: Text(l.buttonSave),
           ),
         ],
       ),
@@ -214,15 +224,17 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _remove(StoredProfile profile) async {
+    final l = AppLocalizations.of(context);
     final confirmed = await _confirm(
-      'Удалить «${profile.name}»?',
-      'Подключение и сохранённый кэш подписки будут удалены.',
+      l.removeProfileTitle(profile.name),
+      l.removeProfileBody,
     );
     if (!confirmed) return;
     await _state.remove(profile.id);
   }
 
   Future<bool> _confirm(String title, String text) async {
+    final l = AppLocalizations.of(context);
     final result = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -231,11 +243,11 @@ class _HomeScreenState extends State<HomeScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Отмена'),
+            child: Text(l.buttonCancel),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Продолжить'),
+            child: Text(l.buttonContinue),
           ),
         ],
       ),
@@ -247,7 +259,8 @@ class _HomeScreenState extends State<HomeScreen> {
     Navigator.push(
       context,
       MaterialPageRoute<void>(
-          builder: (context) => SettingsScreen(state: _state)),
+        builder: (context) => SettingsScreen(state: _state),
+      ),
     );
   }
 
@@ -280,6 +293,7 @@ class _HomeScreenState extends State<HomeScreen> {
   /// Нижняя панель добавления: способ входа выбирается на месте, контекст
   /// главного экрана не теряется.
   Future<void> _showAddSheet() async {
+    final l = AppLocalizations.of(context);
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -288,18 +302,20 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Padding(
-                padding: EdgeInsets.fromLTRB(24, 0, 24, 8),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
                 child: Text(
-                  'Добавьте подключение любого провайдера',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                  l.addSheetTitle,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
               ListTile(
                 leading: const Icon(Icons.link),
-                title: const Text('Ссылка или подписка'),
-                subtitle:
-                    const Text('Вставьте ключ, список ключей или подписку'),
+                title: Text(l.addLinkTitle),
+                subtitle: Text(l.addLinkSubtitle),
                 onTap: () async {
                   Navigator.pop(context);
                   await _addFromText();
@@ -307,9 +323,8 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               ListTile(
                 leading: const Icon(Icons.rss_feed),
-                title: const Text('Подписка по адресу'),
-                subtitle:
-                    const Text('Обновляется сама по интервалу провайдера'),
+                title: Text(l.addUrlTitle),
+                subtitle: Text(l.addUrlSubtitle),
                 onTap: () async {
                   Navigator.pop(context);
                   await _addSubscription();
@@ -317,12 +332,12 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               ListTile(
                 leading: const Icon(Icons.file_open),
-                title: const Text('Файл config.json'),
-                subtitle: const Text('Для опытных: полный конфиг ядра'),
+                title: Text(l.addFileTitle),
+                subtitle: Text(l.addFileSubtitle),
                 onTap: () async {
                   Navigator.pop(context);
                   final error = await _state.addFile();
-                  _notify(error ?? 'Файл добавлен');
+                  _notify(error ?? l.fileAdded);
                 },
               ),
               const SizedBox(height: 8),
@@ -334,31 +349,32 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _addFromText() async {
+    final l = AppLocalizations.of(context);
     final controller = TextEditingController();
     final text = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Ссылка или подписка'),
+        title: Text(l.addLinkTitle),
         content: SizedBox(
           width: 460,
           child: TextField(
             controller: controller,
             maxLines: 6,
             autofocus: true,
-            decoration: const InputDecoration(
-              hintText: 'vless://… или несколько строк, или подписка в base64',
-              border: OutlineInputBorder(),
+            decoration: InputDecoration(
+              hintText: l.addLinkHint,
+              border: const OutlineInputBorder(),
             ),
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Отмена'),
+            child: Text(l.buttonCancel),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, controller.text),
-            child: const Text('Добавить'),
+            child: Text(l.buttonAdd),
           ),
         ],
       ),
@@ -366,32 +382,33 @@ class _HomeScreenState extends State<HomeScreen> {
     if (text == null) return;
 
     final error = await _state.addFromText(text);
-    _notify(error ?? 'Подключение добавлено');
+    _notify(error ?? l.connectionAdded);
   }
 
   Future<void> _addSubscription() async {
+    final l = AppLocalizations.of(context);
     final controller = TextEditingController();
     final url = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Подписка по адресу'),
+        title: Text(l.addUrlTitle),
         content: TextField(
           controller: controller,
           autofocus: true,
           keyboardType: TextInputType.url,
-          decoration: const InputDecoration(
-            hintText: 'https://провайдер.example/подписка',
-            border: OutlineInputBorder(),
+          decoration: InputDecoration(
+            hintText: l.addUrlHint,
+            border: const OutlineInputBorder(),
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Отмена'),
+            child: Text(l.buttonCancel),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, controller.text),
-            child: const Text('Получить'),
+            child: Text(l.buttonFetch),
           ),
         ],
       ),
@@ -399,7 +416,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (url == null) return;
 
     final error = await _state.addSubscription(url);
-    _notify(error ?? 'Подписка добавлена');
+    _notify(error ?? l.subscriptionAdded);
   }
 }
 
@@ -453,6 +470,7 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     // Круглая кнопка отняла место у объяснения: в маленьком окне текст
     // должен прокручиваться, а не выходить за границы Column.
     return Center(
@@ -473,15 +491,13 @@ class _EmptyState extends StatelessWidget {
                 ),
                 const SizedBox(height: 20),
                 Text(
-                  'Быстрый доступ в интернет',
+                  l.emptyTitle,
                   style: Theme.of(context).textTheme.headlineSmall,
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'Добавьте ключ от вашего провайдера или адрес подписки — '
-                  'клиент сам соберёт подключение. Своих серверов у клиента нет, '
-                  'он работает с любым провайдером.',
+                  l.emptyBody,
                   style: Theme.of(context).textTheme.bodyMedium,
                   textAlign: TextAlign.center,
                 ),
@@ -491,9 +507,9 @@ class _EmptyState extends StatelessWidget {
                   child: FilledButton.icon(
                     onPressed: onAdd,
                     icon: const Icon(Icons.add),
-                    label: const Text(
-                      'Добавить подключение',
-                      style: TextStyle(fontSize: 16),
+                    label: Text(
+                      l.emptyAddButton,
+                      style: const TextStyle(fontSize: 16),
                     ),
                   ),
                 ),
@@ -525,26 +541,28 @@ class _ProfileCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+
     return Card(
       color: selected ? Theme.of(context).colorScheme.secondaryContainer : null,
       child: ListTile(
         onTap: onSelect,
         leading: Icon(_iconOf(profile.kind)),
         title: Text(
-          profile.name.isEmpty ? 'Без названия' : profile.name,
+          profile.name.isEmpty ? l.profileUntitled : profile.name,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
-        subtitle: Text(_subtitleOf(profile, provider)),
+        subtitle: Text(_subtitleOf(l, profile, provider)),
         trailing: PopupMenuButton<String>(
-          tooltip: 'Действия',
+          tooltip: l.tooltipActions,
           onSelected: (value) {
             if (value == 'rename') onRename();
             if (value == 'remove') onRemove();
           },
-          itemBuilder: (context) => const [
-            PopupMenuItem(value: 'rename', child: Text('Переименовать')),
-            PopupMenuItem(value: 'remove', child: Text('Удалить')),
+          itemBuilder: (context) => [
+            PopupMenuItem(value: 'rename', child: Text(l.menuRename)),
+            PopupMenuItem(value: 'remove', child: Text(l.menuDelete)),
           ],
         ),
       ),
@@ -552,24 +570,28 @@ class _ProfileCard extends StatelessWidget {
   }
 
   IconData _iconOf(ProfileKind kind) => switch (kind) {
-        ProfileKind.links => Icons.key_outlined,
-        ProfileKind.subscription => Icons.rss_feed,
-        ProfileKind.file => Icons.description_outlined,
-      };
+    ProfileKind.links => Icons.key_outlined,
+    ProfileKind.subscription => Icons.rss_feed,
+    ProfileKind.file => Icons.description_outlined,
+  };
 
-  String _subtitleOf(StoredProfile profile, Provider? provider) {
+  String _subtitleOf(
+    AppLocalizations l,
+    StoredProfile profile,
+    Provider? provider,
+  ) {
     final count = profile.links.length;
     final usage = provider?.usage;
     final left = usage?.remaining;
 
     return switch (profile.kind) {
-      ProfileKind.file => 'Файл ядра',
-      ProfileKind.links => count == 1 ? 'Один профиль' : '$count профилей',
-      ProfileKind.subscription => left == null
-          ? (count == 1
-              ? 'Подписка · один профиль'
-              : 'Подписка · $count профилей')
-          : 'Подписка · осталось ${_megabytes(left)} МБ',
+      ProfileKind.file => l.profileKindFile,
+      ProfileKind.links =>
+        count == 1 ? l.profileCountOne : l.profileCountMany(count),
+      ProfileKind.subscription =>
+        left == null
+            ? (count == 1 ? l.subscriptionOne : l.subscriptionMany(count))
+            : l.subscriptionLeftMb(_megabytes(left)),
     };
   }
 
@@ -598,6 +620,7 @@ class _RegionPicker extends StatelessWidget {
         ? selected!
         : regions.first.key;
     final region = regions.firstWhere((r) => r.key == current);
+    final l = AppLocalizations.of(context);
 
     return InkWell(
       borderRadius: BorderRadius.circular(8),
@@ -608,12 +631,10 @@ class _RegionPicker extends StatelessWidget {
           children: [
             const Icon(Icons.public, size: 20),
             const SizedBox(width: 8),
-            const Text('Страна выхода'),
+            Text(l.regionTitle),
             const SizedBox(width: 8),
             const Spacer(),
-            Flexible(
-              child: _CountryLabel(region),
-            ),
+            Flexible(child: _CountryLabel(region)),
             const Icon(Icons.keyboard_arrow_down, size: 20),
           ],
         ),
@@ -622,6 +643,7 @@ class _RegionPicker extends StatelessWidget {
   }
 
   void _openList(BuildContext context, String current) {
+    final l = AppLocalizations.of(context);
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -630,16 +652,17 @@ class _RegionPicker extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(16, 4, 16, 8),
-              child: Text('Страна выхода'),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+              child: Text(l.regionTitle),
             ),
             for (final region in regions)
               ListTile(
                 title: _CountryLabel(region),
-                subtitle: Text('Профилей: ${region.links.length}'),
-                trailing:
-                    region.key == current ? const Icon(Icons.check) : null,
+                subtitle: Text(l.regionProfileCount(region.links.length)),
+                trailing: region.key == current
+                    ? const Icon(Icons.check)
+                    : null,
                 onTap: () {
                   Navigator.pop(sheetContext);
                   if (region.key != current) onChanged(region.key);
@@ -665,11 +688,11 @@ class _CountryLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Text(
-        defaultTargetPlatform == TargetPlatform.windows || region.flag.isEmpty
-            ? region.name
-            : region.label,
-        overflow: TextOverflow.ellipsis,
-      );
+    defaultTargetPlatform == TargetPlatform.windows || region.flag.isEmpty
+        ? region.name
+        : region.label,
+    overflow: TextOverflow.ellipsis,
+  );
 }
 
 /// Круглая кнопка подключения: цвет и кольцо показывают состояние,
@@ -695,45 +718,61 @@ class _ConnectOrbState extends State<_ConnectOrb> {
     if (mounted) setState(() => _pressed = value);
   }
 
+  /// Переключение туннеля меняет сетевой путь всего устройства, поэтому нажатие
+  /// подтверждается осязанием: пользователю важно почувствовать команду, когда
+  /// экран не виден (карман, рука на руле).
+  void _tap() {
+    HapticFeedback.mediumImpact();
+    widget.onPressed();
+  }
+
   @override
   Widget build(BuildContext context) {
     final connecting = _state.state == TunnelState.connecting;
     final connected = _state.isConnected;
     final failed = _state.state == TunnelState.failure;
     final colors = Theme.of(context).colorScheme;
+    final l = AppLocalizations.of(context);
 
     // Во время подключения диск занят: canConnect уже исключает этот кадр.
     final enabled = _state.canConnect || connected;
 
     final (fill, ring, glyph, glow, caption) = switch (_state.state) {
       TunnelState.on => (
-          colors.primary,
-          colors.primary.withValues(alpha: 0.35),
-          Colors.white,
-          colors.primary.withValues(alpha: 0.40),
-          'Отключить',
-        ),
+        colors.primary,
+        colors.primary.withValues(alpha: 0.35),
+        Colors.white,
+        colors.primary.withValues(alpha: 0.40),
+        l.orbDisconnect,
+      ),
       TunnelState.connecting => (
-          colors.primaryContainer,
-          colors.primary.withValues(alpha: 0.55),
-          colors.onPrimaryContainer,
-          colors.primary.withValues(alpha: 0.18),
-          'Подключение…',
-        ),
+        colors.primaryContainer,
+        colors.primary.withValues(alpha: 0.55),
+        colors.onPrimaryContainer,
+        colors.primary.withValues(alpha: 0.18),
+        l.statusConnecting,
+      ),
       TunnelState.failure => (
-          colors.errorContainer,
-          colors.error.withValues(alpha: 0.45),
-          colors.onErrorContainer,
-          colors.error.withValues(alpha: 0.18),
-          'Подключить снова',
-        ),
+        colors.errorContainer,
+        colors.error.withValues(alpha: 0.45),
+        colors.onErrorContainer,
+        colors.error.withValues(alpha: 0.18),
+        l.orbRetry,
+      ),
+      TunnelState.noLink => (
+        colors.errorContainer,
+        colors.error.withValues(alpha: 0.45),
+        colors.onErrorContainer,
+        colors.error.withValues(alpha: 0.18),
+        l.orbRetry,
+      ),
       TunnelState.off => (
-          colors.surfaceContainerHighest,
-          colors.outline,
-          colors.onSurfaceVariant,
-          Colors.transparent,
-          'Подключить',
-        ),
+        colors.surfaceContainerHighest,
+        colors.outline,
+        colors.onSurfaceVariant,
+        Colors.transparent,
+        l.orbConnect,
+      ),
     };
 
     return Semantics(
@@ -742,7 +781,7 @@ class _ConnectOrbState extends State<_ConnectOrb> {
       label: caption,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: enabled ? widget.onPressed : null,
+        onTap: enabled ? _tap : null,
         onTapDown: enabled ? (_) => _press(true) : null,
         onTapUp: (_) => _press(false),
         onTapCancel: () => _press(false),
@@ -790,8 +829,8 @@ class _ConnectOrbState extends State<_ConnectOrb> {
                         connecting
                             ? Icons.hourglass_top
                             : failed
-                                ? Icons.refresh
-                                : Icons.power_settings_new,
+                            ? Icons.refresh
+                            : Icons.power_settings_new,
                         key: ValueKey(_state.state),
                         size: connecting ? 34 : 52,
                         color: glyph,
@@ -808,9 +847,9 @@ class _ConnectOrbState extends State<_ConnectOrb> {
                 caption,
                 key: ValueKey(_state.state),
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: enabled ? null : colors.outline,
-                    ),
+                  fontWeight: FontWeight.w600,
+                  color: enabled ? null : colors.outline,
+                ),
               ),
             ),
           ],
@@ -827,34 +866,43 @@ class _StatusLine extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final (text, color, icon) = switch (state.state) {
       TunnelState.on => (
-          'Защищено',
-          Colors.green.shade700,
-          Icons.verified_user_outlined,
-        ),
+        l.statusProtected,
+        Colors.green.shade700,
+        Icons.verified_user_outlined,
+      ),
       TunnelState.connecting => (
-          'Подключение…',
-          Theme.of(context).colorScheme.primary,
-          Icons.hourglass_top,
-        ),
+        l.statusConnecting,
+        Theme.of(context).colorScheme.primary,
+        Icons.hourglass_top,
+      ),
       TunnelState.failure => (
-          'Сбой',
-          Theme.of(context).colorScheme.error,
-          Icons.error_outline,
-        ),
+        l.statusFailed,
+        Theme.of(context).colorScheme.error,
+        Icons.error_outline,
+      ),
+      TunnelState.noLink => (
+        l.statusNoLink,
+        Theme.of(context).colorScheme.error,
+        Icons.wifi_off,
+      ),
       TunnelState.off => (
-          'Отключено',
-          Theme.of(context).colorScheme.outline,
-          Icons.shield_outlined,
-        ),
+        l.statusOff,
+        Theme.of(context).colorScheme.outline,
+        Icons.shield_outlined,
+      ),
     };
 
     return Row(
       children: [
         Icon(icon, size: 18, color: color),
         const SizedBox(width: 8),
-        Text(text, style: TextStyle(color: color, fontWeight: FontWeight.w600)),
+        Text(
+          text,
+          style: TextStyle(color: color, fontWeight: FontWeight.w600),
+        ),
         if (state.endpoint != null && state.isConnected) ...[
           const Spacer(),
           Flexible(

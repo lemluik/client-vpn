@@ -9,12 +9,24 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
   crypto: ^3.0.6
+  # Прямая зависимость: FFI-обёртки Win32 (мьютекс, Job Object) работают с
+  # `calloc` и `Utf16`. Пакет и так был в графе через flutter_secure_storage.
+  ffi: ^2.2.0
   file_picker: ^13.1.0
   flutter_secure_storage: ^11.2.0
   path: ^1.9.0
   shared_preferences: ^2.3.4
   window_manager: ^0.5.2
+  connectivity_plus: ^7.3.2
+  intl: ^0.20.3
+  # 1.9.0 — последняя ветка, отдающая ColorScheme из Flutter: в 2.x палитра
+  # приходит из пакета material_ui с собственным типом схемы, несовместимым
+  # с ThemeData текущей версии Flutter.
+  dynamic_color: 1.9.0
+  tray_manager: 0.5.2
 
 dev_dependencies:
   flutter_test:
@@ -23,3 +35,13 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  # Строки интерфейса генерируются из lib/l10n по l10n.yaml.
+  generate: true
+  assets:
+    # Иконка для трея: Windows берёт её файлом, поэтому при старте она
+    # выгружается из бандла во временный каталог.
+    - assets/tray/tray.ico
+    # Экран «О программе» показывает лицензионные файлы целиком, поэтому они
+    # лежат в бандле (пункт У-6: пользователь обязан получить LICENSE и NOTICE).
+    - LICENSE
+    - NOTICE

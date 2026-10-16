@@ -7,3 +7,12 @@ updates:
     open-pull-requests-limit: 5
     commit-message:
       prefix: "chore(deps)"
+  # версии actions в workflow зафиксированы тегом — их тоже нужно обновлять,
+  # пока есть CI, который проверяет такой pull request
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(ci)"

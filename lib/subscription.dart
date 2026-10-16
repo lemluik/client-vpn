@@ -9,6 +9,12 @@ const String _intervalHeader = 'profile-update-interval';
 const String _usageHeader = 'subscription-userinfo';
 const String _supportHeader = 'support-url';
 
+/// Флаг заморозки: `x-sub-status: frozen`. Провайдер включает его на время
+/// миграции узла и отдаёт последнюю хорошую версию; клиент в это время
+/// обновлений не применяет (МК-5).
+const String _subStatusHeader = 'x-sub-status';
+const String _frozenValue = 'frozen';
+
 /// Настройки чата поддержки приходят теми же заголовками, что и остальное:
 /// адрес узла Matrix и комната. В код клиента адреса провайдера не вписываются.
 const String _chatHomeserverHeader = 'chat-homeserver';
@@ -82,6 +88,7 @@ class Subscription {
     this.chatHomeserver,
     this.chatRoomId,
     this.usage,
+    this.frozen = false,
   });
 
   final List<ShareLink> links;
@@ -103,6 +110,9 @@ class Subscription {
   final String? chatRoomId;
 
   final SubscriptionUsage? usage;
+
+  /// Провайдер заморозил версию подписки (`x-sub-status: frozen`).
+  final bool frozen;
 
   bool get isEmpty => links.isEmpty;
 }
@@ -132,6 +142,7 @@ Subscription parseSubscription(
     chatHomeserver: _nonEmpty(normalized[_chatHomeserverHeader]),
     chatRoomId: _nonEmpty(normalized[_chatRoomHeader]),
     usage: SubscriptionUsage.parse(normalized[_usageHeader]),
+    frozen: (normalized[_subStatusHeader] ?? '').trim().toLowerCase() == _frozenValue,
   );
 }
 

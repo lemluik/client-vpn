@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:client_vpn/proxy_config.dart';
 import 'package:client_vpn/tun_config.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -21,13 +22,17 @@ Map<String, dynamic> build(String source) =>
 
 void main() {
   group('buildTunConfig', () {
-    test('заменяет локальные inbound на tun', () {
+    test('вместо inbound пользователя поднимает tun и локальный вход приложения', () {
       final inbounds = build(userConfig)['inbounds'] as List;
 
-      expect(inbounds, hasLength(1));
-      expect(inbounds.single['protocol'], 'tun');
-      expect(inbounds.single['tag'], 'tun-in');
-      expect((inbounds.single['settings'] as Map)['MTU'], 1500);
+      expect(inbounds.map((inbound) => inbound['tag']), ['tun-in', 'cvpn-app']);
+      final tun = inbounds.first as Map;
+      expect(tun['protocol'], 'tun');
+      expect((tun['settings'] as Map)['MTU'], 1500);
+      final app = inbounds[1] as Map;
+      expect(app['protocol'], 'http');
+      expect(app['listen'], '127.0.0.1');
+      expect(app['port'], appProxyEndpoint().port);
     });
 
     test('сохраняет исходящие серверы пользователя', () {
@@ -175,7 +180,28 @@ void main() {
       expect(routing['balancers'], hasLength(1));
       expect(routing['rules'][0],
           {'type': 'field', 'network': 'tcp,udp', 'balancerTag': 'lb'},);
-      // завершающее «всё в прокси» дописывается после правил пользователя
+      // завершающее «всё в прокси» ведёт на балансировщик, который управляет
+      // этим узлом, а не на метку самого узла
+      expect(
+        (routing['rules'].last as Map),
+        {'type': 'field', 'network': 'tcp,udp', 'balancerTag': 'lb'},
+      );
+    });
+
+    test('балансировщик без нашего узла в selector завершающее правило не берёт',
+        () {
+      const source = '''
+      {
+        "outbounds": [{"protocol": "vless", "tag": "proxy-a"}],
+        "routing": {
+          "balancers": [{"tag": "lb", "selector": ["proxy-z"]}],
+          "rules": []
+        }
+      }
+      ''';
+      final routing = build(source)['routing'] as Map;
+
+      expect(routing['balancers'], hasLength(1));
       expect((routing['rules'].last as Map)['outboundTag'], 'proxy-a');
     });
 
@@ -201,7 +227,7 @@ void main() {
   });
 
   group('tunConfigForTest', () {
-    test('заменяет tun inbound на локальный socks, остальное не трогает', () {
+    test('заменяет tun inbound на локальный socks, вход приложения сохраняет', () {
       const source = '''
       {
         "outbounds": [{"protocol": "vless", "tag": "proxy"}],
@@ -214,9 +240,10 @@ void main() {
           as Map<String, dynamic>;
       final inbounds = forTest['inbounds'] as List;
 
-      expect(inbounds, hasLength(1));
-      expect(inbounds.single['protocol'], 'socks');
-      expect(inbounds.single['listen'], '127.0.0.1');
+      expect(inbounds, hasLength(2));
+      expect(inbounds.first['protocol'], 'socks');
+      expect(inbounds.first['listen'], '127.0.0.1');
+      expect(inbounds[1]['tag'], 'cvpn-app');
       expect(forTest['dns'], {
         'servers': ['1.1.1.1'],
       });
@@ -246,6 +273,32 @@ void main() {
 
       expect(sniffing['enabled'], true);
       expect(sniffing['destOverride'], ['http', 'tls']);
+    });
+  });
+
+  group('локальный вход приложения (ТД-15)', () {
+    test('слушает только петлевой адрес и тот же порт, что видит приложение', () {
+      final inbound = appProxyInbound();
+      final endpoint = appProxyEndpoint();
+
+      expect(inbound['protocol'], 'http');
+      expect(inbound['listen'], '127.0.0.1');
+      expect(inbound['port'], endpoint.port);
+      expect(endpoint.protocol, 'http');
+    });
+
+    test('из собранного конфига читается тем же разборщиком, что и на десктопе', () {
+      expect(parseProxyInbound(buildTunConfig(userConfig)), appProxyEndpoint());
+    });
+
+    test('вход пользователя отброшен, порт локального входа один', () {
+      final inbounds = build(userConfig)['inbounds'] as List;
+
+      expect(inbounds.map((inbound) => inbound['tag']), ['tun-in', 'cvpn-app']);
+      expect(
+        inbounds.map((inbound) => inbound['port']).whereType<int>().toList(),
+        [appProxyEndpoint().port],
+      );
     });
   });
 }

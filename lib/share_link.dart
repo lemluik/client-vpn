@@ -157,7 +157,7 @@ class ShareLink {
     return {
       ...outbound,
       'streamSettings': _streamSettings(),
-      if (tag != null) 'tag': tag,
+      'tag': ?tag,
     };
   }
 

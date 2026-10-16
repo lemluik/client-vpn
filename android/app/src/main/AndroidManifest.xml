@@ -9,6 +9,9 @@
     <application
         android:label="КлиентВПН"
         android:name="${applicationName}"
+        android:allowBackup="false"
+        android:fullBackupContent="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:icon="@mipmap/ic_launcher">
         <activity
             android:name=".MainActivity"
@@ -30,6 +33,17 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+            <!-- Глубокая ссылка по стандартным схемам протоколов: тап в
+                 браузере или мессенджере открывает этого клиента и передаёт
+                 ссылку через MainActivity. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="vless"/>
+                <data android:scheme="trojan"/>
+                <data android:scheme="vmess"/>
             </intent-filter>
         </activity>
 
@@ -72,6 +86,12 @@
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
+        </intent>
+        <!-- Список приложений для правила «идёт напрямую» (R2.3): видим только
+             запускаемые экраны, без QUERY_ALL_PACKAGES. -->
+        <intent>
+            <action android:name="android.intent.action.MAIN"/>
+            <category android:name="android.intent.category.LAUNCHER"/>
         </intent>
     </queries>
 </manifest>

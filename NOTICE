@@ -24,17 +24,46 @@ This product includes software developed by third parties.
    License: BSD 3-Clause
    Source: https://github.com/flutter/flutter
            https://github.com/dart-lang/sdk
+   This includes the SDK packages used by the application: flutter and
+   flutter_localizations.
 
 3. Dart packages used by this application.
    Versions are locked in pubspec.lock, licenses verified against pub.dev:
 
-   | Package            | Version | License      | Copyright                     |
-   |--------------------|---------|--------------|-------------------------------|
-   | crypto             | 3.0.7   | BSD-3-Clause | The Dart Authors              |
-   | path               | 1.9.1   | BSD-3-Clause | The Dart Authors              |
-   | shared_preferences | 2.5.6   | BSD-3-Clause | The Flutter Authors           |
-   | file_picker        | 13.1.0  | MIT          | the package authors           |
-   | window_manager     | 0.5.2   | MIT          | the package authors           |
+   | Package                                | Version | License      | Copyright                   |
+   |----------------------------------------|---------|--------------|-----------------------------|
+   | crypto                                 | 3.0.7   | BSD-3-Clause | The Dart Authors            |
+   | path                                   | 1.9.1   | BSD-3-Clause | The Dart Authors            |
+   | intl                                   | 0.20.3  | BSD-3-Clause | The Dart Authors            |
+   | shared_preferences                     | 2.5.6   | BSD-3-Clause | The Flutter Authors         |
+   | connectivity_plus                      | 7.3.2   | BSD-3-Clause | The Chromium Authors        |
+   | connectivity_plus_platform_interface   | 2.1.0   | BSD-3-Clause | The Chromium Authors        |
+   | flutter_secure_storage                 | 11.2.0  | BSD-3-Clause | the package authors         |
+   | file_picker                            | 13.1.0  | MIT          | the package authors         |
+   | window_manager                         | 0.5.2   | MIT          | the package authors         |
+   | dynamic_color                          | 1.9.0   | Apache-2.0   | Material Foundation Authors |
+   | ffi                                    | 2.2.0   | MIT          | the package authors         |
+   | tray_manager                           | 0.5.2   | MIT          | LiJianying                  |
+   | menu_base                              | 0.1.1   | MIT          | LiJianying                  |
+   | shortid                                | 0.1.2   | BSD-3-Clause | 0xff00ff                    |
+   | material_color_utilities               | 0.13.0  | Apache-2.0   | Material Foundation Authors |
+   | nm                                     | 0.6.0   | MPL-2.0      | the package authors         |
+
+   `material_color_utilities` is pulled in by `dynamic_color`; it was already
+   in the dependency graph through the Flutter SDK. The Apache License 2.0
+   text for both is reproduced in LICENSES/Apache-2.0.txt. Neither package
+   ships a NOTICE file of its own.
+
+   `nm` is pulled in by the Linux implementation of `connectivity_plus` only;
+   the Android and Windows builds of this application do not contain it. It is
+   used unmodified, so the Mozilla Public License obligations reach only the
+   unmodified upstream files.
+
+   `tray_manager` 0.5.2 was chosen over 0.8.0 on purpose: 0.8.0 forces
+   `objective_c` and `record_use` upgrades that touch the macOS port, and this
+   repository has no CI to re-verify them. Version 0.5.2 adds only
+   `menu_base` and `shortid`. `ffi` was already in the graph and became a
+   direct dependency for the Win32 wrappers (mutex, Job Object).
 
    Platform components used at runtime: the Android VpnService API
    (Apache License 2.0, part of the Android Open Source Project) and the

@@ -1,0 +1,223 @@
+{
+  "@@locale": "en",
+  "appTitle": "ClientVPN",
+  "tooltipRefreshSubscription": "Refresh subscription",
+  "tooltipAddConnection": "Add connection",
+  "tooltipSettings": "Settings",
+  "tooltipLog": "Log",
+  "tooltipSupport": "Support",
+  "tooltipActions": "Actions",
+  "buttonCancel": "Cancel",
+  "buttonContinue": "Continue",
+  "buttonSave": "Save",
+  "buttonAdd": "Add",
+  "buttonFetch": "Fetch",
+  "switchProfileTitle": "Switch connection?",
+  "switchProfileBody": "The tunnel will be turned off and raised again from the new profile.",
+  "switchRegionTitle": "Change the exit country?",
+  "switchRegionBody": "The tunnel will be raised again through another country. Open connections will drop.",
+  "restartForPresetTitle": "Reconnect?",
+  "restartForPresetBody": "The new rules work only in a connection raised again. Open connections will drop.",
+  "removeProfileTitle": "Delete “{name}”?",
+  "removeProfileBody": "The connection and its cached subscription will be deleted.",
+  "renameTitle": "Connection name",
+  "renameHint": "For example: work",
+  "addSheetTitle": "Add a connection from any provider",
+  "addLinkTitle": "Link or subscription",
+  "addLinkSubtitle": "Paste a key, a list of keys or a subscription",
+  "addUrlTitle": "Subscription by address",
+  "addUrlSubtitle": "Refreshes itself on the provider's interval",
+  "addFileTitle": "config.json file",
+  "addFileSubtitle": "For experts: a full kernel config",
+  "addLinkHint": "vless://… or several lines, or a base64 subscription",
+  "addUrlHint": "https://provider.example/subscription",
+  "probeTarget": "Probe target",
+  "probeTargetSubtitle": "Address the client measures node latency against",
+  "probeApplied": "Probe target saved",
+  "restartForProbeBody": "The new probe target works in a connection raised again. Open connections will drop.",
+  "presetOff": "Off",
+  "presetRu": "Russia directly",
+  "presetOffSubtitle": "All traffic goes through the connection",
+  "presetOnSubtitle": "The preset's sites open bypassing the connection",
+  "myRules": "My rules",
+  "myRulesEmpty": "No rules yet",
+  "myRulesCount": "Rules: {count}",
+  "@myRulesCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "presetSelected": "Preset “{name}” selected",
+  "presetApplied": "Preset “{name}” applied",
+  "subscriptionUpdated": "Subscription updated",
+  "fileAdded": "File added",
+  "connectionAdded": "Connection added",
+  "subscriptionAdded": "Subscription added",
+  "profileUntitled": "Untitled",
+  "menuRename": "Rename",
+  "menuDelete": "Delete",
+  "profileCountOne": "One profile",
+  "profileCountMany": "{count} profiles",
+  "regionProfileCount": "Profiles: {count}",
+  "subscriptionOne": "Subscription · one profile",
+  "subscriptionMany": "Subscription · {count} profiles",
+  "subscriptionLeftMb": "Subscription · {mb} MB left",
+  "regionTitle": "Exit country",
+  "statusProtected": "Protected",
+  "statusConnecting": "Connecting…",
+  "statusFailed": "Failure",
+  "statusNoLink": "No connection",
+  "statusOff": "Off",
+  "orbDisconnect": "Disconnect",
+  "orbConnect": "Connect",
+  "orbRetry": "Connect again",
+  "emptyTitle": "Quick access to the internet",
+  "emptyBody": "Add a key from your provider or a subscription address — the client builds the connection itself. The client has no servers of its own and works with any provider.",
+  "emptyAddButton": "Add connection",
+  "trayShowWindow": "Show window",
+  "trayQuit": "Quit",
+  "alreadyRunningTitle": "The client is already running",
+  "alreadyRunningBody": "The app is open in another window. A second window does not start: two instances would fight over the system proxy and break the connection.",
+  "alreadyRunningClose": "Close this window",
+  "windowHiddenToTray": "The client is in the tray: the connection stays up.",
+  "closeWindowSection": "On window close",
+  "closeWindowChoiceAsk": "Ask every time",
+  "closeWindowChoiceTray": "Minimize to tray",
+  "closeWindowChoiceQuit": "Quit",
+  "closeWindowTitle": "Close the window?",
+  "closeWindowBody": "Minimizing keeps the connection up and leaves the client in the tray. Quitting drops the tunnel and closes the app.",
+  "closeWindowTray": "Minimize to tray",
+  "closeWindowQuit": "Quit",
+  "closeWindowRemember": "Remember my choice",
+  "aboutTitle": "About",
+  "aboutVersion": "Version {version}",
+  "@aboutVersion": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "aboutRepository": "Source code and releases: github.com/lemluik/client-vpn",
+  "aboutLicense": "License",
+  "aboutLicenseSubtitle": "Mozilla Public License 2.0",
+  "aboutNotices": "Third-party notices",
+  "aboutNoticesSubtitle": "Third-party libraries and their licenses",
+  "aboutNoTelemetry": "Data collection",
+  "aboutNoTelemetryBody": "The client collects no statistics and sends no data to third parties: there are no telemetry or analytics libraries in the dependencies.",
+  "aboutAssetMissing": "The file is missing from the build",
+  "updateTitle": "Update",
+  "updateSourceSubtitle": "Address of the release manifest. Checking is a single request without any device or profile identifier",
+  "updateSourceSaved": "Update source saved",
+  "updateCheck": "Check for update",
+  "updateChecking": "Checking…",
+  "updateFound": "Version {version} is available",
+  "@updateFound": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "updateOpen": "Open download",
+  "updateCopy": "Copy link",
+  "updateCopied": "Link copied",
+  "updateNoLink": "The manifest has no link for this platform",
+  "updateOpenFailed": "The browser did not open — copy the link instead",
+  "settingsScreenTitle": "Settings",
+  "settingsThemeSection": "Appearance",
+  "themeSystem": "System",
+  "themeLight": "Light",
+  "themeDark": "Dark",
+  "settingsLaunchSection": "Startup",
+  "settingsAutoStart": "Start with the system",
+  "settingsAutoStartAndroid": "The app opens by itself after the phone boots",
+  "settingsAutoStartDesktop": "The app opens by itself after you sign in",
+  "settingsAutoStartOn": "The app will start with the system",
+  "settingsAutoStartOff": "Auto-start is off",
+  "settingsAutoConnect": "Auto-connect on launch",
+  "settingsAutoConnectPending": "Becomes available after the first successful connection",
+  "settingsAutoConnectProfile": "Bringing up the same connection: {name}",
+  "@settingsAutoConnectProfile": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsAutoConnectMissing": "The connection is no longer there",
+  "settingsProfilesSection": "Connections ({count})",
+  "@settingsProfilesSection": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "settingsProfilesEmpty": "No connections yet — add them on the main screen.",
+  "profileKindLinks": "Links",
+  "profileKindSubscription": "Subscription",
+  "profileKindFile": "config.json file",
+  "settingsRoutingSection": "Where traffic goes",
+  "settingsServiceSection": "Maintenance",
+  "splitHomeDirect": "Home-region sites go direct",
+  "splitHomeDirectZones": "Zones: {zones}. Everything else goes through the connection.",
+  "@splitHomeDirectZones": {
+    "placeholders": {
+      "zones": {
+        "type": "String"
+      }
+    }
+  },
+  "splitHomeDirectUnknown": "The device language does not define a home region",
+  "splitExceptions": "Address exceptions",
+  "splitExceptionsCount": "direct: {direct}, into the tunnel: {tunnel}",
+  "@splitExceptionsCount": {
+    "placeholders": {
+      "direct": {
+        "type": "int"
+      },
+      "tunnel": {
+        "type": "int"
+      }
+    }
+  },
+  "splitExceptionsEmpty": "No list yet",
+  "splitScreenTitle": "Split tunneling",
+  "splitHowItWorks": "An address from this list overrides the home-region rules: direct bypasses the tunnel, into-the-tunnel pulls its own zone address back. A full link is fine too — only the host name is taken from it.",
+  "splitPasteTitle": "Paste a batch",
+  "splitPasteHint": "One address per line: https://example.com/path, example.org",
+  "splitDirection": "Where these addresses go",
+  "splitToDirect": "direct",
+  "splitToTunnel": "into the tunnel",
+  "splitAdded": "Added {added}, duplicates {duplicates}, skipped {skipped}",
+  "@splitAdded": {
+    "placeholders": {
+      "added": {
+        "type": "int"
+      },
+      "duplicates": {
+        "type": "int"
+      },
+      "skipped": {
+        "type": "int"
+      }
+    }
+  },
+  "splitNothingAdded": "Not a single address parsed, skipped {skipped}",
+  "@splitNothingAdded": {
+    "placeholders": {
+      "skipped": {
+        "type": "int"
+      }
+    }
+  },
+  "splitHostRemoved": "The address is out of the list",
+  "splitHostMoved": "The direction changed",
+  "splitSaved": "The list is saved",
+  "splitApplied": "The list is applied, the connection is back up",
+  "splitDirectRuleTitle": "Exceptions: direct",
+  "splitTunnelRuleTitle": "Exceptions: into the tunnel"
+}

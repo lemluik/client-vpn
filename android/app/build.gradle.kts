@@ -1,3 +1,6 @@
+import java.io.FileInputStream
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
@@ -36,10 +39,33 @@ android {
         }
     }
 
+    // Релизная подпись Android (позиция ТД-2). Ключ и пароли лежат в
+    // android/key.properties, которого нет в репозитории: без него сборка
+    // подписывается отладочным ключом — ровно как до этой правки, поэтому CI и
+    // локальная сборка не ломаются. Как только владелец решит публиковаться и
+    // создаст keyring, файл появляется локально и в CI-секретах, а следующий
+    // релиз получает настоящую подпись.
+    val releaseKeystore = rootProject.file("key.properties")
+    if (releaseKeystore.exists()) {
+        val props = Properties().apply { FileInputStream(releaseKeystore).use { load(it) } }
+        signingConfigs {
+            create("release") {
+                keyAlias = props.getProperty("keyAlias")
+                keyPassword = props.getProperty("keyPassword")
+                storeFile = file(props.getProperty("storeFile"))
+                storePassword = props.getProperty("storePassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (releaseKeystore.exists()) {
+                signingConfigs.getByName("release")
+            } else {
+                // отладочный ключ: `flutter run --release` и тестовые сборки работают
+                signingConfigs.getByName("debug")
+            }
         }
     }
 }
