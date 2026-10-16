@@ -213,11 +213,13 @@ jobs:
           test -s "from-android/app-release.apk"
           ls from-windows/"client-vpn-windows-${TAG}.zip" >/dev/null
           mkdir dist
-          cp from-android/app-release.apk "dist/client-vpn-${TAG}-android.apk"
-          cp from-windows/"client-vpn-windows-${TAG}.zip" "dist/client-vpn-${TAG}-windows.zip"
+          # имена файлов релиза — как в уже опубликованных v0.1.0…v0.3.0; суффикс abi у
+          # Android здесь не ставим: CI собирает единый APK на все ABI
+          cp from-android/app-release.apk "dist/ClientVPN-${TAG}-Android.apk"
+          cp from-windows/"client-vpn-windows-${TAG}.zip" "dist/ClientVPN-${TAG}-Windows-x64.zip"
           cp from-android/LICENSE from-android/NOTICE dist/
           cd dist
-          sha256sum "client-vpn-${TAG}-android.apk" "client-vpn-${TAG}-windows.zip" \
+          sha256sum "ClientVPN-${TAG}-Android.apk" "ClientVPN-${TAG}-Windows-x64.zip" \
             LICENSE NOTICE > SHA256SUMS.txt
 
       - name: Опубликовать релиз
