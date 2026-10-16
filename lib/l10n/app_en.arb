@@ -60,7 +60,6 @@
   "profileUntitled": "Untitled",
   "menuRename": "Rename",
   "menuDelete": "Delete",
-  "profileKindFile": "Kernel file",
   "profileCountOne": "One profile",
   "profileCountMany": "{count} profiles",
   "regionProfileCount": "Profiles: {count}",
@@ -119,5 +118,98 @@
   "updateCopy": "Copy link",
   "updateCopied": "Link copied",
   "updateNoLink": "The manifest has no link for this platform",
-  "updateOpenFailed": "The browser did not open — copy the link instead"
+  "updateOpenFailed": "The browser did not open — copy the link instead",
+  "settingsScreenTitle": "Settings",
+  "settingsThemeSection": "Appearance",
+  "themeSystem": "System",
+  "themeLight": "Light",
+  "themeDark": "Dark",
+  "settingsLaunchSection": "Startup",
+  "settingsAutoStart": "Start with the system",
+  "settingsAutoStartAndroid": "The app opens by itself after the phone boots",
+  "settingsAutoStartDesktop": "The app opens by itself after you sign in",
+  "settingsAutoStartOn": "The app will start with the system",
+  "settingsAutoStartOff": "Auto-start is off",
+  "settingsAutoConnect": "Auto-connect on launch",
+  "settingsAutoConnectPending": "Becomes available after the first successful connection",
+  "settingsAutoConnectProfile": "Bringing up the same connection: {name}",
+  "@settingsAutoConnectProfile": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsAutoConnectMissing": "The connection is no longer there",
+  "settingsProfilesSection": "Connections ({count})",
+  "@settingsProfilesSection": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "settingsProfilesEmpty": "No connections yet — add them on the main screen.",
+  "profileKindLinks": "Links",
+  "profileKindSubscription": "Subscription",
+  "profileKindFile": "config.json file",
+  "settingsRoutingSection": "Where traffic goes",
+  "splitHomeDirect": "Home-region sites go direct",
+  "splitHomeDirectZones": "Zones: {zones}. Everything else goes through the connection.",
+  "@splitHomeDirectZones": {
+    "placeholders": {
+      "zones": {
+        "type": "String"
+      }
+    }
+  },
+  "splitHomeDirectUnknown": "The device language does not define a home region",
+  "splitExceptions": "Address exceptions",
+  "splitExceptionsCount": "direct: {direct}, into the tunnel: {tunnel}",
+  "@splitExceptionsCount": {
+    "placeholders": {
+      "direct": {
+        "type": "int"
+      },
+      "tunnel": {
+        "type": "int"
+      }
+    }
+  },
+  "splitExceptionsEmpty": "No list yet",
+  "splitScreenTitle": "Split tunneling",
+  "splitHowItWorks": "An address from this list overrides the home-region rules: direct bypasses the tunnel, into-the-tunnel pulls its own zone address back. A full link is fine too — only the host name is taken from it.",
+  "splitPasteTitle": "Paste a batch",
+  "splitPasteHint": "One address per line: https://example.com/path, example.org",
+  "splitDirection": "Where these addresses go",
+  "splitToDirect": "direct",
+  "splitToTunnel": "into the tunnel",
+  "splitAdded": "Added {added}, duplicates {duplicates}, skipped {skipped}",
+  "@splitAdded": {
+    "placeholders": {
+      "added": {
+        "type": "int"
+      },
+      "duplicates": {
+        "type": "int"
+      },
+      "skipped": {
+        "type": "int"
+      }
+    }
+  },
+  "splitNothingAdded": "Not a single address parsed, skipped {skipped}",
+  "@splitNothingAdded": {
+    "placeholders": {
+      "skipped": {
+        "type": "int"
+      }
+    }
+  },
+  "splitHostRemoved": "The address is out of the list",
+  "splitHostMoved": "The direction changed",
+  "splitSaved": "The list is saved",
+  "splitApplied": "The list is applied, the connection is back up",
+  "splitDirectRuleTitle": "Exceptions: direct",
+  "splitTunnelRuleTitle": "Exceptions: into the tunnel"
 }

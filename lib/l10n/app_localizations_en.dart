@@ -184,9 +184,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get menuDelete => 'Delete';
 
   @override
-  String get profileKindFile => 'Kernel file';
-
-  @override
   String get profileCountOne => 'One profile';
 
   @override
@@ -339,4 +336,149 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get updateOpenFailed =>
       'The browser did not open — copy the link instead';
+
+  @override
+  String get settingsScreenTitle => 'Settings';
+
+  @override
+  String get settingsThemeSection => 'Appearance';
+
+  @override
+  String get themeSystem => 'System';
+
+  @override
+  String get themeLight => 'Light';
+
+  @override
+  String get themeDark => 'Dark';
+
+  @override
+  String get settingsLaunchSection => 'Startup';
+
+  @override
+  String get settingsAutoStart => 'Start with the system';
+
+  @override
+  String get settingsAutoStartAndroid =>
+      'The app opens by itself after the phone boots';
+
+  @override
+  String get settingsAutoStartDesktop =>
+      'The app opens by itself after you sign in';
+
+  @override
+  String get settingsAutoStartOn => 'The app will start with the system';
+
+  @override
+  String get settingsAutoStartOff => 'Auto-start is off';
+
+  @override
+  String get settingsAutoConnect => 'Auto-connect on launch';
+
+  @override
+  String get settingsAutoConnectPending =>
+      'Becomes available after the first successful connection';
+
+  @override
+  String settingsAutoConnectProfile(String name) {
+    return 'Bringing up the same connection: $name';
+  }
+
+  @override
+  String get settingsAutoConnectMissing => 'The connection is no longer there';
+
+  @override
+  String settingsProfilesSection(int count) {
+    return 'Connections ($count)';
+  }
+
+  @override
+  String get settingsProfilesEmpty =>
+      'No connections yet — add them on the main screen.';
+
+  @override
+  String get profileKindLinks => 'Links';
+
+  @override
+  String get profileKindSubscription => 'Subscription';
+
+  @override
+  String get profileKindFile => 'config.json file';
+
+  @override
+  String get settingsRoutingSection => 'Where traffic goes';
+
+  @override
+  String get splitHomeDirect => 'Home-region sites go direct';
+
+  @override
+  String splitHomeDirectZones(String zones) {
+    return 'Zones: $zones. Everything else goes through the connection.';
+  }
+
+  @override
+  String get splitHomeDirectUnknown =>
+      'The device language does not define a home region';
+
+  @override
+  String get splitExceptions => 'Address exceptions';
+
+  @override
+  String splitExceptionsCount(int direct, int tunnel) {
+    return 'direct: $direct, into the tunnel: $tunnel';
+  }
+
+  @override
+  String get splitExceptionsEmpty => 'No list yet';
+
+  @override
+  String get splitScreenTitle => 'Split tunneling';
+
+  @override
+  String get splitHowItWorks =>
+      'An address from this list overrides the home-region rules: direct bypasses the tunnel, into-the-tunnel pulls its own zone address back. A full link is fine too — only the host name is taken from it.';
+
+  @override
+  String get splitPasteTitle => 'Paste a batch';
+
+  @override
+  String get splitPasteHint =>
+      'One address per line: https://example.com/path, example.org';
+
+  @override
+  String get splitDirection => 'Where these addresses go';
+
+  @override
+  String get splitToDirect => 'direct';
+
+  @override
+  String get splitToTunnel => 'into the tunnel';
+
+  @override
+  String splitAdded(int added, int duplicates, int skipped) {
+    return 'Added $added, duplicates $duplicates, skipped $skipped';
+  }
+
+  @override
+  String splitNothingAdded(int skipped) {
+    return 'Not a single address parsed, skipped $skipped';
+  }
+
+  @override
+  String get splitHostRemoved => 'The address is out of the list';
+
+  @override
+  String get splitHostMoved => 'The direction changed';
+
+  @override
+  String get splitSaved => 'The list is saved';
+
+  @override
+  String get splitApplied => 'The list is applied, the connection is back up';
+
+  @override
+  String get splitDirectRuleTitle => 'Exceptions: direct';
+
+  @override
+  String get splitTunnelRuleTitle => 'Exceptions: into the tunnel';
 }

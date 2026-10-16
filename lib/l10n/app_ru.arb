@@ -81,7 +81,6 @@
   "profileUntitled": "Без названия",
   "menuRename": "Переименовать",
   "menuDelete": "Удалить",
-  "profileKindFile": "Файл ядра",
   "profileCountOne": "Один профиль",
   "profileCountMany": "{count} профилей",
   "@profileCountMany": {
@@ -168,5 +167,98 @@
   "updateCopy": "Скопировать ссылку",
   "updateCopied": "Ссылка скопирована",
   "updateNoLink": "Ссылка на эту платформу в манифесте не указана",
-  "updateOpenFailed": "Браузер не открылся — скопируйте ссылку"
+  "updateOpenFailed": "Браузер не открылся — скопируйте ссылку",
+  "settingsScreenTitle": "Настройки",
+  "settingsThemeSection": "Оформление",
+  "themeSystem": "Системная",
+  "themeLight": "Светлая",
+  "themeDark": "Тёмная",
+  "settingsLaunchSection": "Запуск",
+  "settingsAutoStart": "Автозапуск с системой",
+  "settingsAutoStartAndroid": "Клиент откроется сам после включения телефона",
+  "settingsAutoStartDesktop": "Клиент откроется сам после входа в систему",
+  "settingsAutoStartOn": "Клиент будет запускаться с системой",
+  "settingsAutoStartOff": "Автозапуск выключен",
+  "settingsAutoConnect": "Автоподключение при запуске",
+  "settingsAutoConnectPending": "Станет доступно после первого успешного подключения",
+  "settingsAutoConnectProfile": "Поднимаем то же подключение: {name}",
+  "@settingsAutoConnectProfile": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsAutoConnectMissing": "Подключение больше не найдено",
+  "settingsProfilesSection": "Профили ({count})",
+  "@settingsProfilesSection": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "settingsProfilesEmpty": "Подключений пока нет — добавьте их на главном экране.",
+  "profileKindLinks": "Ссылки",
+  "profileKindSubscription": "Подписка",
+  "profileKindFile": "Файл config.json",
+  "settingsRoutingSection": "Куда идёт трафик",
+  "splitHomeDirect": "Сайты домашнего региона напрямую",
+  "splitHomeDirectZones": "Зоны: {zones}. Остальное — через подключение.",
+  "@splitHomeDirectZones": {
+    "placeholders": {
+      "zones": {
+        "type": "String"
+      }
+    }
+  },
+  "splitHomeDirectUnknown": "Домашний регион по языку устройства не определён",
+  "splitExceptions": "Адреса-исключения",
+  "splitExceptionsCount": "напрямую: {direct}, в туннель: {tunnel}",
+  "@splitExceptionsCount": {
+    "placeholders": {
+      "direct": {
+        "type": "int"
+      },
+      "tunnel": {
+        "type": "int"
+      }
+    }
+  },
+  "splitExceptionsEmpty": "Списка пока нет",
+  "splitScreenTitle": "Раздельное туннелирование",
+  "splitHowItWorks": "Адрес из списка идёт вопреки правилам домашнего региона: «напрямую» мимо туннеля или «в туннель» назло своей зоне. Ссылку можно вставить целиком — из неё возьмём только имя хоста.",
+  "splitPasteTitle": "Вставить пачкой",
+  "splitPasteHint": "По одному адресу на строку: https://example.com/path, example.org",
+  "splitDirection": "Куда направить эти адреса",
+  "splitToDirect": "напрямую",
+  "splitToTunnel": "в туннель",
+  "splitAdded": "Добавлено {added}, повторов {duplicates}, пропущено {skipped}",
+  "@splitAdded": {
+    "placeholders": {
+      "added": {
+        "type": "int"
+      },
+      "duplicates": {
+        "type": "int"
+      },
+      "skipped": {
+        "type": "int"
+      }
+    }
+  },
+  "splitNothingAdded": "Ни одного адреса не разобрано, пропущено {skipped}",
+  "@splitNothingAdded": {
+    "placeholders": {
+      "skipped": {
+        "type": "int"
+      }
+    }
+  },
+  "splitHostRemoved": "Адрес убран из списка",
+  "splitHostMoved": "Направление изменено",
+  "splitSaved": "Список сохранён",
+  "splitApplied": "Список применён, подключение поднято заново",
+  "splitDirectRuleTitle": "Исключения: напрямую",
+  "splitTunnelRuleTitle": "Исключения: в туннель"
 }

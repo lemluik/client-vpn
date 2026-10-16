@@ -1,21 +1,27 @@
 import 'package:client_vpn/app_state.dart';
 import 'package:client_vpn/autostart.dart';
+import 'package:client_vpn/l10n/app_localizations.dart';
+import 'package:client_vpn/manual_rules.dart';
 import 'package:client_vpn/profile_store.dart';
+import 'package:client_vpn/routing_presets.dart';
 import 'package:client_vpn/settings_screen.dart';
 import 'package:client_vpn/settings_store.dart';
+import 'package:client_vpn/split_screen.dart';
 import 'package:client_vpn/vpn_config.dart';
 import 'package:client_vpn/vpn_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-const linkOne = 'vless://2f6bd5a1-1e73-4b1a-9d3c-000000000001@example.org:443'
+const linkOne =
+    'vless://2f6bd5a1-1e73-4b1a-9d3c-000000000001@example.org:443'
     '?encryption=none&security=reality'
     '&pbk=SaMdKeySaMdKeySaMdKeySaMdKeySaMd1234'
     '&sid=ab12cd34&fp=chrome&type=tcp&sni=example.org'
     '&flow=xtls-rprx-vision#%D0%A3%D0%B7%D0%B5%D0%BB%201';
 
-const linkTwo = 'vless://2f6bd5a1-1e73-4b1a-9d3c-000000000002@example.org:443'
+const linkTwo =
+    'vless://2f6bd5a1-1e73-4b1a-9d3c-000000000002@example.org:443'
     '?encryption=none&security=reality'
     '&pbk=SaMdKeySaMdKeySaMdKeySaMdKeySaMd1234'
     '&sid=ab12cd34&fp=chrome&type=tcp&sni=example.org'
@@ -66,13 +72,20 @@ class _FakeAutostart implements Autostart {
   Future<void> set(bool value) async => on = value;
 }
 
-Future<AppState> makeState({Autostart? autostart}) async {
+Future<AppState> makeState({
+  Autostart? autostart,
+  String languageCode = '',
+}) async {
+  final prefs = await SharedPreferences.getInstance();
   return AppState(
     await ProfileStore.open(),
     _NoCore(),
     settings: await SettingsStore.open(),
     autostart: autostart ?? _FakeAutostart(),
+    presets: PresetStore(prefs),
+    ruleStore: RuleStore(prefs),
     configWriter: (config) async => config,
+    languageCode: languageCode,
   );
 }
 
@@ -84,9 +97,16 @@ Future<void> openSettings(WidgetTester tester, AppState state) async {
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
 
-  await tester.pumpWidget(MaterialApp(
-    home: SettingsScreen(state: state),
-  ));
+  await tester.pumpWidget(
+    MaterialApp(
+      // Экран настроек целиком локализован: без локалей он собрался бы по-английски,
+      // а тесты ищут русские строки.
+      locale: const Locale('ru'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: SettingsScreen(state: state),
+    ),
+  );
   await tester.pumpAndSettle();
 }
 
@@ -94,8 +114,9 @@ void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
   group('экран настроек', () {
-    testWidgets('тема выбирается на месте и остаётся сохранённой',
-        (tester) async {
+    testWidgets('тема выбирается на месте и остаётся сохранённой', (
+      tester,
+    ) async {
       final state = await makeState();
       addTearDown(state.dispose);
       await openSettings(tester, state);
@@ -114,8 +135,9 @@ void main() {
       expect(reopened.themeChoice, ThemeChoice.dark);
     });
 
-    testWidgets('автозапуск показывает состояние системы и меняет его',
-        (tester) async {
+    testWidgets('автозапуск показывает состояние системы и меняет его', (
+      tester,
+    ) async {
       final autostart = _FakeAutostart(on: true);
       final state = await makeState(autostart: autostart);
       addTearDown(state.dispose);
@@ -131,24 +153,32 @@ void main() {
       expect(state.autoStart, isFalse);
     });
 
-    testWidgets('автоподключение включается после первого успешного профиля',
-        (tester) async {
+    testWidgets('автоподключение включается после первого успешного профиля', (
+      tester,
+    ) async {
       final state = await makeState();
       addTearDown(state.dispose);
       await state.addFromText(linkOne);
       await openSettings(tester, state);
 
-      final autoConnect = find.widgetWithText(SwitchListTile, 'Автоподключение при запуске');
+      final autoConnect = find.widgetWithText(
+        SwitchListTile,
+        'Автоподключение при запуске',
+      );
       expect(tester.widget<SwitchListTile>(autoConnect).onChanged, isNull);
-      expect(find.text('Станет доступно после первого успешного подключения'),
-          findsOneWidget);
+      expect(
+        find.text('Станет доступно после первого успешного подключения'),
+        findsOneWidget,
+      );
 
       // Успешное подключение запоминает профиль — переключатель оживает.
       await state.connect();
       await tester.pumpAndSettle();
 
-      expect(find.text('Станет доступно после первого успешного подключения'),
-          findsNothing);
+      expect(
+        find.text('Станет доступно после первого успешного подключения'),
+        findsNothing,
+      );
       expect(tester.widget<SwitchListTile>(autoConnect).onChanged, isNotNull);
       await tester.tap(autoConnect);
       await tester.pumpAndSettle();
@@ -177,7 +207,10 @@ void main() {
       await tester.enterText(find.byType(TextField), 'Домашний');
       await tester.tap(find.text('Сохранить'));
       await tester.pumpAndSettle();
-      expect(state.profiles.map((profile) => profile.name), contains('Домашний'));
+      expect(
+        state.profiles.map((profile) => profile.name),
+        contains('Домашний'),
+      );
 
       await tester.tap(find.byTooltip('Действия').first);
       await tester.pumpAndSettle();
@@ -188,6 +221,76 @@ void main() {
 
       expect(state.profiles.length, 1);
       expect(find.text('Профили (1)'), findsOneWidget);
+    });
+  });
+
+  group('раздельное туннелирование в настройках', () {
+    testWidgets('переключатель домашнего региона двигает тот же пресет', (
+      tester,
+    ) async {
+      // Русская локаль устройства: пресет России выбран по умолчанию, поэтому
+      // переключатель изначально включён.
+      final state = await makeState(languageCode: 'ru');
+      addTearDown(state.dispose);
+      await openSettings(tester, state);
+
+      final toggle = find.byKey(const ValueKey('home-region-direct'));
+      expect(tester.widget<SwitchListTile>(toggle).value, isTrue);
+      expect(
+        find.text('Зоны: ru, su, рф. Остальное — через подключение.'),
+        findsOneWidget,
+      );
+
+      await tester.tap(toggle);
+      await tester.pumpAndSettle();
+      expect(state.routingPreset.key, offPreset.key);
+
+      await tester.tap(toggle);
+      await tester.pumpAndSettle();
+      expect(state.routingPreset.key, 'ru');
+      // Выбор пережил «перезапись» состояния: он в хранилище настроек.
+      expect(
+        PresetStore(await SharedPreferences.getInstance()).load('en').key,
+        'ru',
+      );
+    });
+
+    testWidgets('без известного домашнего региона переключатель выключен', (
+      tester,
+    ) async {
+      final state = await makeState();
+      addTearDown(state.dispose);
+      await openSettings(tester, state);
+
+      final toggle = find.byKey(const ValueKey('home-region-direct'));
+      expect(tester.widget<SwitchListTile>(toggle).onChanged, isNull);
+      expect(
+        find.text('Домашний регион по языку устройства не определён'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('счётчик исключений и переход на экран списка', (tester) async {
+      final state = await makeState(languageCode: 'ru');
+      addTearDown(state.dispose);
+      await state.setSplitHosts(
+        direct: ['example.com'],
+        tunnel: ['my.office.ru'],
+        directTitle: 'Исключения: напрямую',
+        tunnelTitle: 'Исключения: в туннель',
+      );
+      await openSettings(tester, state);
+
+      expect(find.text('напрямую: 1, в туннель: 1'), findsOneWidget);
+
+      await tester.tap(find.text('Адреса-исключения'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(SplitScreen), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('split-host-example.com')),
+        findsOneWidget,
+      );
     });
   });
 }

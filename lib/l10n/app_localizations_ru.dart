@@ -183,9 +183,6 @@ class AppLocalizationsRu extends AppLocalizations {
   String get menuDelete => 'Удалить';
 
   @override
-  String get profileKindFile => 'Файл ядра';
-
-  @override
   String get profileCountOne => 'Один профиль';
 
   @override
@@ -337,4 +334,149 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get updateOpenFailed => 'Браузер не открылся — скопируйте ссылку';
+
+  @override
+  String get settingsScreenTitle => 'Настройки';
+
+  @override
+  String get settingsThemeSection => 'Оформление';
+
+  @override
+  String get themeSystem => 'Системная';
+
+  @override
+  String get themeLight => 'Светлая';
+
+  @override
+  String get themeDark => 'Тёмная';
+
+  @override
+  String get settingsLaunchSection => 'Запуск';
+
+  @override
+  String get settingsAutoStart => 'Автозапуск с системой';
+
+  @override
+  String get settingsAutoStartAndroid =>
+      'Клиент откроется сам после включения телефона';
+
+  @override
+  String get settingsAutoStartDesktop =>
+      'Клиент откроется сам после входа в систему';
+
+  @override
+  String get settingsAutoStartOn => 'Клиент будет запускаться с системой';
+
+  @override
+  String get settingsAutoStartOff => 'Автозапуск выключен';
+
+  @override
+  String get settingsAutoConnect => 'Автоподключение при запуске';
+
+  @override
+  String get settingsAutoConnectPending =>
+      'Станет доступно после первого успешного подключения';
+
+  @override
+  String settingsAutoConnectProfile(String name) {
+    return 'Поднимаем то же подключение: $name';
+  }
+
+  @override
+  String get settingsAutoConnectMissing => 'Подключение больше не найдено';
+
+  @override
+  String settingsProfilesSection(int count) {
+    return 'Профили ($count)';
+  }
+
+  @override
+  String get settingsProfilesEmpty =>
+      'Подключений пока нет — добавьте их на главном экране.';
+
+  @override
+  String get profileKindLinks => 'Ссылки';
+
+  @override
+  String get profileKindSubscription => 'Подписка';
+
+  @override
+  String get profileKindFile => 'Файл config.json';
+
+  @override
+  String get settingsRoutingSection => 'Куда идёт трафик';
+
+  @override
+  String get splitHomeDirect => 'Сайты домашнего региона напрямую';
+
+  @override
+  String splitHomeDirectZones(String zones) {
+    return 'Зоны: $zones. Остальное — через подключение.';
+  }
+
+  @override
+  String get splitHomeDirectUnknown =>
+      'Домашний регион по языку устройства не определён';
+
+  @override
+  String get splitExceptions => 'Адреса-исключения';
+
+  @override
+  String splitExceptionsCount(int direct, int tunnel) {
+    return 'напрямую: $direct, в туннель: $tunnel';
+  }
+
+  @override
+  String get splitExceptionsEmpty => 'Списка пока нет';
+
+  @override
+  String get splitScreenTitle => 'Раздельное туннелирование';
+
+  @override
+  String get splitHowItWorks =>
+      'Адрес из списка идёт вопреки правилам домашнего региона: «напрямую» мимо туннеля или «в туннель» назло своей зоне. Ссылку можно вставить целиком — из неё возьмём только имя хоста.';
+
+  @override
+  String get splitPasteTitle => 'Вставить пачкой';
+
+  @override
+  String get splitPasteHint =>
+      'По одному адресу на строку: https://example.com/path, example.org';
+
+  @override
+  String get splitDirection => 'Куда направить эти адреса';
+
+  @override
+  String get splitToDirect => 'напрямую';
+
+  @override
+  String get splitToTunnel => 'в туннель';
+
+  @override
+  String splitAdded(int added, int duplicates, int skipped) {
+    return 'Добавлено $added, повторов $duplicates, пропущено $skipped';
+  }
+
+  @override
+  String splitNothingAdded(int skipped) {
+    return 'Ни одного адреса не разобрано, пропущено $skipped';
+  }
+
+  @override
+  String get splitHostRemoved => 'Адрес убран из списка';
+
+  @override
+  String get splitHostMoved => 'Направление изменено';
+
+  @override
+  String get splitSaved => 'Список сохранён';
+
+  @override
+  String get splitApplied => 'Список применён, подключение поднято заново';
+
+  @override
+  String get splitDirectRuleTitle => 'Исключения: напрямую';
+
+  @override
+  String get splitTunnelRuleTitle => 'Исключения: в туннель';
 }

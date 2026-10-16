@@ -11,6 +11,7 @@ import 'profile_store.dart';
 import 'provider.dart';
 import 'region.dart';
 import 'routing_presets.dart';
+import 'routing_restart.dart';
 import 'rules_screen.dart';
 import 'settings_screen.dart';
 import 'support_chat_screen.dart';
@@ -166,10 +167,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _select(String id) async {
     if (_state.isConnected) {
       final l = AppLocalizations.of(context);
-      final leave = await _confirm(
-        l.switchProfileTitle,
-        l.switchProfileBody,
-      );
+      final leave = await _confirm(l.switchProfileTitle, l.switchProfileBody);
       if (!leave) return;
       await _state.disconnect();
     }
@@ -191,10 +189,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     final l = AppLocalizations.of(context);
-    final leave = await _confirm(
-      l.switchRegionTitle,
-      l.switchRegionBody,
-    );
+    final leave = await _confirm(l.switchRegionTitle, l.switchRegionBody);
     if (!leave) return;
     await _state.disconnect();
     await _state.selectRegion(key);
@@ -265,7 +260,8 @@ class _HomeScreenState extends State<HomeScreen> {
     Navigator.push(
       context,
       MaterialPageRoute<void>(
-          builder: (context) => SettingsScreen(state: _state)),
+        builder: (context) => SettingsScreen(state: _state),
+      ),
     );
   }
 
@@ -421,9 +417,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 onTap: () {
                   Navigator.pop(context);
                   Navigator.of(this.context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const UpdateScreen(),
-                    ),
+                    MaterialPageRoute(builder: (_) => const UpdateScreen()),
                   );
                 },
               ),
@@ -432,9 +426,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 onTap: () {
                   Navigator.pop(context);
                   Navigator.of(this.context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const AboutScreen(),
-                    ),
+                    MaterialPageRoute(builder: (_) => const AboutScreen()),
                   );
                 },
               ),
@@ -460,21 +452,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
     final l = AppLocalizations.of(context);
     final label = _presetLabel(l, preset);
-    if (!_state.isConnected) {
-      await _state.setRoutingPreset(preset.key);
-      _notify(l.presetSelected(label));
-      return;
-    }
-
-    final restart = await _confirm(
-      l.restartForPresetTitle,
-      l.restartForPresetBody,
+    await applyRoutingChange(
+      context,
+      _state,
+      l,
+      change: () => _state.setRoutingPreset(preset.key),
+      savedNote: l.presetSelected(label),
+      appliedNote: l.presetApplied(label),
     );
-    if (!restart) return;
-    await _state.disconnect();
-    await _state.setRoutingPreset(preset.key);
-    await _state.connect();
-    _notify(l.presetApplied(label));
   }
 
   /// Точка проб наблюдателя (У-3): значение вводит пользователь, нейтральное
@@ -731,8 +716,7 @@ class _ProfileCard extends StatelessWidget {
     final l = AppLocalizations.of(context);
 
     return Card(
-      color:
-          selected ? Theme.of(context).colorScheme.secondaryContainer : null,
+      color: selected ? Theme.of(context).colorScheme.secondaryContainer : null,
       child: ListTile(
         onTap: onSelect,
         leading: Icon(_iconOf(profile.kind)),
@@ -758,10 +742,10 @@ class _ProfileCard extends StatelessWidget {
   }
 
   IconData _iconOf(ProfileKind kind) => switch (kind) {
-        ProfileKind.links => Icons.key_outlined,
-        ProfileKind.subscription => Icons.rss_feed,
-        ProfileKind.file => Icons.description_outlined,
-      };
+    ProfileKind.links => Icons.key_outlined,
+    ProfileKind.subscription => Icons.rss_feed,
+    ProfileKind.file => Icons.description_outlined,
+  };
 
   String _subtitleOf(
     AppLocalizations l,
@@ -776,11 +760,10 @@ class _ProfileCard extends StatelessWidget {
       ProfileKind.file => l.profileKindFile,
       ProfileKind.links =>
         count == 1 ? l.profileCountOne : l.profileCountMany(count),
-      ProfileKind.subscription => left == null
-          ? (count == 1
-              ? l.subscriptionOne
-              : l.subscriptionMany(count))
-          : l.subscriptionLeftMb(_megabytes(left)),
+      ProfileKind.subscription =>
+        left == null
+            ? (count == 1 ? l.subscriptionOne : l.subscriptionMany(count))
+            : l.subscriptionLeftMb(_megabytes(left)),
     };
   }
 
@@ -823,9 +806,7 @@ class _RegionPicker extends StatelessWidget {
             Text(l.regionTitle),
             const SizedBox(width: 8),
             const Spacer(),
-            Flexible(
-              child: _CountryLabel(region),
-            ),
+            Flexible(child: _CountryLabel(region)),
             const Icon(Icons.keyboard_arrow_down, size: 20),
           ],
         ),
@@ -851,8 +832,9 @@ class _RegionPicker extends StatelessWidget {
               ListTile(
                 title: _CountryLabel(region),
                 subtitle: Text(l.regionProfileCount(region.links.length)),
-                trailing:
-                    region.key == current ? const Icon(Icons.check) : null,
+                trailing: region.key == current
+                    ? const Icon(Icons.check)
+                    : null,
                 onTap: () {
                   Navigator.pop(sheetContext);
                   if (region.key != current) onChanged(region.key);
@@ -878,11 +860,11 @@ class _CountryLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Text(
-        defaultTargetPlatform == TargetPlatform.windows || region.flag.isEmpty
-            ? region.name
-            : region.label,
-        overflow: TextOverflow.ellipsis,
-      );
+    defaultTargetPlatform == TargetPlatform.windows || region.flag.isEmpty
+        ? region.name
+        : region.label,
+    overflow: TextOverflow.ellipsis,
+  );
 }
 
 /// Круглая кнопка подключения: цвет и кольцо показывают состояние,
@@ -929,40 +911,40 @@ class _ConnectOrbState extends State<_ConnectOrb> {
 
     final (fill, ring, glyph, glow, caption) = switch (_state.state) {
       TunnelState.on => (
-          colors.primary,
-          colors.primary.withValues(alpha: 0.35),
-          Colors.white,
-          colors.primary.withValues(alpha: 0.40),
-          l.orbDisconnect,
-        ),
+        colors.primary,
+        colors.primary.withValues(alpha: 0.35),
+        Colors.white,
+        colors.primary.withValues(alpha: 0.40),
+        l.orbDisconnect,
+      ),
       TunnelState.connecting => (
-          colors.primaryContainer,
-          colors.primary.withValues(alpha: 0.55),
-          colors.onPrimaryContainer,
-          colors.primary.withValues(alpha: 0.18),
-          l.statusConnecting,
-        ),
+        colors.primaryContainer,
+        colors.primary.withValues(alpha: 0.55),
+        colors.onPrimaryContainer,
+        colors.primary.withValues(alpha: 0.18),
+        l.statusConnecting,
+      ),
       TunnelState.failure => (
-          colors.errorContainer,
-          colors.error.withValues(alpha: 0.45),
-          colors.onErrorContainer,
-          colors.error.withValues(alpha: 0.18),
-          l.orbRetry,
-        ),
+        colors.errorContainer,
+        colors.error.withValues(alpha: 0.45),
+        colors.onErrorContainer,
+        colors.error.withValues(alpha: 0.18),
+        l.orbRetry,
+      ),
       TunnelState.noLink => (
-          colors.errorContainer,
-          colors.error.withValues(alpha: 0.45),
-          colors.onErrorContainer,
-          colors.error.withValues(alpha: 0.18),
-          l.orbRetry,
-        ),
+        colors.errorContainer,
+        colors.error.withValues(alpha: 0.45),
+        colors.onErrorContainer,
+        colors.error.withValues(alpha: 0.18),
+        l.orbRetry,
+      ),
       TunnelState.off => (
-          colors.surfaceContainerHighest,
-          colors.outline,
-          colors.onSurfaceVariant,
-          Colors.transparent,
-          l.orbConnect,
-        ),
+        colors.surfaceContainerHighest,
+        colors.outline,
+        colors.onSurfaceVariant,
+        Colors.transparent,
+        l.orbConnect,
+      ),
     };
 
     return Semantics(
@@ -1019,8 +1001,8 @@ class _ConnectOrbState extends State<_ConnectOrb> {
                         connecting
                             ? Icons.hourglass_top
                             : failed
-                                ? Icons.refresh
-                                : Icons.power_settings_new,
+                            ? Icons.refresh
+                            : Icons.power_settings_new,
                         key: ValueKey(_state.state),
                         size: connecting ? 34 : 52,
                         color: glyph,
@@ -1037,9 +1019,9 @@ class _ConnectOrbState extends State<_ConnectOrb> {
                 caption,
                 key: ValueKey(_state.state),
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: enabled ? null : colors.outline,
-                    ),
+                  fontWeight: FontWeight.w600,
+                  color: enabled ? null : colors.outline,
+                ),
               ),
             ),
           ],
@@ -1059,37 +1041,40 @@ class _StatusLine extends StatelessWidget {
     final l = AppLocalizations.of(context);
     final (text, color, icon) = switch (state.state) {
       TunnelState.on => (
-          l.statusProtected,
-          Colors.green.shade700,
-          Icons.verified_user_outlined,
-        ),
+        l.statusProtected,
+        Colors.green.shade700,
+        Icons.verified_user_outlined,
+      ),
       TunnelState.connecting => (
-          l.statusConnecting,
-          Theme.of(context).colorScheme.primary,
-          Icons.hourglass_top,
-        ),
+        l.statusConnecting,
+        Theme.of(context).colorScheme.primary,
+        Icons.hourglass_top,
+      ),
       TunnelState.failure => (
-          l.statusFailed,
-          Theme.of(context).colorScheme.error,
-          Icons.error_outline,
-        ),
+        l.statusFailed,
+        Theme.of(context).colorScheme.error,
+        Icons.error_outline,
+      ),
       TunnelState.noLink => (
-          l.statusNoLink,
-          Theme.of(context).colorScheme.error,
-          Icons.wifi_off,
-        ),
+        l.statusNoLink,
+        Theme.of(context).colorScheme.error,
+        Icons.wifi_off,
+      ),
       TunnelState.off => (
-          l.statusOff,
-          Theme.of(context).colorScheme.outline,
-          Icons.shield_outlined,
-        ),
+        l.statusOff,
+        Theme.of(context).colorScheme.outline,
+        Icons.shield_outlined,
+      ),
     };
 
     return Row(
       children: [
         Icon(icon, size: 18, color: color),
         const SizedBox(width: 8),
-        Text(text, style: TextStyle(color: color, fontWeight: FontWeight.w600)),
+        Text(
+          text,
+          style: TextStyle(color: color, fontWeight: FontWeight.w600),
+        ),
         if (state.endpoint != null && state.isConnected) ...[
           const Spacer(),
           Flexible(

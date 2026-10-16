@@ -2,13 +2,17 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'app_state.dart';
+import 'l10n/app_localizations.dart';
 import 'profile_store.dart';
+import 'routing_restart.dart';
 import 'settings_store.dart';
+import 'split_screen.dart';
 
-/// Настройки клиента: оформление, запуск вместе с системой и профили.
+/// Настройки клиента: оформление, запуск вместе с системой, маршрут и профили.
 ///
 /// Набор как у большинства VPN-клиентов, чтобы не пришлось искать привычное.
-/// Значения применяются сразу — отдельной кнопки «Сохранить» здесь нет.
+/// Значения применяются сразу — отдельной кнопки «Сохранить» здесь нет, кроме
+/// смены маршрута: она поднимает туннель заново и спрашивает разрешение.
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({required this.state, super.key});
 
@@ -41,20 +45,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Настройки'),
-        centerTitle: true,
-      ),
+      appBar: AppBar(title: Text(l.settingsScreenTitle), centerTitle: true),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.fromLTRB(12, 8, 12, 20),
           children: [
-            const _SectionTitle('Оформление'),
+            _SectionTitle(l.settingsThemeSection),
             ...ThemeChoice.values.map(
               (choice) => ListTile(
                 leading: Icon(_themeIcon(choice)),
-                title: Text(choice.label),
+                title: Text(_themeLabel(l, choice)),
                 trailing: _state.themeChoice == choice
                     ? const Icon(Icons.check)
                     : null,
@@ -62,77 +65,128 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
             const _SectionDivider(),
-            const _SectionTitle('Запуск'),
+            _SectionTitle(l.settingsLaunchSection),
             if (_state.autostartSupported)
               SwitchListTile(
                 secondary: const Icon(Icons.play_circle_outline),
-                title: const Text('Автозапуск с системой'),
+                title: Text(l.settingsAutoStart),
                 subtitle: Text(
                   defaultTargetPlatform == TargetPlatform.android
-                      ? 'Клиент откроется сам после включения телефона'
-                      : 'Клиент откроется сам после входа в систему',
+                      ? l.settingsAutoStartAndroid
+                      : l.settingsAutoStartDesktop,
                 ),
                 value: _state.autoStart,
                 onChanged: (value) async {
                   await _state.setAutoStart(value);
-                  _notify(value
-                      ? 'Клиент будет запускаться с системой'
-                      : 'Автозапуск выключен');
+                  _notify(
+                    value ? l.settingsAutoStartOn : l.settingsAutoStartOff,
+                  );
                 },
               ),
             SwitchListTile(
               secondary: const Icon(Icons.bolt),
-              title: const Text('Автоподключение при запуске'),
-              subtitle: Text(_autoConnectHint()),
+              title: Text(l.settingsAutoConnect),
+              subtitle: Text(_autoConnectHint(l)),
               value: _state.autoConnect,
-              onChanged: _state.settings.lastProfileId == null &&
-                      !_state.autoConnect
+              onChanged:
+                  _state.settings.lastProfileId == null && !_state.autoConnect
                   ? null
                   : (value) => _state.setAutoConnect(value),
             ),
             const _SectionDivider(),
-            _SectionTitle('Профили (${_state.profiles.length})'),
+            _SectionTitle(l.settingsRoutingSection),
+            _homeRegionTile(l),
+            ListTile(
+              leading: const Icon(Icons.list_alt),
+              title: Text(l.splitExceptions),
+              subtitle: Text(
+                _state.splitDirectHosts.isEmpty &&
+                        _state.splitTunnelHosts.isEmpty
+                    ? l.splitExceptionsEmpty
+                    : l.splitExceptionsCount(
+                        _state.splitDirectHosts.length,
+                        _state.splitTunnelHosts.length,
+                      ),
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => SplitScreen(state: _state)),
+              ),
+            ),
+            const _SectionDivider(),
+            _SectionTitle(l.settingsProfilesSection(_state.profiles.length)),
             if (_state.profiles.isEmpty)
-              const Padding(
-                padding: EdgeInsets.fromLTRB(16, 4, 16, 12),
-                child: Text('Подключений пока нет — добавьте их на главном экране.'),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+                child: Text(l.settingsProfilesEmpty),
               )
             else
-              ..._state.profiles.map(_profileTile),
+              ..._state.profiles.map((profile) => _profileTile(l, profile)),
           ],
         ),
       ),
     );
   }
 
-  String _autoConnectHint() {
+  /// Переключатель «сайты домашнего региона напрямую».
+  ///
+  /// Управляет тем же выбранным пресетом, что и лист «Дополнительно»: два
+  /// хранимых значения разошлись бы, и экран показывал бы не тот маршрут,
+  /// который реально ушёл в ядро.
+  Widget _homeRegionTile(AppLocalizations l) {
+    final known = _state.homeRegionKnown;
+
+    return SwitchListTile(
+      key: const ValueKey('home-region-direct'),
+      secondary: const Icon(Icons.public),
+      title: Text(l.splitHomeDirect),
+      subtitle: Text(
+        known
+            ? l.splitHomeDirectZones(_state.homePreset.homeDomainsLabel)
+            : l.splitHomeDirectUnknown,
+      ),
+      value: known && _state.homeRegionDirect,
+      onChanged: known
+          ? (value) => applyRoutingChange(
+              context,
+              _state,
+              l,
+              change: () => _state.setHomeRegionDirect(value),
+              savedNote: l.splitSaved,
+              appliedNote: l.splitApplied,
+            )
+          : null,
+    );
+  }
+
+  String _autoConnectHint(AppLocalizations l) {
     final id = _state.settings.lastProfileId;
-    if (id == null) return 'Станет доступно после первого успешного подключения';
+    if (id == null) return l.settingsAutoConnectPending;
     final name = _state.profiles
         .map((profile) => profile.id == id ? profile.name : null)
         .firstWhere((name) => name != null, orElse: () => null);
     return name == null
-        ? 'Подключение больше не найдено'
-        : 'Поднимаем то же подключение: $name';
+        ? l.settingsAutoConnectMissing
+        : l.settingsAutoConnectProfile(name);
   }
 
-  Widget _profileTile(StoredProfile profile) {
+  Widget _profileTile(AppLocalizations l, StoredProfile profile) {
     final active = _state.activeProfile?.id == profile.id;
     return ListTile(
       leading: Icon(_profileIcon(profile)),
       title: Text(profile.name),
-      subtitle: Text(_profileKindLabel(profile)),
+      subtitle: Text(_profileKindLabel(l, profile)),
       trailing: active
           ? const Icon(Icons.check)
           : PopupMenuButton<String>(
-              tooltip: 'Действия',
+              tooltip: l.tooltipActions,
               onSelected: (action) async {
-                if (action == 'rename') await _rename(profile);
-                if (action == 'remove') await _remove(profile);
+                if (action == 'rename') await _rename(l, profile);
+                if (action == 'remove') await _remove(l, profile);
               },
-              itemBuilder: (context) => const [
-                PopupMenuItem(value: 'rename', child: Text('Переименовать')),
-                PopupMenuItem(value: 'remove', child: Text('Удалить')),
+              itemBuilder: (context) => [
+                PopupMenuItem(value: 'rename', child: Text(l.menuRename)),
+                PopupMenuItem(value: 'remove', child: Text(l.menuDelete)),
               ],
             ),
       onTap: active ? null : () => _state.select(profile.id),
@@ -140,35 +194,41 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   IconData _themeIcon(ThemeChoice choice) => switch (choice) {
-        ThemeChoice.system => Icons.brightness_auto_outlined,
-        ThemeChoice.light => Icons.light_mode_outlined,
-        ThemeChoice.dark => Icons.dark_mode_outlined,
+    ThemeChoice.system => Icons.brightness_auto_outlined,
+    ThemeChoice.light => Icons.light_mode_outlined,
+    ThemeChoice.dark => Icons.dark_mode_outlined,
+  };
+
+  String _themeLabel(AppLocalizations l, ThemeChoice choice) =>
+      switch (choice) {
+        ThemeChoice.system => l.themeSystem,
+        ThemeChoice.light => l.themeLight,
+        ThemeChoice.dark => l.themeDark,
       };
 
-  IconData _profileIcon(StoredProfile profile) =>
-      switch (profile.kind) {
-        ProfileKind.links => Icons.key_outlined,
-        ProfileKind.subscription => Icons.rss_feed,
-        ProfileKind.file => Icons.description_outlined,
-      };
+  IconData _profileIcon(StoredProfile profile) => switch (profile.kind) {
+    ProfileKind.links => Icons.key_outlined,
+    ProfileKind.subscription => Icons.rss_feed,
+    ProfileKind.file => Icons.description_outlined,
+  };
 
-  String _profileKindLabel(StoredProfile profile) {
+  String _profileKindLabel(AppLocalizations l, StoredProfile profile) {
     final provider = _state.providers
         .map((item) => item.id == profile.providerId ? item.name : null)
         .firstWhere((name) => name != null, orElse: () => null);
     return switch (profile.kind) {
-      ProfileKind.links => provider ?? 'Ссылки',
-      ProfileKind.subscription => provider ?? 'Подписка',
-      ProfileKind.file => 'Файл config.json',
+      ProfileKind.links => provider ?? l.profileKindLinks,
+      ProfileKind.subscription => provider ?? l.profileKindSubscription,
+      ProfileKind.file => l.profileKindFile,
     };
   }
 
-  Future<void> _rename(StoredProfile profile) async {
+  Future<void> _rename(AppLocalizations l, StoredProfile profile) async {
     final controller = TextEditingController(text: profile.name);
     final name = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Имя подключения'),
+        title: Text(l.renameTitle),
         content: TextField(
           controller: controller,
           autofocus: true,
@@ -177,11 +237,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Отмена'),
+            child: Text(l.buttonCancel),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, controller.text),
-            child: const Text('Сохранить'),
+            child: Text(l.buttonSave),
           ),
         ],
       ),
@@ -190,22 +250,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await _state.rename(profile.id, name);
   }
 
-  Future<void> _remove(StoredProfile profile) async {
+  Future<void> _remove(AppLocalizations l, StoredProfile profile) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Удалить «${profile.name}»?'),
-        content: const Text(
-          'Подключение и сохранённый кэш подписки будут удалены.',
-        ),
+        title: Text(l.removeProfileTitle(profile.name)),
+        content: Text(l.removeProfileBody),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Отмена'),
+            child: Text(l.buttonCancel),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Продолжить'),
+            child: Text(l.buttonContinue),
           ),
         ],
       ),

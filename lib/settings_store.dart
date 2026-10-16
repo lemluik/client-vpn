@@ -2,15 +2,17 @@ import 'package:flutter/material.dart' show ThemeMode;
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Выбор темы: как в большинстве клиентов — следим за системой или форсируем.
+///
+/// Названия тем interface берёт из локализации: модель работает до первого
+/// кадра, а язык известен только в виджете.
 enum ThemeChoice {
-  system(ThemeMode.system, 'Системная'),
-  light(ThemeMode.light, 'Светлая'),
-  dark(ThemeMode.dark, 'Тёмная');
+  system(ThemeMode.system),
+  light(ThemeMode.light),
+  dark(ThemeMode.dark);
 
-  const ThemeChoice(this.mode, this.label);
+  const ThemeChoice(this.mode);
 
   final ThemeMode mode;
-  final String label;
 
   static ThemeChoice named(String? value) =>
       values.firstWhere((choice) => choice.name == value, orElse: () => system);
