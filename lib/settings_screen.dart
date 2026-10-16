@@ -3,16 +3,23 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import 'about_screen.dart';
 import 'app_state.dart';
+import 'failover.dart';
 import 'l10n/app_localizations.dart';
 import 'profile_store.dart';
+import 'routing_presets.dart';
 import 'routing_restart.dart';
+import 'rules_screen.dart';
 import 'settings_store.dart';
 import 'split_screen.dart';
+import 'update_screen.dart';
 
-/// Настройки клиента: оформление, запуск вместе с системой, маршрут и профили.
+/// Настройки клиента: оформление, запуск, маршрут, профили и обслуживание.
 ///
-/// Набор как у большинства VPN-клиентов, чтобы не пришлось искать привычное.
+/// Единственная точка входа к этим пунктам — шестерёнка на главном экране:
+/// второго списка тех же настроек на первом экране нет, и показывать разные
+/// значения одного и того же выбора в двух местах невозможно.
 /// Значения применяются сразу — отдельной кнопки «Сохранить» здесь нет, кроме
 /// смены маршрута: она поднимает туннель заново и спрашивает разрешение.
 class SettingsScreen extends StatefulWidget {
@@ -104,7 +111,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ],
             const _SectionDivider(),
             _SectionTitle(l.settingsRoutingSection),
-            _homeRegionTile(l),
+            if (_state.homeRegionKnown)
+              _homeRegionTile(l)
+            else
+              ..._presetTiles(l),
             ListTile(
               leading: const Icon(Icons.list_alt),
               title: Text(l.splitExceptions),
@@ -121,6 +131,49 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => SplitScreen(state: _state)),
               ),
+            ),
+            ListTile(
+              key: const ValueKey('my-rules'),
+              leading: const Icon(Icons.rule_outlined),
+              title: Text(l.myRules),
+              subtitle: Text(
+                _state.manualRules.isEmpty
+                    ? l.myRulesEmpty
+                    : l.myRulesCount(_state.manualRules.length),
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => RulesScreen(state: _state)),
+              ),
+            ),
+            const _SectionDivider(),
+            _SectionTitle(l.settingsServiceSection),
+            ListTile(
+              key: const ValueKey('probe-target'),
+              leading: const Icon(Icons.network_check),
+              title: Text(l.probeTarget),
+              subtitle: Text(_state.probeEndpoint),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: _editProbeTarget,
+            ),
+            ListTile(
+              key: const ValueKey('update-source'),
+              leading: const Icon(Icons.system_update_alt),
+              title: Text(l.updateTitle),
+              subtitle: Text(l.updateSourceSubtitle),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => const UpdateScreen())),
+            ),
+            ListTile(
+              key: const ValueKey('about'),
+              leading: const Icon(Icons.info_outline),
+              title: Text(l.aboutTitle),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => const AboutScreen())),
             ),
             const _SectionDivider(),
             _SectionTitle(l.settingsProfilesSection(_state.profiles.length)),
@@ -139,9 +192,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   /// Переключатель «сайты домашнего региона напрямую».
   ///
-  /// Управляет тем же выбранным пресетом, что и лист «Дополнительно»: два
-  /// хранимых значения разошлись бы, и экран показывал бы не тот маршрут,
-  /// который реально ушёл в ядро.
+  /// Это и есть выбор маршрутного пресета: значение живёт в `routing.preset.v1`
+  /// и у переключателя, и у списка-замены ниже. Два видимых контролла над одним
+  /// значением расходились бы, и экран показывал бы не тот маршрут, который
+  /// реально ушёл в ядро, — поэтому показывается ровно один.
   Widget _homeRegionTile(AppLocalizations l) {
     final known = _state.homeRegionKnown;
 
@@ -166,6 +220,124 @@ class _SettingsScreenState extends State<SettingsScreen> {
             )
           : null,
     );
+  }
+
+  /// Выбор пресета списком — замена переключателя, когда домашний регион не
+  /// определён и включателю нечего предлагать.
+  List<Widget> _presetTiles(AppLocalizations l) => [
+    for (final preset in routingPresets)
+      ListTile(
+        key: ValueKey('preset-${preset.key}'),
+        leading: Icon(preset.isOff ? Icons.block : Icons.alt_route),
+        title: Text(_presetLabel(l, preset)),
+        subtitle: Text(preset.isOff ? l.presetOffSubtitle : l.presetOnSubtitle),
+        trailing: Icon(
+          preset.key == _state.routingPreset.key
+              ? Icons.radio_button_checked
+              : Icons.radio_button_off,
+        ),
+        // Выбранный ряд неактивен: повторный выбор того же маршрута всё равно
+        // перервал бы соединения, ничего не меняя.
+        onTap: preset.key == _state.routingPreset.key
+            ? null
+            : () => applyRoutingChange(
+                context,
+                _state,
+                l,
+                change: () => _state.setRoutingPreset(preset.key),
+                savedNote: l.presetSelected(_presetLabel(l, preset)),
+                appliedNote: l.presetApplied(_presetLabel(l, preset)),
+              ),
+      ),
+  ];
+
+  /// Название пресета на языке интерфейса. Модель список не переводит:
+  /// она работает до первого кадра, а язык известен только в виджете.
+  String _presetLabel(AppLocalizations l, RoutingPreset preset) =>
+      switch (preset.key) {
+        'ru' => l.presetRu,
+        'none' => l.presetOff,
+        _ => preset.label,
+      };
+
+  /// Точка проб наблюдателя (У-3): значение вводит пользователь, нейтральное
+  /// по умолчанию ничего о провайдере не сообщает.
+  Future<void> _editProbeTarget() async {
+    final l = AppLocalizations.of(context);
+    final controller = TextEditingController(text: _state.probeEndpoint);
+    final value = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(l.probeTarget),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(l.probeTargetSubtitle),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              autofocus: true,
+              keyboardType: TextInputType.url,
+              decoration: const InputDecoration(
+                hintText: defaultProbeEndpoint,
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(l.buttonCancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, controller.text),
+            child: Text(l.buttonSave),
+          ),
+        ],
+      ),
+    );
+    if (value == null) return;
+
+    final error = await _state.setProbeEndpoint(value);
+    if (error != null) {
+      _notify(error);
+      return;
+    }
+    if (!_state.isConnected) {
+      _notify(l.probeApplied);
+      return;
+    }
+
+    // Значение уже сохранено; переподключение только применяет его к каналу.
+    if (await _confirm(l.restartForPresetTitle, l.restartForProbeBody)) {
+      await _state.disconnect();
+      await _state.connect();
+    }
+    _notify(l.probeApplied);
+  }
+
+  Future<bool> _confirm(String title, String text) async {
+    final l = AppLocalizations.of(context);
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: Text(text),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(l.buttonCancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(l.buttonContinue),
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
   }
 
   /// Ряд выбора поведения крестика. Нужен, чтобы запомненный в запросе выбор

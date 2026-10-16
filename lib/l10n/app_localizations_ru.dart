@@ -21,9 +21,6 @@ class AppLocalizationsRu extends AppLocalizations {
   String get tooltipSettings => 'Настройки';
 
   @override
-  String get tooltipMore => 'Дополнительно';
-
-  @override
   String get tooltipLog => 'Журнал';
 
   @override
@@ -110,9 +107,6 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get addUrlHint => 'https://провайдер.example/подписка';
-
-  @override
-  String get settingsTitle => 'Часть трафика напрямую';
 
   @override
   String get probeTarget => 'Точка проб';
@@ -433,6 +427,9 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get settingsRoutingSection => 'Куда идёт трафик';
+
+  @override
+  String get settingsServiceSection => 'Обслуживание';
 
   @override
   String get splitHomeDirect => 'Сайты домашнего региона напрямую';

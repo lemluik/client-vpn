@@ -4,7 +4,6 @@
   "tooltipRefreshSubscription": "Refresh subscription",
   "tooltipAddConnection": "Add connection",
   "tooltipSettings": "Settings",
-  "tooltipMore": "More",
   "tooltipLog": "Log",
   "tooltipSupport": "Support",
   "tooltipActions": "Actions",
@@ -32,7 +31,6 @@
   "addFileSubtitle": "For experts: a full kernel config",
   "addLinkHint": "vless://… or several lines, or a base64 subscription",
   "addUrlHint": "https://provider.example/subscription",
-  "settingsTitle": "Part of the traffic directly",
   "probeTarget": "Probe target",
   "probeTargetSubtitle": "Address the client measures node latency against",
   "probeApplied": "Probe target saved",
@@ -163,6 +161,7 @@
   "profileKindSubscription": "Subscription",
   "profileKindFile": "config.json file",
   "settingsRoutingSection": "Where traffic goes",
+  "settingsServiceSection": "Maintenance",
   "splitHomeDirect": "Home-region sites go direct",
   "splitHomeDirectZones": "Zones: {zones}. Everything else goes through the connection.",
   "@splitHomeDirectZones": {

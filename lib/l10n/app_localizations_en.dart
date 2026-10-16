@@ -21,9 +21,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get tooltipSettings => 'Settings';
 
   @override
-  String get tooltipMore => 'More';
-
-  @override
   String get tooltipLog => 'Log';
 
   @override
@@ -110,9 +107,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get addUrlHint => 'https://provider.example/subscription';
-
-  @override
-  String get settingsTitle => 'Part of the traffic directly';
 
   @override
   String get probeTarget => 'Probe target';
@@ -435,6 +429,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsRoutingSection => 'Where traffic goes';
+
+  @override
+  String get settingsServiceSection => 'Maintenance';
 
   @override
   String get splitHomeDirect => 'Home-region sites go direct';

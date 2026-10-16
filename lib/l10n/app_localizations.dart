@@ -122,12 +122,6 @@ abstract class AppLocalizations {
   /// **'Настройки'**
   String get tooltipSettings;
 
-  /// No description provided for @tooltipMore.
-  ///
-  /// In ru, this message translates to:
-  /// **'Дополнительно'**
-  String get tooltipMore;
-
   /// No description provided for @tooltipLog.
   ///
   /// In ru, this message translates to:
@@ -289,12 +283,6 @@ abstract class AppLocalizations {
   /// In ru, this message translates to:
   /// **'https://провайдер.example/подписка'**
   String get addUrlHint;
-
-  /// No description provided for @settingsTitle.
-  ///
-  /// In ru, this message translates to:
-  /// **'Часть трафика напрямую'**
-  String get settingsTitle;
 
   /// No description provided for @probeTarget.
   ///
@@ -865,6 +853,12 @@ abstract class AppLocalizations {
   /// In ru, this message translates to:
   /// **'Куда идёт трафик'**
   String get settingsRoutingSection;
+
+  /// No description provided for @settingsServiceSection.
+  ///
+  /// In ru, this message translates to:
+  /// **'Обслуживание'**
+  String get settingsServiceSection;
 
   /// No description provided for @splitHomeDirect.
   ///

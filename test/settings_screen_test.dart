@@ -2,10 +2,12 @@ import 'dart:io';
 
 import 'package:client_vpn/app_state.dart';
 import 'package:client_vpn/autostart.dart';
+import 'package:client_vpn/failover.dart';
 import 'package:client_vpn/l10n/app_localizations.dart';
 import 'package:client_vpn/manual_rules.dart';
 import 'package:client_vpn/profile_store.dart';
 import 'package:client_vpn/routing_presets.dart';
+import 'package:client_vpn/rules_screen.dart';
 import 'package:client_vpn/settings_screen.dart';
 import 'package:client_vpn/settings_store.dart';
 import 'package:client_vpn/split_screen.dart';
@@ -257,17 +259,104 @@ void main() {
       );
     });
 
-    testWidgets('без известного домашнего региона переключатель выключен', (
+    testWidgets('без домашнего региона маршрут выбирается списком пресетов', (
       tester,
     ) async {
       final state = await makeState();
       addTearDown(state.dispose);
       await openSettings(tester, state);
 
-      final toggle = find.byKey(const ValueKey('home-region-direct'));
-      expect(tester.widget<SwitchListTile>(toggle).onChanged, isNull);
+      // Мёртвый переключатель показывать незачем: вместо него рабочий список
+      // пресетов — тот же самый выбор, что и переключатель при известном
+      // домашнем регионе.
+      expect(find.byKey(const ValueKey('home-region-direct')), findsNothing);
       expect(
         find.text('Домашний регион по языку устройства не определён'),
+        findsNothing,
+      );
+      expect(find.text('Выключено'), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('preset-ru')));
+      await tester.pumpAndSettle();
+      expect(state.routingPreset.key, 'ru');
+
+      // Выбранный ряд неактивен: повтор тот же маршрут оборвал бы соединения.
+      expect(
+        tester.widget<ListTile>(find.byKey(const ValueKey('preset-ru'))).onTap,
+        isNull,
+      );
+    });
+
+    testWidgets(
+      'со своим домашним регионом список не дублирует переключатель',
+      (tester) async {
+        final state = await makeState(languageCode: 'ru');
+        addTearDown(state.dispose);
+        await openSettings(tester, state);
+
+        expect(
+          find.byKey(const ValueKey('home-region-direct')),
+          findsOneWidget,
+        );
+        expect(find.byKey(const ValueKey('preset-ru')), findsNothing);
+        expect(find.byKey(const ValueKey('preset-none')), findsNothing);
+      },
+    );
+  });
+
+  group('переехавшие пункты листа «Дополнительно»', () {
+    testWidgets(
+      'правила, точка проб, обновления и «о программе» в настройках',
+      (tester) async {
+        final state = await makeState();
+        addTearDown(state.dispose);
+        await state.addFromText(linkOne);
+        await openSettings(tester, state);
+
+        expect(find.text('Мои правила'), findsOneWidget);
+        expect(find.text('Правил пока нет'), findsOneWidget);
+        expect(find.text('Обслуживание'), findsOneWidget);
+        expect(find.text('Точка проб'), findsOneWidget);
+        expect(find.text('Обновление'), findsOneWidget);
+        expect(find.text('О программе'), findsOneWidget);
+
+        await tester.tap(find.byKey(const ValueKey('my-rules')));
+        await tester.pumpAndSettle();
+        expect(find.byType(RulesScreen), findsOneWidget);
+      },
+    );
+
+    testWidgets('точка проб правится на экране настроек', (tester) async {
+      final state = await makeState();
+      addTearDown(state.dispose);
+      await openSettings(tester, state);
+
+      await tester.tap(find.byKey(const ValueKey('probe-target')));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byType(TextField),
+        'https://example.test/ping',
+      );
+      await tester.tap(find.text('Сохранить'));
+      await tester.pumpAndSettle();
+
+      expect(state.probeEndpoint, 'https://example.test/ping');
+    });
+
+    testWidgets('плохая точка проб не сохраняется', (tester) async {
+      final state = await makeState();
+      addTearDown(state.dispose);
+      await openSettings(tester, state);
+
+      await tester.tap(find.byKey(const ValueKey('probe-target')));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'example.test');
+      await tester.tap(find.text('Сохранить'));
+      await tester.pumpAndSettle();
+
+      expect(state.probeEndpoint, defaultProbeEndpoint);
+      expect(
+        find.text('Адрес должен начинаться с http:// или https://'),
         findsOneWidget,
       );
     });

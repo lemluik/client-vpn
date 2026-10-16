@@ -2,25 +2,20 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import 'about_screen.dart';
 import 'app_state.dart';
-import 'failover.dart';
 import 'l10n/app_localizations.dart';
 import 'log_screen.dart';
 import 'profile_store.dart';
 import 'provider.dart';
 import 'region.dart';
-import 'routing_presets.dart';
-import 'routing_restart.dart';
-import 'rules_screen.dart';
 import 'settings_screen.dart';
 import 'support_chat_screen.dart';
-import 'update_screen.dart';
 
 /// Главный экран: состояние туннеля, список подключений и добавление новых.
 ///
-/// Журнал и способ входа сырым файлом убраны отсюда: первый экран отвечает на
-/// вопрос «подключено ли», а не «что пишет ядро».
+/// Настройки, журнал-инструменты и «что куда идёт» живут на экране настроек:
+/// первый экран отвечает на вопрос «подключено ли», а не «как маршрутизирован
+/// трафик».
 class HomeScreen extends StatefulWidget {
   const HomeScreen({required this.state, super.key});
 
@@ -74,11 +69,6 @@ class _HomeScreenState extends State<HomeScreen> {
             tooltip: l.tooltipAddConnection,
             icon: const Icon(Icons.add),
             onPressed: _state.isBusy ? null : _showAddSheet,
-          ),
-          IconButton(
-            tooltip: l.tooltipMore,
-            icon: const Icon(Icons.tune),
-            onPressed: _state.isBusy ? null : _showSettingsSheet,
           ),
           IconButton(
             tooltip: l.tooltipLog,
@@ -347,177 +337,6 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
     );
-  }
-
-  /// Нижняя панель настроек: контекст главного экрана не теряется.
-  ///
-  /// Пресет нужен **до** первого подключения, поэтому выбор применяется сразу
-  /// и поднятый туннель перезапускается, а не ждёт следующего запуска.
-  Future<void> _showSettingsSheet() async {
-    final l = AppLocalizations.of(context);
-    await showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) => SafeArea(
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
-                child: Text(
-                  l.settingsTitle,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              for (final preset in routingPresets)
-                ListTile(
-                  title: Text(_presetLabel(l, preset)),
-                  subtitle: Text(
-                    preset.isOff ? l.presetOffSubtitle : l.presetOnSubtitle,
-                  ),
-                  trailing: preset.key == _state.routingPreset.key
-                      ? const Icon(Icons.check)
-                      : null,
-                  onTap: () async {
-                    Navigator.pop(context);
-                    await _applyPreset(preset);
-                  },
-                ),
-              ListTile(
-                title: Text(l.myRules),
-                subtitle: Text(
-                  _state.manualRules.isEmpty
-                      ? l.myRulesEmpty
-                      : l.myRulesCount(_state.manualRules.length),
-                ),
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.of(this.context).push(
-                    MaterialPageRoute(
-                      builder: (_) => RulesScreen(state: _state),
-                    ),
-                  );
-                },
-              ),
-              ListTile(
-                title: Text(l.probeTarget),
-                subtitle: Text(_state.probeEndpoint),
-                onTap: () async {
-                  Navigator.pop(context);
-                  await _editProbeTarget();
-                },
-              ),
-              ListTile(
-                title: Text(l.updateTitle),
-                subtitle: Text(l.updateSourceSubtitle),
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.of(this.context).push(
-                    MaterialPageRoute(builder: (_) => const UpdateScreen()),
-                  );
-                },
-              ),
-              ListTile(
-                title: Text(l.aboutTitle),
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.of(this.context).push(
-                    MaterialPageRoute(builder: (_) => const AboutScreen()),
-                  );
-                },
-              ),
-              const SizedBox(height: 8),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// Название пресета на языке интерфейса. Модель список не переводит:
-  /// она работает до первого кадра, а язык известен только в виджете.
-  String _presetLabel(AppLocalizations l, RoutingPreset preset) =>
-      switch (preset.key) {
-        'ru' => l.presetRu,
-        'none' => l.presetOff,
-        _ => preset.label,
-      };
-
-  Future<void> _applyPreset(RoutingPreset preset) async {
-    if (preset.key == _state.routingPreset.key) return;
-
-    final l = AppLocalizations.of(context);
-    final label = _presetLabel(l, preset);
-    await applyRoutingChange(
-      context,
-      _state,
-      l,
-      change: () => _state.setRoutingPreset(preset.key),
-      savedNote: l.presetSelected(label),
-      appliedNote: l.presetApplied(label),
-    );
-  }
-
-  /// Точка проб наблюдателя (У-3): значение вводит пользователь, нейтральное
-  /// по умолчанию ничего о провайдере не сообщает.
-  Future<void> _editProbeTarget() async {
-    final l = AppLocalizations.of(context);
-    final controller = TextEditingController(text: _state.probeEndpoint);
-    final value = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(l.probeTarget),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(l.probeTargetSubtitle),
-            const SizedBox(height: 12),
-            TextField(
-              controller: controller,
-              autofocus: true,
-              keyboardType: TextInputType.url,
-              decoration: const InputDecoration(
-                hintText: defaultProbeEndpoint,
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(l.buttonCancel),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, controller.text),
-            child: Text(l.buttonSave),
-          ),
-        ],
-      ),
-    );
-    if (value == null) return;
-
-    final error = await _state.setProbeEndpoint(value);
-    if (error != null) {
-      _notify(error);
-      return;
-    }
-    if (!_state.isConnected) {
-      _notify(l.probeApplied);
-      return;
-    }
-
-    // Значение уже сохранено; переподключение только применяет его к каналу.
-    if (await _confirm(l.restartForPresetTitle, l.restartForProbeBody)) {
-      await _state.disconnect();
-      await _state.connect();
-    }
-    _notify(l.probeApplied);
   }
 
   Future<void> _addFromText() async {

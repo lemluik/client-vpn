@@ -4,7 +4,6 @@
   "tooltipRefreshSubscription": "Обновить подписку",
   "tooltipAddConnection": "Добавить подключение",
   "tooltipSettings": "Настройки",
-  "tooltipMore": "Дополнительно",
   "tooltipLog": "Журнал",
   "tooltipSupport": "Поддержка",
   "tooltipActions": "Действия",
@@ -39,7 +38,6 @@
   "addFileSubtitle": "Для опытных: полный конфиг ядра",
   "addLinkHint": "vless://… или несколько строк, или подписка в base64",
   "addUrlHint": "https://провайдер.example/подписка",
-  "settingsTitle": "Часть трафика напрямую",
   "probeTarget": "Точка проб",
   "probeTargetSubtitle": "Адрес, до которого клиент меряет задержку узлов",
   "probeApplied": "Точка проб сохранена",
@@ -212,6 +210,7 @@
   "profileKindSubscription": "Подписка",
   "profileKindFile": "Файл config.json",
   "settingsRoutingSection": "Куда идёт трафик",
+  "settingsServiceSection": "Обслуживание",
   "splitHomeDirect": "Сайты домашнего региона напрямую",
   "splitHomeDirectZones": "Зоны: {zones}. Остальное — через подключение.",
   "@splitHomeDirectZones": {

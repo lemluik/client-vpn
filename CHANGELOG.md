@@ -25,6 +25,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- One settings entry point instead of two: the second toolbar button on the home screen opened a
+  sheet with rules, probe target, updates and about, while the gear opened a screen holding the
+  same routing choice under a different label. The sheet is gone and every item it held lives on
+  the settings screen; the routing choice is shown once — as the home-region switch when the device
+  language resolves to a region, otherwise as the preset list
 - The connect button sits in the middle of the home screen instead of being pinned to the bottom:
   the profile list now keeps its natural height, two spacers center the button in the space left,
   and the connection status stays at the bottom edge of the window
