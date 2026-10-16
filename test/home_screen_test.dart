@@ -181,6 +181,17 @@ void main() {
       expect(gear, findsOneWidget);
       expect(tester.getCenter(gear).dx, lessThan(60));
 
+      // Редкие действия — слева, частые справа, по две кнопки с каждой стороны.
+      expect(tester.getCenter(find.byTooltip('Журнал')).dx, lessThan(110));
+      expect(
+        tester.getCenter(find.byTooltip('Добавить подключение')).dx,
+        greaterThan(400),
+      );
+      expect(
+        tester.getCenter(find.byTooltip('Поддержка')).dx,
+        greaterThan(400),
+      );
+
       await tester.tap(gear);
       await tester.pumpAndSettle();
 

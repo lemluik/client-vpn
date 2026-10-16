@@ -25,6 +25,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- The home screen toolbar is balanced by how often each action is used: settings and log sit on the
+  left, add-connection and support chat on the right. The log used to be wedged between the two
+  actions people reach for daily, and the right side carried three buttons against one on the left.
 - The profiles section is first on the settings screen, above theme and startup: the list of saved
   connections is what the screen is opened for, and at the bottom it sat behind everything else.
 - One settings entry point instead of two: the second toolbar button on the home screen opened a

@@ -53,10 +53,24 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         title: Text(l.appTitle),
         centerTitle: true,
-        leading: IconButton(
-          tooltip: l.tooltipSettings,
-          icon: const Icon(Icons.settings_outlined),
-          onPressed: _openSettings,
+        // Редкие действия — слева, частые — справа: настройки и журнал нужны не
+        // каждый день, а добавление подключения и чат поддержки живут на
+        // переднем плане. По две кнопки с каждой стороны, заголовок по центру.
+        leadingWidth: 96,
+        leading: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              tooltip: l.tooltipSettings,
+              icon: const Icon(Icons.settings_outlined),
+              onPressed: _openSettings,
+            ),
+            IconButton(
+              tooltip: l.tooltipLog,
+              icon: const Icon(Icons.article_outlined),
+              onPressed: _openLog,
+            ),
+          ],
         ),
         actions: [
           if (!empty && _state.activeProvider != null)
@@ -69,11 +83,6 @@ class _HomeScreenState extends State<HomeScreen> {
             tooltip: l.tooltipAddConnection,
             icon: const Icon(Icons.add),
             onPressed: _state.isBusy ? null : _showAddSheet,
-          ),
-          IconButton(
-            tooltip: l.tooltipLog,
-            icon: const Icon(Icons.article_outlined),
-            onPressed: _openLog,
           ),
           IconButton(
             tooltip: l.tooltipSupport,
