@@ -15,7 +15,7 @@ import 'settings_store.dart';
 import 'split_screen.dart';
 import 'update_screen.dart';
 
-/// Настройки клиента: оформление, запуск, маршрут, профили и обслуживание.
+/// Настройки клиента: профили, оформление, запуск, маршрут и обслуживание.
 ///
 /// Единственная точка входа к этим пунктам — шестерёнка на главном экране:
 /// второго списка тех же настроек на первом экране нет, и показывать разные
@@ -62,6 +62,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(12, 8, 12, 20),
           children: [
+            _SectionTitle(l.settingsProfilesSection(_state.profiles.length)),
+            if (_state.profiles.isEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+                child: Text(l.settingsProfilesEmpty),
+              )
+            else
+              ..._state.profiles.map((profile) => _profileTile(l, profile)),
+            const _SectionDivider(),
             _SectionTitle(l.settingsThemeSection),
             ...ThemeChoice.values.map(
               (choice) => ListTile(
@@ -175,15 +184,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 context,
               ).push(MaterialPageRoute(builder: (_) => const AboutScreen())),
             ),
-            const _SectionDivider(),
-            _SectionTitle(l.settingsProfilesSection(_state.profiles.length)),
-            if (_state.profiles.isEmpty)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
-                child: Text(l.settingsProfilesEmpty),
-              )
-            else
-              ..._state.profiles.map((profile) => _profileTile(l, profile)),
           ],
         ),
       ),

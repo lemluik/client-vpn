@@ -197,6 +197,11 @@ void main() {
       await openSettings(tester, state);
 
       expect(find.text('Профили (2)'), findsOneWidget);
+      // Раздел профилей — первый на экране: список подключений ищут сразу.
+      expect(
+        tester.getTopLeft(find.text('Профили (2)')).dy,
+        lessThan(tester.getTopLeft(find.text('Оформление')).dy),
+      );
       // Галочка одна на экране: активный профиль — последний добавленный.
       expect(find.widgetWithIcon(ListTile, Icons.check), findsNWidgets(2));
 
