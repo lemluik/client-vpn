@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    
+    <!-- Атом: центральная частица + 3 орбиты -->
+    <!-- Центр: (54, 54), safe zone: 72×72 dp (18dp padding) -->
+    
+    <!-- Центральная частица (радиус 8dp) -->
+    <path
+        android:fillColor="#1565C0"
+        android:pathData="M54,46 a8,8 0 1,0 0,16 a8,8 0 1,0 0,-16"/>
+    
+    <!-- Орбита 1: горизонтальная (0°) -->
+    <path
+        android:strokeColor="#1565C0"
+        android:strokeWidth="2.5"
+        android:fillColor="#00000000"
+        android:pathData="M30,54 a24,12 0 1,0 48,0 a24,12 0 1,0 -48,0"/>
+    
+    <!-- Орбита 2: повёрнута на 60° -->
+    <group
+        android:pivotX="54"
+        android:pivotY="54"
+        android:rotation="60">
+        <path
+            android:strokeColor="#1565C0"
+            android:strokeWidth="2.5"
+            android:fillColor="#00000000"
+            android:pathData="M30,54 a24,12 0 1,0 48,0 a24,12 0 1,0 -48,0"/>
+    </group>
+    
+    <!-- Орбита 3: повёрнута на 120° -->
+    <group
+        android:pivotX="54"
+        android:pivotY="54"
+        android:rotation="120">
+        <path
+            android:strokeColor="#1565C0"
+            android:strokeWidth="2.5"
+            android:fillColor="#00000000"
+            android:pathData="M30,54 a24,12 0 1,0 48,0 a24,12 0 1,0 -48,0"/>
+    </group>
+</vector>
