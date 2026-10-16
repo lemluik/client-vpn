@@ -71,6 +71,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   variables rather than from the system — on both platforms. Closing it needs a local inbound on
   Android, where the tunnel config replaces local inbounds with the tun device.
 
+### Dependencies
+
+- `tray_manager` 0.5.2 → 0.8.0. Since 0.7.0 the package is built on `nativeapi`: the old singleton
+  and its platform channel moved to a deprecated `legacy.dart` that disappears in the next release,
+  so the tray controller now creates a `TrayIcon`, a `Menu` with `MenuItem`s and event listeners.
+  All native calls are synchronous and can return "not created", and the objects have to be kept
+  referenced — finalized by the garbage collector, a tray object releases its native handle and the
+  icon vanishes.
+- The state on the icon is still `setToolTip`, and only `setToolTip`: `setTitle` does nothing on
+  Windows. The difference from 0.5.x is that an unsupported call is now ignored silently instead of
+  throwing, which removes the half-mounted tray but gives no signal either, so the mount path keeps
+  checking every step and tears the tray down if any of them fails.
+- `dynamic_color` stays on 1.9.0 on purpose. From 2.0.0 the package returns a `ColorScheme` from
+  `material_ui` — a different Material implementation — so taking the upgrade would mean swapping
+  the app's widget library to get a palette.
+
 ## [0.3.0] - 2026-10-15
 
 ### Added
