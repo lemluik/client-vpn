@@ -222,7 +222,9 @@ class MainActivity : FlutterActivity() {
         } catch (e: Exception) {
             null
         }
-        if (uri == null || uri.host.isEmpty || uri.scheme != "http" && uri.scheme != "https") {
+        if (uri == null || uri.host.isNullOrEmpty() ||
+            (uri.scheme != "http" && uri.scheme != "https")
+        ) {
             result.error("bad_url", "Ссылка не похожа на адрес", null)
             return
         }
