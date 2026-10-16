@@ -222,6 +222,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get statusOff => 'Off';
 
   @override
+  String trafficRate(String up, String down) {
+    return '↑ $up/s · ↓ $down/s';
+  }
+
+  @override
+  String trafficSession(String up, String down) {
+    return 'Session: ↑ $up · ↓ $down';
+  }
+
+  @override
   String get orbDisconnect => 'Disconnect';
 
   @override

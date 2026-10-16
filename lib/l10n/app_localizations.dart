@@ -476,6 +476,18 @@ abstract class AppLocalizations {
   /// **'Отключено'**
   String get statusOff;
 
+  /// No description provided for @trafficRate.
+  ///
+  /// In ru, this message translates to:
+  /// **'↑ {up}/с · ↓ {down}/с'**
+  String trafficRate(String up, String down);
+
+  /// No description provided for @trafficSession.
+  ///
+  /// In ru, this message translates to:
+  /// **'За сессию: ↑ {up} · ↓ {down}'**
+  String trafficSession(String up, String down);
+
   /// No description provided for @orbDisconnect.
   ///
   /// In ru, this message translates to:

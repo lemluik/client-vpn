@@ -70,6 +70,8 @@
   "statusFailed": "Failure",
   "statusNoLink": "No connection",
   "statusOff": "Off",
+  "trafficRate": "↑ {up}/s · ↓ {down}/s",
+  "trafficSession": "Session: ↑ {up} · ↓ {down}",
   "orbDisconnect": "Disconnect",
   "orbConnect": "Connect",
   "orbRetry": "Connect again",

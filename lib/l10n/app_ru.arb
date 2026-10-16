@@ -119,6 +119,28 @@
   "statusFailed": "Сбой",
   "statusNoLink": "Нет связи",
   "statusOff": "Отключено",
+  "trafficRate": "↑ {up}/с · ↓ {down}/с",
+  "@trafficRate": {
+    "placeholders": {
+      "up": {
+        "type": "String"
+      },
+      "down": {
+        "type": "String"
+      }
+    }
+  },
+  "trafficSession": "За сессию: ↑ {up} · ↓ {down}",
+  "@trafficSession": {
+    "placeholders": {
+      "up": {
+        "type": "String"
+      },
+      "down": {
+        "type": "String"
+      }
+    }
+  },
   "orbDisconnect": "Отключить",
   "orbConnect": "Подключить",
   "orbRetry": "Подключить снова",
