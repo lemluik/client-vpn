@@ -197,6 +197,9 @@ class AppState extends ChangeNotifier {
 
   bool get autoConnect => _settings.autoConnect;
 
+  /// Крестик на окне: спросить, свернуть в трей или выйти.
+  CloseAction get closeAction => _settings.closeAction;
+
   /// Платформа без поддержки автозапуска прячет настройку целиком.
   bool get autostartSupported => _autostart.supported;
 
@@ -382,6 +385,12 @@ class AppState extends ChangeNotifier {
 
   Future<void> setTheme(ThemeChoice value) async {
     await _settings.setTheme(value);
+    notifyListeners();
+  }
+
+  /// Запомнить или передумать, что делать с крестиком на окне.
+  Future<void> setCloseAction(CloseAction value) async {
+    await _settings.setCloseAction(value);
     notifyListeners();
   }
 

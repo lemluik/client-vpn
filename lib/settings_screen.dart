@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
@@ -93,6 +95,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ? null
                   : (value) => _state.setAutoConnect(value),
             ),
+            // Трей поднимается только на Windows: на остальном десктопе
+            // прятать окно некуда, и настраивать нечего.
+            if (Platform.isWindows) ...[
+              const _SectionDivider(),
+              _SectionTitle(l.closeWindowSection),
+              ...CloseAction.values.map((action) => _closeTile(l, action)),
+            ],
             const _SectionDivider(),
             _SectionTitle(l.settingsRoutingSection),
             _homeRegionTile(l),
@@ -159,6 +168,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  /// Ряд выбора поведения крестика. Нужен, чтобы запомненный в запросе выбор
+  /// можно было передумать: без этой настройки «запомнить» превратилось бы в
+  /// ловушку до очистки данных приложения.
+  Widget _closeTile(AppLocalizations l, CloseAction action) {
+    final selected = _state.closeAction == action;
+    return ListTile(
+      key: ValueKey('close-choice-${action.name}'),
+      leading: Icon(_closeIcon(action)),
+      title: Text(_closeLabel(l, action)),
+      // Отметка своя, а не общая галочка: по галочке на этом экране ищут
+      // выбранную тему и активный профиль.
+      trailing: Icon(
+        selected ? Icons.radio_button_checked : Icons.radio_button_off,
+      ),
+      onTap: () => _state.setCloseAction(action),
+    );
+  }
+
   String _autoConnectHint(AppLocalizations l) {
     final id = _state.settings.lastProfileId;
     if (id == null) return l.settingsAutoConnectPending;
@@ -204,6 +231,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ThemeChoice.system => l.themeSystem,
         ThemeChoice.light => l.themeLight,
         ThemeChoice.dark => l.themeDark,
+      };
+
+  IconData _closeIcon(CloseAction action) => switch (action) {
+    CloseAction.ask => Icons.help_outline,
+    CloseAction.tray => Icons.minimize,
+    CloseAction.quit => Icons.power_settings_new,
+  };
+
+  String _closeLabel(AppLocalizations l, CloseAction action) =>
+      switch (action) {
+        CloseAction.ask => l.closeWindowChoiceAsk,
+        CloseAction.tray => l.closeWindowChoiceTray,
+        CloseAction.quit => l.closeWindowChoiceQuit,
       };
 
   IconData _profileIcon(StoredProfile profile) => switch (profile.kind) {

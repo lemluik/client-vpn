@@ -560,6 +560,60 @@ abstract class AppLocalizations {
   /// **'Клиент свёрнут в трей: подключение продолжает работать.'**
   String get windowHiddenToTray;
 
+  /// No description provided for @closeWindowSection.
+  ///
+  /// In ru, this message translates to:
+  /// **'При закрытии окна'**
+  String get closeWindowSection;
+
+  /// No description provided for @closeWindowChoiceAsk.
+  ///
+  /// In ru, this message translates to:
+  /// **'Спрашивать'**
+  String get closeWindowChoiceAsk;
+
+  /// No description provided for @closeWindowChoiceTray.
+  ///
+  /// In ru, this message translates to:
+  /// **'Сворачивать в трей'**
+  String get closeWindowChoiceTray;
+
+  /// No description provided for @closeWindowChoiceQuit.
+  ///
+  /// In ru, this message translates to:
+  /// **'Выходить'**
+  String get closeWindowChoiceQuit;
+
+  /// No description provided for @closeWindowTitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Закрыть окно?'**
+  String get closeWindowTitle;
+
+  /// No description provided for @closeWindowBody.
+  ///
+  /// In ru, this message translates to:
+  /// **'Свернуть в трей — подключение продолжит работать, клиент останется в трее. Выход снимет туннель и закроет приложение.'**
+  String get closeWindowBody;
+
+  /// No description provided for @closeWindowTray.
+  ///
+  /// In ru, this message translates to:
+  /// **'Свернуть в трей'**
+  String get closeWindowTray;
+
+  /// No description provided for @closeWindowQuit.
+  ///
+  /// In ru, this message translates to:
+  /// **'Выйти'**
+  String get closeWindowQuit;
+
+  /// No description provided for @closeWindowRemember.
+  ///
+  /// In ru, this message translates to:
+  /// **'Запомнить выбор'**
+  String get closeWindowRemember;
+
   /// No description provided for @aboutTitle.
   ///
   /// In ru, this message translates to:

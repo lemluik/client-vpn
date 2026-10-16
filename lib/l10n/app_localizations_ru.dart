@@ -266,6 +266,34 @@ class AppLocalizationsRu extends AppLocalizations {
       'Клиент свёрнут в трей: подключение продолжает работать.';
 
   @override
+  String get closeWindowSection => 'При закрытии окна';
+
+  @override
+  String get closeWindowChoiceAsk => 'Спрашивать';
+
+  @override
+  String get closeWindowChoiceTray => 'Сворачивать в трей';
+
+  @override
+  String get closeWindowChoiceQuit => 'Выходить';
+
+  @override
+  String get closeWindowTitle => 'Закрыть окно?';
+
+  @override
+  String get closeWindowBody =>
+      'Свернуть в трей — подключение продолжит работать, клиент останется в трее. Выход снимет туннель и закроет приложение.';
+
+  @override
+  String get closeWindowTray => 'Свернуть в трей';
+
+  @override
+  String get closeWindowQuit => 'Выйти';
+
+  @override
+  String get closeWindowRemember => 'Запомнить выбор';
+
+  @override
   String get aboutTitle => 'О программе';
 
   @override

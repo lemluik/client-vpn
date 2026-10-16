@@ -7,8 +7,10 @@ import 'package:flutter/services.dart' show SystemNavigator;
 import 'package:window_manager/window_manager.dart';
 
 import 'app_state.dart';
+import 'close_prompt.dart';
 import 'home_screen.dart';
 import 'l10n/app_localizations.dart';
+import 'settings_store.dart';
 import 'tray_controller.dart';
 import 'windows_guard.dart';
 
@@ -74,11 +76,16 @@ class ClientVpnApp extends StatefulWidget {
 }
 
 class _ClientVpnAppState extends State<ClientVpnApp> with WindowListener {
+  /// Навигатор нужен запросу закрытия: событие приходит от операционной
+  /// системы, и своего контекста у него нет.
+  final GlobalKey<NavigatorState> _navigator = GlobalKey<NavigatorState>();
+
   AppTray? _tray;
   AppLocalizations? _l10n;
   bool _trayAttempted = false;
   bool _trayMounted = false;
   bool _quitting = false;
+  bool _asking = false;
 
   @override
   void initState() {
@@ -111,15 +118,39 @@ class _ClientVpnAppState extends State<ClientVpnApp> with WindowListener {
 
   @override
   void onWindowClose() async {
-    if (_quitting) return;
-    if (_trayMounted) {
-      // Закрытие окна с треем — это сворачивание, а не разрыв: подключение
-      // продолжает работать, выход остаётся пунктом меню трея.
-      await windowManager.hide();
-      return;
+    // _asking держит повторные события: крестик на строке названия нажимается
+    // и тогда, когда поверх окна уже висит запрос.
+    if (_quitting || _asking) return;
+    switch (resolveClose(widget.state.closeAction, trayMounted: _trayMounted)) {
+      case ResolvedClose.hide:
+        await _hideWindow();
+      case ResolvedClose.quit:
+        await _shutdown();
+      case ResolvedClose.ask:
+        await _askBeforeClose();
     }
-    await _shutdown();
   }
+
+  /// Запрос при закрытии. Отмена оставляет окно открытым: крестик жмут по
+  /// привычке, а разрыв подключения одним кликом не отыгрывается.
+  Future<void> _askBeforeClose() async {
+    final context = _navigator.currentContext;
+    if (context == null) return;
+    _asking = true;
+    final choice = await showClosePrompt(context);
+    _asking = false;
+    if (choice == null) return;
+    if (choice.remember) await widget.state.setCloseAction(choice.action);
+    if (choice.action == CloseAction.tray) {
+      await _hideWindow();
+    } else {
+      await _shutdown();
+    }
+  }
+
+  /// Сворачивание, а не разрыв: подключение продолжает работать, а выход
+  /// остаётся пунктом меню трея.
+  Future<void> _hideWindow() => windowManager.hide();
 
   /// Полный выход: снять туннель, убрать трей, отдать мьютекс, уничтожить окно.
   Future<void> _shutdown() async {
@@ -176,6 +207,7 @@ class _ClientVpnAppState extends State<ClientVpnApp> with WindowListener {
     return DynamicColorBuilder(
       builder: (lightDynamic, darkDynamic) => MaterialApp(
         title: 'КлиентВПН',
+        navigatorKey: _navigator,
         debugShowCheckedModeBanner: false,
         // Язык берётся с устройства: русская и около-русская локаль дают русский,
         // англоязычная — английский, прочая откатывается на русский как первый.

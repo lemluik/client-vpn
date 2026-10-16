@@ -18,24 +18,42 @@ enum ThemeChoice {
       values.firstWhere((choice) => choice.name == value, orElse: () => system);
 }
 
-/// Настройки пользователя: оформление, автоподключение и память о последнем
-/// успешном подключении. Автозапуск сюда не входит — его флаг живёт в системе.
+/// Что делает крестик на окне: `ask` спрашивает при каждом закрытии, `tray`
+/// и `quit` — выбор, запомненный в этом самом запросе.
+enum CloseAction {
+  ask,
+  tray,
+  quit;
+
+  static CloseAction named(String? value) =>
+      values.firstWhere((action) => action.name == value, orElse: () => ask);
+}
+
+/// Настройки пользователя: оформление, запуск вместе с системой, крестик на
+/// окне и память о последнем успешном подключении. Флаг автозапуска живёт не
+/// здесь, а в системе.
 class SettingsStore {
   SettingsStore._(
     this._prefs, {
     required this.themeChoice,
     required this.autoConnect,
+    required this.closeAction,
     this.lastProfileId,
   });
 
   static const _themeKey = 'settings.theme';
   static const _autoConnectKey = 'settings.autoConnect';
   static const _lastProfileKey = 'settings.lastProfile';
+  static const _closeActionKey = 'settings.closeAction';
 
   final SharedPreferences _prefs;
 
   ThemeChoice themeChoice;
   bool autoConnect;
+
+  /// По умолчанию крестик спрашивает: молчаливый выход рвёт туннель, а
+  /// молчаливый трей прячет окно так, что его не найти.
+  CloseAction closeAction;
 
   /// Профиль, которым удалось подключиться в прошлый раз: именно его
   /// автоподключение поднимает снова.
@@ -47,6 +65,7 @@ class SettingsStore {
       prefs,
       themeChoice: ThemeChoice.named(prefs.getString(_themeKey)),
       autoConnect: prefs.getBool(_autoConnectKey) ?? false,
+      closeAction: CloseAction.named(prefs.getString(_closeActionKey)),
       lastProfileId: prefs.getString(_lastProfileKey),
     );
   }
@@ -59,6 +78,11 @@ class SettingsStore {
   Future<void> setAutoConnect(bool value) async {
     autoConnect = value;
     await _prefs.setBool(_autoConnectKey, value);
+  }
+
+  Future<void> setCloseAction(CloseAction value) async {
+    closeAction = value;
+    await _prefs.setString(_closeActionKey, value.name);
   }
 
   Future<void> rememberProfile(String id) async {

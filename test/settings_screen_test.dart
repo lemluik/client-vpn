@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:client_vpn/app_state.dart';
 import 'package:client_vpn/autostart.dart';
 import 'package:client_vpn/l10n/app_localizations.dart';
@@ -292,5 +294,52 @@ void main() {
         findsOneWidget,
       );
     });
+  });
+
+  // Ряды выбора относятся к трею, а трей поднимается только на Windows.
+  final windowsOnly = !Platform.isWindows;
+
+  group('закрытие окна в настройках', () {
+    /// Выбранный ряд — с заполненным кружком.
+    Finder chosen(String action) => find.descendant(
+      of: find.byKey(ValueKey('close-choice-$action')),
+      matching: find.byIcon(Icons.radio_button_checked),
+    );
+
+    testWidgets('три варианта, отмечена спрашивать', (tester) async {
+      final state = await makeState();
+      addTearDown(state.dispose);
+      await openSettings(tester, state);
+
+      expect(find.text('При закрытии окна'), findsOneWidget);
+      expect(find.byKey(const ValueKey('close-choice-ask')), findsOneWidget);
+      expect(find.byKey(const ValueKey('close-choice-tray')), findsOneWidget);
+      expect(find.byKey(const ValueKey('close-choice-quit')), findsOneWidget);
+      expect(chosen('ask'), findsOneWidget);
+      expect(chosen('tray'), findsNothing);
+    }, skip: windowsOnly);
+
+    testWidgets('выбор сохраняется и после перезапуска', (tester) async {
+      final state = await makeState();
+      addTearDown(state.dispose);
+      await openSettings(tester, state);
+
+      await tester.tap(find.text('Сворачивать в трей'));
+      await tester.pumpAndSettle();
+
+      expect(state.closeAction, CloseAction.tray);
+      expect((await SettingsStore.open()).closeAction, CloseAction.tray);
+      expect(chosen('tray'), findsOneWidget);
+      expect(chosen('ask'), findsNothing);
+    }, skip: windowsOnly);
+
+    testWidgets('запомненный выход показан выбранным', (tester) async {
+      final state = await makeState();
+      addTearDown(state.dispose);
+      await state.setCloseAction(CloseAction.quit);
+      await openSettings(tester, state);
+
+      expect(chosen('quit'), findsOneWidget);
+    }, skip: windowsOnly);
   });
 }

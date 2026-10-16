@@ -267,6 +267,34 @@ class AppLocalizationsEn extends AppLocalizations {
       'The client is in the tray: the connection stays up.';
 
   @override
+  String get closeWindowSection => 'On window close';
+
+  @override
+  String get closeWindowChoiceAsk => 'Ask every time';
+
+  @override
+  String get closeWindowChoiceTray => 'Minimize to tray';
+
+  @override
+  String get closeWindowChoiceQuit => 'Quit';
+
+  @override
+  String get closeWindowTitle => 'Close the window?';
+
+  @override
+  String get closeWindowBody =>
+      'Minimizing keeps the connection up and leaves the client in the tray. Quitting drops the tunnel and closes the app.';
+
+  @override
+  String get closeWindowTray => 'Minimize to tray';
+
+  @override
+  String get closeWindowQuit => 'Quit';
+
+  @override
+  String get closeWindowRemember => 'Remember my choice';
+
+  @override
   String get aboutTitle => 'About';
 
   @override
