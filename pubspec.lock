@@ -53,10 +53,10 @@ packages:
     dependency: transitive
     description:
       name: cnativeapi
-      sha256: "251fb93cd7ec205445fa512ee5ddeb0b82b3273d071cfc0784ddffbbdebbf5d3"
+      sha256: "43fce94bdf2f60e15bb7b0ef7b78b60fc0758e5463817fa17c5fb59f149566dd"
       url: "https://pub.dev"
     source: hosted
-    version: "0.5.2"
+    version: "0.3.0"
   code_assets:
     dependency: transitive
     description:
@@ -277,14 +277,6 @@ packages:
     description: flutter
     source: sdk
     version: "0.0.0"
-  glob:
-    dependency: transitive
-    description:
-      name: glob
-      sha256: "218aeb56050c714f62a3182775320dfa04602b55074873e24e31bbd39bda96fb"
-      url: "https://pub.dev"
-    source: hosted
-    version: "2.2.0"
   google_cloud:
     dependency: transitive
     description:
@@ -453,30 +445,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.19.0"
-  native_toolchain_c:
-    dependency: transitive
-    description:
-      name: native_toolchain_c
-      sha256: "90eaad8059ebc2004a63810a4696ea9acdb02473e47ed3b6b3bafb100ac77e31"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.19.5"
   nativeapi:
     dependency: transitive
     description:
       name: nativeapi
-      sha256: c4625e81f5ce2f4a9044c0ec1bdb38355119ffcf89e24eb20ae9fc5027a01e59
+      sha256: "2f40b3ac356097f56efa8188703159c303ce2b8b078d04c3d2d4afbe95b384ce"
       url: "https://pub.dev"
     source: hosted
-    version: "0.5.2"
-  nativeapi_flutter:
-    dependency: transitive
-    description:
-      name: nativeapi_flutter
-      sha256: "4feaa68cb5c4fc3b2eeaee1a25e56e2d092178e1c59516d9db5dd34940dcf36c"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.5.2"
+    version: "0.3.0"
   nm:
     dependency: transitive
     description:
@@ -581,14 +557,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.1.8"
-  process:
-    dependency: transitive
-    description:
-      name: process
-      sha256: "4242ba3508d37e01808bdf71ad1d5bb93a8d671bf2e7450e6b1b353fb0808891"
-      url: "https://pub.dev"
-    source: hosted
-    version: "5.0.6"
   protobuf:
     dependency: transitive
     description:
@@ -766,10 +734,10 @@ packages:
     dependency: "direct main"
     description:
       name: tray_manager
-      sha256: "4be089ac5fbca1c1724ea2b28a4827ff84f217956558d4eaf9441fd231c160a0"
+      sha256: "1f504e8e858cf44af1f5147df05d68ef735902d3259eac69aafc8afd8ee38a0e"
       url: "https://pub.dev"
     source: hosted
-    version: "0.8.0"
+    version: "0.7.0"
   typed_data:
     dependency: transitive
     description:
