@@ -186,87 +186,9 @@ jobs:
             SHA256SUMS.txt
           if-no-files-found: error
 
-  ios:
-    name: Сборка iOS
-    needs: checks
-    if: >-
-      startsWith(github.ref, 'refs/tags/v') ||
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.build == 'true')
-    runs-on: macos-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          cache: true
-
-      - name: Ядро и geo-базы для iOS
-        run: bash scripts/download_xray_ios.sh
-
-      - name: Сборка iOS (без подписи для артефакта)
-        run: flutter build ios --release --no-codesign
-
-      - name: Упаковать .app
-        run: |
-          cd build/ios/iphoneos
-          cp "$GITHUB_WORKSPACE/LICENSE" "$GITHUB_WORKSPACE/NOTICE" .
-          tar czf "$GITHUB_WORKSPACE/client-vpn-ios-${GITHUB_REF_NAME}.tar.gz" Runner.app LICENSE NOTICE
-
-      - name: Контрольная сумма архива
-        run: sha256sum client-vpn-ios-${{ github.ref_name }}.tar.gz > SHA256SUMS.txt
-
-      - uses: actions/upload-artifact@v7
-        with:
-          name: client-vpn-ios-${{ github.ref_name }}
-          path: |-
-            client-vpn-ios-${{ github.ref_name }}.tar.gz
-            SHA256SUMS.txt
-          if-no-files-found: error
-
-  macos:
-    name: Сборка macOS
-    needs: checks
-    if: >-
-      startsWith(github.ref, 'refs/tags/v') ||
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.build == 'true')
-    runs-on: macos-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          cache: true
-
-      - name: Ядро и geo-базы для macOS
-        run: bash scripts/download_xray_macos.sh
-
-      - name: Сборка macOS
-        run: flutter build macos --release
-
-      - name: Упаковать .app
-        run: |
-          cd build/macos/Build/Products/Release
-          cp "$GITHUB_WORKSPACE/LICENSE" "$GITHUB_WORKSPACE/NOTICE" .
-          tar czf "$GITHUB_WORKSPACE/client-vpn-macos-${GITHUB_REF_NAME}.tar.gz" client_vpn.app LICENSE NOTICE
-
-      - name: Контрольная сумма архива
-        run: sha256sum client-vpn-macos-${{ github.ref_name }}.tar.gz > SHA256SUMS.txt
-
-      - uses: actions/upload-artifact@v7
-        with:
-          name: client-vpn-macos-${{ github.ref_name }}
-          path: |-
-            client-vpn-macos-${{ github.ref_name }}.tar.gz
-            SHA256SUMS.txt
-          if-no-files-found: error
-
   release:
     name: Публикация GitHub Release
-    needs: [android, windows, ios, macos]
+    needs: [android, windows]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -289,35 +211,20 @@ jobs:
           name: client-vpn-windows-${{ github.ref_name }}
           path: from-windows
 
-      - uses: actions/download-artifact@v8
-        with:
-          name: client-vpn-ios-${{ github.ref_name }}
-          path: from-ios
-
-      - uses: actions/download-artifact@v8
-        with:
-          name: client-vpn-macos-${{ github.ref_name }}
-          path: from-macos
-
       - name: Собрать файлы релиза
         run: |
           set -euo pipefail
           TAG="${GITHUB_REF_NAME}"
           test -s "from-android/app-release.apk"
           ls from-windows/"client-vpn-windows-${TAG}.zip" >/dev/null
-          ls from-ios/"client-vpn-ios-${TAG}.tar.gz" >/dev/null
-          ls from-macos/"client-vpn-macos-${TAG}.tar.gz" >/dev/null
           mkdir dist
           # имена файлов релиза — как в уже опубликованных v0.1.0…v0.3.0; суффикс abi у
           # Android здесь не ставим: CI собирает единый APK на все ABI
           cp from-android/app-release.apk "dist/ClientVPN-${TAG}-Android.apk"
           cp from-windows/"client-vpn-windows-${TAG}.zip" "dist/ClientVPN-${TAG}-Windows-x64.zip"
-          cp from-ios/"client-vpn-ios-${TAG}.tar.gz" "dist/ClientVPN-${TAG}-iOS.tar.gz"
-          cp from-macos/"client-vpn-macos-${TAG}.tar.gz" "dist/ClientVPN-${TAG}-macOS.tar.gz"
           cp from-android/LICENSE from-android/NOTICE dist/
           cd dist
           sha256sum "ClientVPN-${TAG}-Android.apk" "ClientVPN-${TAG}-Windows-x64.zip" \
-            "ClientVPN-${TAG}-iOS.tar.gz" "ClientVPN-${TAG}-macOS.tar.gz" \
             LICENSE NOTICE > SHA256SUMS.txt
 
       - name: Опубликовать релиз
