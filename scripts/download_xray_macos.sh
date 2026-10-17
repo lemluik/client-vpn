@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# Скачать ядро Xray для macOS (universal) и geo-базы.
+# Скачать geo-базы для macOS.
+# macOS требует подпись для исполнения сторонних бинарников, поэтому ядро
+# не загружается — нужны только geo-базы (geoip.dat и geosite.dat).
 set -euo pipefail
 
 XRAY_VERSION="v26.3.27"
 BASE_URL="https://github.com/XTLS/Xray-core/releases/download/${XRAY_VERSION}"
-ASSET="Xray-macos.zip"
+ASSET="Xray-windows-64.zip"
 DEST="macos/Runner/Resources"
 GEO_DEST="macos/Runner/Resources/geo"
 
@@ -29,15 +31,11 @@ check_sha256() {
   fi
 }
 
-echo "Скачивание Xray-core ${XRAY_VERSION} (macos-universal)..."
+echo "Скачивание geo-баз из Xray-core ${XRAY_VERSION} (windows-64)..."
 curl -sfL --fail "${BASE_URL}/${ASSET}" -o "$TMP_ZIP"
 
-echo "Распаковка..."
-unzip -o -q "$TMP_ZIP" xray geoip.dat geosite.dat -d "$TMP_DIR"
-
-cp "$TMP_DIR/xray" "$DEST/xray"
-chmod +x "$DEST/xray"
-echo "Готово: $DEST/xray"
+echo "Распаковка geo-баз..."
+unzip -o -q "$TMP_ZIP" geoip.dat geosite.dat -d "$TMP_DIR"
 
 echo "Проверка SHA-256 geo-баз..."
 check_sha256 "$TMP_DIR/geoip.dat" "$GEOIP_SHA256" "geoip.dat"

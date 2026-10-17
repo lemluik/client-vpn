@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Скачать ядро Xray для iOS (arm64) и geo-базы.
+# Скачать geo-базы для iOS.
 # iOS не позволяет исполнять сторонние бинарники без подписи, поэтому ядро
-# используется только для geo-баз.
+# не используется — нужны только geo-базы (geoip.dat и geosite.dat).
 set -euo pipefail
 
 XRAY_VERSION="v26.3.27"
 BASE_URL="https://github.com/XTLS/Xray-core/releases/download/${XRAY_VERSION}"
-ASSET="Xray-ios-arm64.zip"
+ASSET="Xray-windows-64.zip"
 GEO_DEST="ios/Runner/assets/geo"
 
 GEOIP_SHA256="744c97b74c52bae2ac8664fef6ac481d7765cb8432a0df54f0368a88b9b4a354"
@@ -30,7 +30,7 @@ check_sha256() {
   fi
 }
 
-echo "Скачивание Xray-core ${XRAY_VERSION} (ios-arm64)..."
+echo "Скачивание geo-баз из Xray-core ${XRAY_VERSION} (windows-64)..."
 curl -sfL --fail "${BASE_URL}/${ASSET}" -o "$TMP_ZIP"
 
 echo "Распаковка geo-баз..."
