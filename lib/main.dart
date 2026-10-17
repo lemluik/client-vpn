@@ -154,15 +154,12 @@ class _ClientVpnAppState extends State<ClientVpnApp> with WindowListener {
   /// с закрытием окна до завершения `_ensureTray`), монтируем сейчас — иначе
   /// окно спрячется без возможности вернуться.
   Future<void> _hideWindow() async {
-    _logToFile('_hideWindow: _trayMounted=$_trayMounted, _tray=$_tray');
     if (!_trayMounted && _tray != null && _l10n != null) {
-      _logToFile('принудительное монтирование...');
       final mounted = await _tray!.mount(
         tooltip: _tooltipText(_l10n!),
         showLabel: _l10n!.trayShowWindow,
         quitLabel: _l10n!.trayQuit,
       );
-      _logToFile('результат принудительного монтирования: $mounted');
       if (mounted) setState(() => _trayMounted = true);
     }
     await windowManager.hide();
@@ -179,10 +176,8 @@ class _ClientVpnAppState extends State<ClientVpnApp> with WindowListener {
   }
 
   void _ensureTray(AppLocalizations l10n) {
-    _logToFile('_ensureTray вызван: _trayAttempted=$_trayAttempted, isWindows=${Platform.isWindows}');
     if (_trayAttempted || !Platform.isWindows) return;
     _trayAttempted = true;
-    _logToFile('монтирование...');
     final tray = AppTray(
       onShowWindow: _showWindow,
       onQuit: () => unawaited(_shutdown()),
@@ -196,19 +191,9 @@ class _ClientVpnAppState extends State<ClientVpnApp> with WindowListener {
             quitLabel: l10n.trayQuit,
           )
           .then((mounted) {
-            _logToFile('результат: $mounted');
             if (mounted) setState(() => _trayMounted = true);
           }),
     );
-  }
-
-  void _logToFile(String message) {
-    try {
-      final file = File(r'C:\Users\Lem\client_vpn_tray.log');
-      file.writeAsStringSync('${DateTime.now().toIso8601String()} $message\n', mode: FileMode.append);
-    } catch (e) {
-      // Игнорируем ошибки логирования
-    }
   }
 
   Future<void> _showWindow() async {
@@ -244,7 +229,6 @@ class _ClientVpnAppState extends State<ClientVpnApp> with WindowListener {
 
   @override
   Widget build(BuildContext context) {
-    _logToFile('build вызван');
     return DynamicColorBuilder(
       builder: (lightDynamic, darkDynamic) => MaterialApp(
         title: 'КлиентВПН',
