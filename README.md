@@ -1,7 +1,7 @@
 <p align="center">
-  <h1 align="center">КлиентВПН</h1>
+  <h1 align="center">Нейтрино</h1>
   <p align="center">
-    Open-source VPN-клиент на базе Xray-core (VLESS+Reality) для Windows и Android
+    Open-source VPN-клиент на базе Xray-core (VLESS+Reality) для Windows, Android, iOS и macOS
   </p>
   <p align="center">
     <a href="LICENSE">
@@ -10,7 +10,7 @@
     <a href="https://github.com/lemluik/client-vpn/releases">
       <img src="https://img.shields.io/github/v/release/lemluik/client-vpn" alt="Release">
     </a>
-    <img src="https://img.shields.io/badge/platform-Windows%2010%2F11%20%C2%B7%20Android%20arm64-blue" alt="Platform: Windows and Android">
+    <img src="https://img.shields.io/badge/platform-Windows%2010%2F11%20%C2%B7%20Android%20arm64%20%C2%B7%20iOS%20%C2%B7%20macOS-blue" alt="Platform: Windows, Android, iOS, macOS">
     <img src="https://img.shields.io/badge/xray-26.3.27-green" alt="Xray: 26.3.27">
     <a href="https://github.com/XTLS/Xray-core">
       <img src="https://img.shields.io/badge/powered%20by-Xray--core%20(MPL--2.0)-orange" alt="Powered by Xray-core">
@@ -22,7 +22,7 @@
 
 ## О проекте
 
-КлиентВПН — open-source VPN-клиент, который управляет Xray-core как подпроцессом. Поддерживает VLESS+Reality, работает на Windows (системный прокси) и на Android (туннель VpnService), делает автоматический откат при сбое.
+Нейтрино — open-source VPN-клиент, который управляет Xray-core как подпроцессом. Поддерживает VLESS+Reality, работает на Windows (системный прокси), Android (туннель VpnService), iOS и macOS, делает автоматический откат при сбое.
 
 Клиент универсален: он работает с подпиской и ссылками любого провайдера, а не только с нашим сервисом. В нём можно держать несколько подключений одновременно — файл config.json, ссылку VLESS и подписку целиком, — а страна выхода выбирается прямо в интерфейсе по именам узлов, которые прислал провайдер.
 
@@ -69,12 +69,14 @@
 - ✅ Раздельное туннелирование: адреса `.ru` и других зон идут напрямую, остальное — через туннель; список настраивается
 - ✅ Редактор правил маршрутизации: ручные правила домена и IP, пресеты (всё через туннель / всё напрямую / раздельное), per-app на Android
 - ✅ Иконка в системном трее (Windows): левый клик показывает окно, правый — меню «Показать / Выйти»; подсказка на иконке следит за состоянием туннеля
+- ✅ Счётчик трафика в реальном времени: Android — в уведомлении VPN-туннеля (скорость ↑↓ и объём), Windows — в подсказке трея; по UID на Android и gRPC StatsService на Windows
 - ✅ Запрос при закрытии окна (Windows): свернуть в трей или выйти — с запоминанием выбора
 - ✅ Проверка обновлений: клиент спрашивает GitHub Releases о новой версии и показывает экран с описанием и ссылкой на релиз
 
 ### Ограничения текущей версии
 
-- ⚠️ iOS / macOS / Linux — в планах R3
+- ⚠️ iOS / macOS — сборка в CI (без подписи); для запуска на устройстве нужна собственная подпись и доработка ядра
+- ⚠️ Linux — в планах R3
 - ⚠️ Windows: только system proxy (без TUN) — часть трафика может идти мимо
 - ⚠️ Android: только arm64-v8a (официальный релиз Xray-core для Android не содержит других бинарников)
 - ⚠️ Android: APK подписан отладочным ключом — обновление поверх релиза другим ключом потребует переустановки
@@ -91,7 +93,7 @@
 
 **Windows**
 
-1. Скачайте `ClientVPN-v0.3.0-Windows-x64.zip` из [Releases](https://github.com/lemluik/client-vpn/releases)
+1. Скачайте `ClientVPN-v0.4.0-Windows-x64.zip` из [Releases](https://github.com/lemluik/client-vpn/releases)
 2. Распакуйте в любую папку
 3. Запустите `client_vpn.exe`
 
@@ -100,12 +102,21 @@
 
 **Android**
 
-1. Скачайте `ClientVPN-v0.3.0-Android-arm64-v8a.apk` из [Releases](https://github.com/lemluik/client-vpn/releases)
+1. Скачайте `ClientVPN-v0.4.0-Android-arm64-v8a.apk` из [Releases](https://github.com/lemluik/client-vpn/releases)
 2. Установите файл (Android запросит разрешение на установку из неизвестных источников)
 3. Откройте приложение и добавьте подключение — ядро уже внутри APK
 
 > [!NOTE]
 > При первом подключении система запросит разрешение на создание VPN-туннеля.
+
+**iOS / macOS**
+
+1. Скачайте `ClientVPN-v0.4.0-iOS.tar.gz` или `ClientVPN-v0.4.0-macOS.tar.gz` из [Releases](https://github.com/lemluik/client-vpn/releases)
+2. Распакуйте архив — внутри проект Flutter для Xcode (iOS) или готовый `.app` (macOS)
+3. Для запуска на устройстве подпишите приложение своим сертификатом Apple; без подписи macOS заблокирует запуск (Gatekeeper)
+
+> [!WARNING]
+> Релизные сборки iOS/macOS не подписаны. Для использования на устройстве нужна учётная запись разработчика Apple и собственная подпись через Xcode.
 
 ## Использование
 
@@ -178,6 +189,32 @@ flutter build apk --release
 > [!WARNING]
 > В `android/app/build.gradle.kts` релизная сборка подписана отладочным ключом. Перед публикацией в магазин или для обновлений поверх другой подписи настройте собственный ключ.
 
+### Сборка iOS / macOS
+
+Нужен macOS с Xcode. Ядро в git не лежит — его скачивает скрипт:
+
+```bash
+# iOS: только geo-базы (исполняемый файл без подписи не запустится)
+bash scripts/download_xray_ios.sh
+
+# macOS: ядро + geo-базы
+bash scripts/download_xray_macos.sh
+
+# Зависимости и сборка
+flutter pub get
+
+# iOS (без подписи — только для проверки сборки)
+flutter build ios --release --no-codesign
+
+# macOS
+flutter build macos --release
+```
+
+Готовый `.app`: `build/macos/Build/Products/Release/client_vpn.app`
+
+> [!NOTE]
+> Для запуска на устройстве или публикации подпишите приложение в Xcode (Signing & Capabilities). CI собирает без подписи (`--no-codesign` для iOS).
+
 ### Проверка окружения
 
 ```powershell
@@ -242,7 +279,7 @@ client-vpn/
 │   ├── region.dart            # группы узлов по стране и порядок выбора
 │   ├── settings_store.dart    # настройки: тема, автозапуск, автоподключение, close action
 │   ├── settings_screen.dart   # экран настроек (шестерёнка)
-│   ├── tray_controller.dart   # иконка в системном трее (native API tray_manager 0.8.0)
+│   ├── tray_controller.dart   # иконка в системном трее (native API tray_manager 0.7.0)
 │   ├── close_prompt.dart      # запрос при закрытии окна
 │   ├── autostart.dart         # автозапуск с системой (реестр Windows / BootReceiver Android)
 │   ├── routing_presets.dart   # пресеты маршрутизации: direct, proxy, split
@@ -281,7 +318,9 @@ client-vpn/
 │       └── tray.ico           # иконка трея
 ├── scripts/
 │   ├── download_xray.sh          # Xray-core для Windows + geo-базы + сверка SHA-256
-│   └── download_xray_android.sh  # ядро в jniLibs + geo-базы в assets/geo + манифест сумм
+│   ├── download_xray_android.sh  # ядро в jniLibs + geo-базы в assets/geo + манифест сумм
+│   ├── download_xray_ios.sh      # geo-базы для iOS (исполняемый файл не подписан)
+│   └── download_xray_macos.sh    # ядро + geo-базы для macOS + сверка SHA-256
 ├── test/                         # 418 тестов (33 файла)
 │   ├── share_link_test.dart      # разбор ссылок и параметров Reality
 │   ├── subscription_test.dart    # разбор подписки
@@ -338,9 +377,10 @@ client-vpn/
 - [x] **R1** — Windows MVP (system proxy, один профиль)
 - [x] **R2** — Android (VpnService + TUN), ядро внутри APK, общий слой ядра для двух платформ
 - [x] **R2.5** — несколько подключений (ссылки, подписки, кэш), выбор страны выхода по именам узлов, журнал с маскированием, круглая кнопка подключения
-- [ ] **R2.6** — автопереключение узла и страны при сбое, замер задержки до узлов
-- [ ] **R2.1** — TUN на Windows (wintun)
-- [ ] **R3** — iOS/macOS, Linux, автообновление, sing-box конвертер
+- [x] **R2.6** — трей Windows (tray_manager 0.7.0), запрос при закрытии, счётчик трафика в уведомлении Android и подсказке трея Windows, CI для iOS/macOS
+- [ ] **R3** — подпись iOS/macOS, Linux, автообновление, sing-box конвертер
+- [ ] **R3.1** — автопереключение узла и страны при сбое, замер задержки до узлов
+- [ ] **R3.2** — TUN на Windows (wintun)
 
 ## Безопасность
 

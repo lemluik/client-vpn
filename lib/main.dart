@@ -150,8 +150,20 @@ class _ClientVpnAppState extends State<ClientVpnApp> with WindowListener {
   }
 
   /// Сворачивание, а не разрыв: подключение продолжает работать, а выход
-  /// остаётся пунктом меню трея.
-  Future<void> _hideWindow() => windowManager.hide();
+  /// остаётся пунктом меню трея. Если трей ещё не смонтирован (race condition
+  /// с закрытием окна до завершения `_ensureTray`), монтируем сейчас — иначе
+  /// окно спрячется без возможности вернуться.
+  Future<void> _hideWindow() async {
+    if (!_trayMounted && _tray != null && _l10n != null) {
+      final mounted = await _tray!.mount(
+        tooltip: _tooltipText(_l10n!),
+        showLabel: _l10n!.trayShowWindow,
+        quitLabel: _l10n!.trayQuit,
+      );
+      if (mounted) setState(() => _trayMounted = true);
+    }
+    await windowManager.hide();
+  }
 
   /// Полный выход: снять туннель, убрать трей, отдать мьютекс, уничтожить окно.
   Future<void> _shutdown() async {
