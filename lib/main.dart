@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show SystemNavigator;
+import 'package:flutter/services.dart' show MethodChannel, SystemNavigator;
 import 'package:window_manager/window_manager.dart';
 
 import 'app_state.dart';
@@ -23,6 +23,10 @@ final bool isDesktop =
 /// Мьютекс одиночного экземпляра. Держим ручку до конца процесса: при
 /// внешнем убийстве приложения операционная система закрывает её сама.
 SingleInstanceLock? _instanceLock;
+
+/// macOS: Cmd+Q и «Завершить» в Dock приходят сюда из AppDelegate.swift,
+/// а ответ `allowQuit` разрешает системе завершить приложение.
+const MethodChannel _appChannel = MethodChannel('client_vpn/app');
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -94,6 +98,11 @@ class _ClientVpnAppState extends State<ClientVpnApp> with WindowListener {
     if (isDesktop) {
       windowManager.addListener(this);
       widget.state.addListener(_updateTrayTooltip);
+    }
+    if (Platform.isMacOS) {
+      _appChannel.setMethodCallHandler((call) async {
+        if (call.method == 'quitRequested') await _shutdown();
+      });
     }
     widget.state.addListener(_onChange);
     // Первая отрисована: окно видно, пока поднимается туннель.
@@ -167,16 +176,18 @@ class _ClientVpnAppState extends State<ClientVpnApp> with WindowListener {
 
   /// Полный выход: снять туннель, убрать трей, отдать мьютекс, уничтожить окно.
   Future<void> _shutdown() async {
+    if (_quitting) return;
     _quitting = true;
     await widget.state.disconnect();
     widget.state.dispose();
     await _tray?.unmount();
     _instanceLock?.release();
+    if (Platform.isMacOS) await _appChannel.invokeMethod<void>('allowQuit');
     await windowManager.destroy();
   }
 
   void _ensureTray(AppLocalizations l10n) {
-    if (_trayAttempted || !Platform.isWindows) return;
+    if (_trayAttempted || !(Platform.isWindows || Platform.isMacOS)) return;
     _trayAttempted = true;
     final tray = AppTray(
       onShowWindow: _showWindow,

@@ -111,9 +111,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ? null
                   : (value) => _state.setAutoConnect(value),
             ),
-            // Трей поднимается только на Windows: на остальном десктопе
-            // прятать окно некуда, и настраивать нечего.
-            if (Platform.isWindows) ...[
+            // Трей есть на Windows и в строке меню macOS: на остальном
+            // десктопе прятать окно некуда, и настраивать нечего.
+            if (Platform.isWindows || Platform.isMacOS) ...[
               const _SectionDivider(),
               _SectionTitle(l.closeWindowSection),
               ...CloseAction.values.map((action) => _closeTile(l, action)),

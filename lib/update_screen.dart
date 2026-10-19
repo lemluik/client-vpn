@@ -119,7 +119,9 @@ class _UpdateScreenState extends State<UpdateScreen> {
     final release = result.release;
     if (release == null) return Text(result.error!);
 
-    final url = release.downloadUrlFor(Platform.isAndroid ? 'android' : 'windows');
+    final url = Platform.isMacOS
+        ? release.downloadUrlFor('macos', anyAsLast: false)
+        : release.downloadUrlFor(Platform.isAndroid ? 'android' : 'windows');
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

@@ -3,7 +3,8 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 
 /// Открывает ссылку в системном браузере, не заводя новых зависимостей:
-/// на Windows — штатный `rundll32`, на Android — `ACTION_VIEW` через нативный
+/// на Windows — штатный `rundll32`, на macOS — `open`, на Android —
+/// `ACTION_VIEW` через нативный
 /// канал туннела. `false` означает «автоматически не получилось»: экран в этом
 /// случае предлагает скопировать ссылку.
 const MethodChannel tunnelChannel = MethodChannel('client_vpn/tunnel');
@@ -20,6 +21,15 @@ Future<bool> openExternalLink(String url) async {
         'rundll32',
         ['url.dll,FileProtocolHandler', trimmed],
       );
+      return result.exitCode == 0;
+    } on ProcessException {
+      return false;
+    }
+  }
+
+  if (Platform.isMacOS) {
+    try {
+      final result = await Process.run('/usr/bin/open', [trimmed]);
       return result.exitCode == 0;
     } on ProcessException {
       return false;
