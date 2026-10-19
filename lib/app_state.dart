@@ -165,9 +165,6 @@ class AppState extends ChangeNotifier {
   /// Имя сервиса для надписей («Подключить {имя}»). Без конфига — «сервис».
   String get serviceName => serviceConfig.serviceName;
 
-  /// Показывать ли подключение пробного ключа в меню «+».
-  bool get trialEnabled => serviceConfig.trialEnabled;
-
   /// Правила пользователя: хранятся на устройстве, применяются поверх пресета.
   final RuleStore? _ruleStore;
   List<ManualRule> _manualRules;

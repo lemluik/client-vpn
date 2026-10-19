@@ -721,22 +721,24 @@ void main() {
       expect(find.text('Подключить сервис'), findsOneWidget);
     });
 
-    testWidgets('открытый клиент (trial выключен) пункт не показывает', (
-      tester,
-    ) async {
-      final state = await makeState();
-      addTearDown(state.dispose);
+    testWidgets(
+      'открытый клиент без конфига: пункт виден с нейтральной меткой',
+      (tester) async {
+        final state = await makeState();
+        addTearDown(state.dispose);
 
-      await pumpApp(tester, state);
-      await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('Добавить подключение'));
-      await tester.pumpAndSettle();
+        await pumpApp(tester, state);
+        await tester.pumpAndSettle();
+        await tester.tap(find.byTooltip('Добавить подключение'));
+        await tester.pumpAndSettle();
 
-      expect(find.byIcon(Icons.bolt_rounded), findsNothing);
-      expect(find.text('Подключить сервис'), findsNothing);
-      // Универсальные пункты на месте.
-      expect(find.text('Ссылка или подписка'), findsOneWidget);
-    });
+        // Кнопка видна всегда (решение владельца 20.10), без конфига — fallback.
+        expect(find.byIcon(Icons.bolt_rounded), findsOneWidget);
+        expect(find.text('Подключить сервис'), findsOneWidget);
+        // Универсальные пункты на месте.
+        expect(find.text('Ссылка или подписка'), findsOneWidget);
+      },
+    );
 
     testWidgets('тап по пункту открывает экран подключения', (tester) async {
       final state = await makeState(serviceConfig: trialConfig);

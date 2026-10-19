@@ -325,19 +325,18 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
               ),
-              if (_state.trialEnabled)
-                ListTile(
-                  leading: Icon(
-                    Icons.bolt_rounded,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
-                  title: Text(l.trialConnectTitle(_state.serviceName)),
-                  subtitle: Text(l.trialConnectSubtitle),
-                  onTap: () async {
-                    Navigator.pop(context);
-                    await _openRegistration();
-                  },
+              ListTile(
+                leading: Icon(
+                  Icons.bolt_rounded,
+                  color: Theme.of(context).colorScheme.primary,
                 ),
+                title: Text(l.trialConnectTitle(_state.serviceName)),
+                subtitle: Text(l.trialConnectSubtitle),
+                onTap: () async {
+                  Navigator.pop(context);
+                  await _openRegistration();
+                },
+              ),
               ListTile(
                 leading: const Icon(Icons.link),
                 title: Text(l.addLinkTitle),
