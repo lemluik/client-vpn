@@ -14,5 +14,6 @@ analyzer:
     - "build/**"
     - windows/**
     - android/**
+    - macos/**
   errors:
     invalid_annotation_target: ignore
