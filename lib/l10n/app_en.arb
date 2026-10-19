@@ -221,5 +221,21 @@
   "splitSaved": "The list is saved",
   "splitApplied": "The list is applied, the connection is back up",
   "splitDirectRuleTitle": "Exceptions: direct",
-  "splitTunnelRuleTitle": "Exceptions: into the tunnel"
+  "splitTunnelRuleTitle": "Exceptions: into the tunnel",
+  "trialConnectTitle": "Connect {serviceName}",
+  "trialConnectSubtitle": "Free trial key",
+  "registrationLoginLabel": "Telegram login",
+  "registrationLoginHint": "@username",
+  "registrationTerms": "I agree to the testing program terms",
+  "registrationSubmit": "Connect",
+  "registrationInfo": "This is a testing program. Keys are issued free of charge until the end of the year. The support team may run surveys to improve the service.",
+  "registrationNeedConsent": "You must agree to the program terms",
+  "registrationBadLogin": "Enter a Telegram login: @username, 5 to 32 characters",
+  "registrationSuccess": "Connected! The key is added.",
+  "registrationFailed": "Could not connect: {reason}",
+  "expiredTitle": "Key expired",
+  "expiredBody": "Your temporary key has expired.",
+  "expiredSupport": "To renew it, contact the support team",
+  "expiredOpenSupport": "Open support",
+  "expiredProgramNote": "The testing program is valid until 31.10.2026"
 }

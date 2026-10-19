@@ -8,6 +8,7 @@ import 'package:client_vpn/failover.dart';
 import 'package:client_vpn/home_screen.dart';
 import 'package:client_vpn/main.dart';
 import 'package:client_vpn/profile_store.dart';
+import 'package:client_vpn/services/service_config.dart';
 import 'package:client_vpn/settings_store.dart';
 import 'package:client_vpn/vpn_config.dart';
 import 'package:client_vpn/vpn_core.dart';
@@ -101,7 +102,11 @@ class _NullVault implements TokenVault {
   Future<void> erase(String key) async {}
 }
 
-Future<AppState> makeState({FakeCore? core, Autostart? autostart}) async {
+Future<AppState> makeState({
+  FakeCore? core,
+  Autostart? autostart,
+  ServiceConfig? serviceConfig,
+}) async {
   SharedPreferences.setMockInitialValues({});
   return AppState(
     await ProfileStore.open(),
@@ -110,6 +115,7 @@ Future<AppState> makeState({FakeCore? core, Autostart? autostart}) async {
     autostart: autostart ?? FakeAutostart(),
     // Запись служебного конфига проверена отдельно в temp_config_test.
     configWriter: (config) async => config,
+    serviceConfig: serviceConfig ?? const ServiceConfig(),
   );
 }
 
@@ -657,6 +663,97 @@ void main() {
       expect(json, contains('"balancerTag":"cvpn-lb"'));
       expect(json, contains('"strategy":{"type":"leastPing"'));
       expect(json, contains('"tolerance":$regionToleranceMs'));
+    });
+  });
+
+  group('подключение пробного ключа в меню «+»', () {
+    const trialConfig = ServiceConfig(
+      serviceName: 'Example',
+      controlPoint: 'https://control.example.com/',
+      trialEnabled: true,
+    );
+
+    testWidgets('пункт первый, с молнией и именем из конфига', (tester) async {
+      final state = await makeState(serviceConfig: trialConfig);
+      addTearDown(state.dispose);
+
+      await pumpApp(tester, state);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Добавить подключение'));
+      await tester.pumpAndSettle();
+
+      final trial = find.text('Подключить Example');
+      expect(trial, findsOneWidget);
+      expect(find.byIcon(Icons.bolt_rounded), findsOneWidget);
+      // Пробный ключ — первый пункт, выше импорта ссылки.
+      expect(
+        tester.getTopLeft(trial).dy,
+        lessThan(tester.getTopLeft(find.text('Ссылка или подписка')).dy),
+      );
+    });
+
+    testWidgets('имя берётся из конфига, а не зашито в код', (tester) async {
+      final state = await makeState(serviceConfig: trialConfig);
+      addTearDown(state.dispose);
+
+      await pumpApp(tester, state);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Добавить подключение'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Подключить Example'), findsOneWidget);
+      expect(find.text('Подключить сервис'), findsNothing);
+    });
+
+    testWidgets('без бренда в конфиге пункт читается «Подключить сервис»', (
+      tester,
+    ) async {
+      final state = await makeState(
+        serviceConfig: const ServiceConfig(trialEnabled: true),
+      );
+      addTearDown(state.dispose);
+
+      await pumpApp(tester, state);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Добавить подключение'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Подключить сервис'), findsOneWidget);
+    });
+
+    testWidgets('открытый клиент (trial выключен) пункт не показывает', (
+      tester,
+    ) async {
+      final state = await makeState();
+      addTearDown(state.dispose);
+
+      await pumpApp(tester, state);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Добавить подключение'));
+      await tester.pumpAndSettle();
+
+      expect(find.byIcon(Icons.bolt_rounded), findsNothing);
+      expect(find.text('Подключить сервис'), findsNothing);
+      // Универсальные пункты на месте.
+      expect(find.text('Ссылка или подписка'), findsOneWidget);
+    });
+
+    testWidgets('тап по пункту открывает экран подключения', (tester) async {
+      final state = await makeState(serviceConfig: trialConfig);
+      addTearDown(state.dispose);
+
+      await pumpApp(tester, state);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Добавить подключение'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Подключить Example'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Согласен с условиями программы тестирования'),
+        findsOneWidget,
+      );
+      expect(find.text('Подключить'), findsOneWidget);
     });
   });
 }

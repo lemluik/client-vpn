@@ -290,5 +290,35 @@
   "splitSaved": "Список сохранён",
   "splitApplied": "Список применён, подключение поднято заново",
   "splitDirectRuleTitle": "Исключения: напрямую",
-  "splitTunnelRuleTitle": "Исключения: в туннель"
+  "splitTunnelRuleTitle": "Исключения: в туннель",
+  "trialConnectTitle": "Подключить {serviceName}",
+  "@trialConnectTitle": {
+    "placeholders": {
+      "serviceName": {
+        "type": "String"
+      }
+    }
+  },
+  "trialConnectSubtitle": "Пробный ключ бесплатно",
+  "registrationLoginLabel": "Telegram login",
+  "registrationLoginHint": "@username",
+  "registrationTerms": "Согласен с условиями программы тестирования",
+  "registrationSubmit": "Подключить",
+  "registrationInfo": "Это программа тестирования. Ключи выдаются бесплатно до конца года. Служба поддержки может проводить опросы для улучшения сервиса.",
+  "registrationNeedConsent": "Необходимо согласиться с условиями программы",
+  "registrationBadLogin": "Введите Telegram login: @username, от 5 до 32 символов",
+  "registrationSuccess": "Подключено! Ключ добавлен.",
+  "registrationFailed": "Не удалось подключиться: {reason}",
+  "@registrationFailed": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "expiredTitle": "Ключ истёк",
+  "expiredBody": "Ваш временный ключ закончился.",
+  "expiredSupport": "Для продления обратитесь в службу поддержки",
+  "expiredOpenSupport": "Открыть поддержку",
+  "expiredProgramNote": "Программа тестирования действительна до 31.10.2026"
 }

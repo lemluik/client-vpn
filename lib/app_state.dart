@@ -19,6 +19,7 @@ import 'provider.dart';
 import 'reconnect.dart';
 import 'region.dart';
 import 'routing_presets.dart';
+import 'services/service_config.dart';
 import 'settings_store.dart';
 import 'share_link.dart';
 import 'subscription.dart';
@@ -92,6 +93,7 @@ class AppState extends ChangeNotifier {
     String languageCode = '',
     Stream<List<ConnectivityResult>>? networks,
     Stream<String>? deepLinks,
+    ServiceConfig? serviceConfig,
   }) : _writeConfig =
            configWriter ??
            (Platform.isAndroid ? _passThrough : ensureConfigOnDisk),
@@ -109,7 +111,8 @@ class AppState extends ChangeNotifier {
        _probeEndpoint = probes?.load() ?? defaultProbeEndpoint,
        _languageCode = languageCode,
        _routingPreset =
-           presets?.load(languageCode) ?? defaultPresetFor(languageCode) {
+           presets?.load(languageCode) ?? defaultPresetFor(languageCode),
+       serviceConfig = serviceConfig ?? const ServiceConfig() {
     _logSubscription = _core.logs.listen(_onLog);
     _statusSubscription = _core.statusChanges.listen(_onStatus);
     _networkSubscription = networks?.listen(_onNetworks);
@@ -133,6 +136,7 @@ class AppState extends ChangeNotifier {
       languageCode: PlatformDispatcher.instance.locale.languageCode,
       networks: Connectivity().onConnectivityChanged,
       deepLinks: deepLinkStream(),
+      serviceConfig: await ServiceConfig.load(),
     );
   }
 
@@ -152,6 +156,17 @@ class AppState extends ChangeNotifier {
   final SettingsStore _settings;
   final Autostart _autostart;
   final PresetStore? _presets;
+
+  /// Конфигурация сервиса: имя для надписей и точка контроля пробного ключа.
+  /// В открытом клиенте — значения по умолчанию (имя «сервис», пробный ключ
+  /// выключен), поэтому клиент остаётся универсальным.
+  final ServiceConfig serviceConfig;
+
+  /// Имя сервиса для надписей («Подключить {имя}»). Без конфига — «сервис».
+  String get serviceName => serviceConfig.serviceName;
+
+  /// Показывать ли подключение пробного ключа в меню «+».
+  bool get trialEnabled => serviceConfig.trialEnabled;
 
   /// Правила пользователя: хранятся на устройстве, применяются поверх пресета.
   final RuleStore? _ruleStore;
