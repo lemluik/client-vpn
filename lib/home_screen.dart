@@ -8,6 +8,7 @@ import 'log_screen.dart';
 import 'profile_store.dart';
 import 'provider.dart';
 import 'region.dart';
+import 'screens/registration/registration_screen.dart';
 import 'settings_screen.dart';
 import 'support_chat_screen.dart';
 import 'traffic.dart';
@@ -284,6 +285,17 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  /// Подключение пробного ключа: первый пункт меню «+», виден только когда
+  /// конфигурация сервиса включает программу тестирования.
+  Future<void> _openRegistration() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute<void>(
+        builder: (context) => RegistrationScreen(state: _state),
+      ),
+    );
+  }
+
   void _notify(String text) {
     if (!mounted) return;
     ScaffoldMessenger.of(context)
@@ -312,6 +324,18 @@ class _HomeScreenState extends State<HomeScreen> {
                     fontWeight: FontWeight.w600,
                   ),
                 ),
+              ),
+              ListTile(
+                leading: Icon(
+                  Icons.bolt_rounded,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+                title: Text(l.trialConnectTitle(_state.serviceName)),
+                subtitle: Text(l.trialConnectSubtitle),
+                onTap: () async {
+                  Navigator.pop(context);
+                  await _openRegistration();
+                },
               ),
               ListTile(
                 leading: const Icon(Icons.link),

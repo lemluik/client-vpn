@@ -997,6 +997,102 @@ abstract class AppLocalizations {
   /// In ru, this message translates to:
   /// **'Исключения: в туннель'**
   String get splitTunnelRuleTitle;
+
+  /// No description provided for @trialConnectTitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Подключить {serviceName}'**
+  String trialConnectTitle(String serviceName);
+
+  /// No description provided for @trialConnectSubtitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Пробный ключ бесплатно'**
+  String get trialConnectSubtitle;
+
+  /// No description provided for @registrationLoginLabel.
+  ///
+  /// In ru, this message translates to:
+  /// **'Telegram login'**
+  String get registrationLoginLabel;
+
+  /// No description provided for @registrationLoginHint.
+  ///
+  /// In ru, this message translates to:
+  /// **'@username'**
+  String get registrationLoginHint;
+
+  /// No description provided for @registrationTerms.
+  ///
+  /// In ru, this message translates to:
+  /// **'Согласен с условиями программы тестирования'**
+  String get registrationTerms;
+
+  /// No description provided for @registrationSubmit.
+  ///
+  /// In ru, this message translates to:
+  /// **'Подключить'**
+  String get registrationSubmit;
+
+  /// No description provided for @registrationInfo.
+  ///
+  /// In ru, this message translates to:
+  /// **'Это программа тестирования. Ключи выдаются бесплатно до конца года. Служба поддержки может проводить опросы для улучшения сервиса.'**
+  String get registrationInfo;
+
+  /// No description provided for @registrationNeedConsent.
+  ///
+  /// In ru, this message translates to:
+  /// **'Необходимо согласиться с условиями программы'**
+  String get registrationNeedConsent;
+
+  /// No description provided for @registrationBadLogin.
+  ///
+  /// In ru, this message translates to:
+  /// **'Введите Telegram login: @username, от 5 до 32 символов'**
+  String get registrationBadLogin;
+
+  /// No description provided for @registrationSuccess.
+  ///
+  /// In ru, this message translates to:
+  /// **'Подключено! Ключ добавлен.'**
+  String get registrationSuccess;
+
+  /// No description provided for @registrationFailed.
+  ///
+  /// In ru, this message translates to:
+  /// **'Не удалось подключиться: {reason}'**
+  String registrationFailed(String reason);
+
+  /// No description provided for @expiredTitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Ключ истёк'**
+  String get expiredTitle;
+
+  /// No description provided for @expiredBody.
+  ///
+  /// In ru, this message translates to:
+  /// **'Ваш временный ключ закончился.'**
+  String get expiredBody;
+
+  /// No description provided for @expiredSupport.
+  ///
+  /// In ru, this message translates to:
+  /// **'Для продления обратитесь в службу поддержки'**
+  String get expiredSupport;
+
+  /// No description provided for @expiredOpenSupport.
+  ///
+  /// In ru, this message translates to:
+  /// **'Открыть поддержку'**
+  String get expiredOpenSupport;
+
+  /// No description provided for @expiredProgramNote.
+  ///
+  /// In ru, this message translates to:
+  /// **'Программа тестирования действительна до 31.10.2026'**
+  String get expiredProgramNote;
 }
 
 class _AppLocalizationsDelegate
