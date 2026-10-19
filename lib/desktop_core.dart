@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 
 import 'app_proxy.dart';
 import 'core_stats.dart';
+import 'mac_core_guard.dart';
 import 'proxy_config.dart';
 import 'system_proxy.dart';
 import 'temp_config.dart';
@@ -48,6 +49,9 @@ class DesktopCore implements VpnCore {
   /// Job Object с флагом kill-on-close: ядро умирает вместе с приложением,
   /// даже если приложение убито извне.
   CoreKillJob? _job;
+
+  /// macOS: сторож и метка ядра вместо Job Object.
+  final MacCoreGuard _macGuard = MacCoreGuard();
 
   /// true, когда ядро завершается по нашей команде — тогда настройки
   /// пользователя возвращаются. Любой другой выход считается аварией, и
@@ -297,6 +301,9 @@ class DesktopCore implements VpnCore {
         });
 
     _attachToJob(_process!.pid);
+    if (Platform.isMacOS) {
+      _logController.add(await _macGuard.attach(_process!.pid, xrayPath));
+    }
     final apiPort = _apiPort;
     if (apiPort != null) CoreStats.apiPort = apiPort;
     AppProxy.attach(_proxy);
@@ -312,6 +319,7 @@ class DesktopCore implements VpnCore {
         _process = null;
         CoreStats.apiPort = null;
         _closeJob();
+        if (Platform.isMacOS) await _macGuard.detach();
         AppProxy.attach(null);
         final intentional = _intentionalStop;
         _intentionalStop = false;
@@ -392,6 +400,7 @@ class DesktopCore implements VpnCore {
 
     _process = null;
     _closeJob();
+    if (Platform.isMacOS) await _macGuard.detach();
     AppProxy.attach(null);
     await SystemProxy.disable();
     _statusController.add(false);
@@ -399,7 +408,15 @@ class DesktopCore implements VpnCore {
   }
 
   @override
-  Future<void> recoverAfterCrash() => SystemProxy.cleanupAfterCrash();
+  Future<void> recoverAfterCrash() async {
+    if (Platform.isMacOS) {
+      final orphan = await _macGuard.killOrphan();
+      if (orphan != null) {
+        _logController.add('Снято ядро прошлого запуска (PID: $orphan)');
+      }
+    }
+    await SystemProxy.cleanupAfterCrash();
+  }
 
   @override
   Future<void> dispose() async {
