@@ -23,11 +23,15 @@ const secondLink = 'trojan://pass@example.org:8443?sni=example.org#Second';
 ///
 /// Прогон идёт `xray run -test` — тот же режим, что вызывает приложение перед
 /// запуском. Тест пропускается, если ядро или geo-базы не скачаны
-/// (`bash scripts/download_xray.sh`), чтобы `flutter test` не зависел от сети.
+/// (`bash scripts/download_xray.sh`, на macOS — `download_xray_macos.sh`),
+/// чтобы `flutter test` не зависел от сети.
 void main() {
-  final xray = File(p.join('assets', 'xray', 'xray.exe'));
-  final geoip = File(p.join('assets', 'xray', 'geoip.dat'));
-  final geosite = File(p.join('assets', 'xray', 'geosite.dat'));
+  final dir = Platform.isMacOS
+      ? p.join('macos', 'xray')
+      : p.join('assets', 'xray');
+  final xray = File(p.join(dir, Platform.isMacOS ? 'xray' : 'xray.exe'));
+  final geoip = File(p.join(dir, 'geoip.dat'));
+  final geosite = File(p.join(dir, 'geosite.dat'));
   final ready = xray.existsSync() && geoip.existsSync() && geosite.existsSync();
   const reason = 'ядро или geo-базы не скачаны: bash scripts/download_xray.sh';
 

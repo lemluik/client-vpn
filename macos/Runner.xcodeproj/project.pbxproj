@@ -213,6 +213,7 @@
 				33CC10EB2044A3C60003C045 /* Resources */,
 				33CC110E2044A8840003C045 /* Bundle Framework */,
 				3399D490228B24CF009A79C7 /* ShellScript */,
+				7A1C0E5D2F00000100C0FFEE /* Embed Xray core */,
 			);
 			buildRules = (
 			);
@@ -338,6 +339,25 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "\"$FLUTTER_ROOT\"/packages/flutter_tools/bin/macos_assemble.sh && touch Flutter/ephemeral/tripwire";
+		};
+		7A1C0E5D2F00000100C0FFEE /* Embed Xray core */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Embed Xray core";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# Ядро Xray для режима \"как Windows\": бинарник и geo-базы кладутся в\n# Contents/Resources/xray. Там ядро запечатано подписью бандла как ресурс и\n# остаётся побайтно официальным: его SHA-256 сверяет DesktopCore. Срез\n# x86_64 без подписи, поэтому из Contents/MacOS Xcode бандл не подпишет.\n# Файлы готовит scripts/download_xray_macos.sh; без них сборка проходит,\n# а приложение при подключении прямо скажет, что ядра нет.\nSRC=\"$PROJECT_DIR/xray\"\nif [ ! -f \"$SRC/xray\" ]; then\n  echo \"warning: macos/xray/xray нет - выполните bash scripts/download_xray_macos.sh\"\n  exit 0\nfi\nDEST=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/xray\"\nmkdir -p \"$DEST\"\ncp -f \"$SRC/xray\" \"$SRC/geoip.dat\" \"$SRC/geosite.dat\" \"$DEST/\"\nchmod 755 \"$DEST/xray\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 

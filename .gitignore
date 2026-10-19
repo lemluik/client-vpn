@@ -37,3 +37,6 @@ android/app/src/main/assets/geo/
 
 # Логи сборки Kotlin (содержат локальные пути)
 android/.kotlin/
+
+# Ядро Xray и geo-базы для macOS (download separately via scripts/download_xray_macos.sh)
+macos/xray/
