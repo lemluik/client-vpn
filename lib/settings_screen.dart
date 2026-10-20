@@ -498,8 +498,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _addTile() async {
     bool added;
     try {
-      added = await const MethodChannel('client_vpn/tunnel')
-              .invokeMethod<bool>('addTile') ==
+      added =
+          await const MethodChannel(
+            'client_vpn/tunnel',
+          ).invokeMethod<bool>('addTile') ==
           true;
     } on Exception {
       added = false;

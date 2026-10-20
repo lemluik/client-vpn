@@ -410,7 +410,9 @@ class AppState extends ChangeNotifier {
     } on MissingPluginException {
       return;
     }
-    if (!pending || _state == TunnelState.on || _state == TunnelState.connecting) {
+    if (!pending ||
+        _state == TunnelState.on ||
+        _state == TunnelState.connecting) {
       return;
     }
     _addLog('Подключение по плитке шторки');

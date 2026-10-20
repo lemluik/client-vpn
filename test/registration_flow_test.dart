@@ -27,13 +27,13 @@ const validKey =
 /// Ядро без процесса и сети: нужно только чтобы AppState собрался.
 class _FakeCore implements VpnCore {
   final _logs = StreamController<String>.broadcast();
-  final _status = StreamController<bool>.broadcast();
+  final _status = StreamController<CoreStatus>.broadcast();
   bool _running = false;
 
   @override
   Stream<String> get logs => _logs.stream;
   @override
-  Stream<bool> get statusChanges => _status.stream;
+  Stream<CoreStatus> get statusChanges => _status.stream;
   @override
   bool get isRunning => _running;
   @override
@@ -48,6 +48,10 @@ class _FakeCore implements VpnCore {
   Future<void> dispose() async {}
   @override
   Future<void> recoverAfterCrash() async {}
+  @override
+  Future<void> markTunnelFresh() async {}
+  @override
+  Future<bool> takePendingConnect() async => false;
 }
 
 class _FakeAutostart implements Autostart {
