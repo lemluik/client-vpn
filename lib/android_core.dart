@@ -20,8 +20,8 @@ class AndroidCore implements VpnCore {
 
   final StreamController<String> _logController =
       StreamController<String>.broadcast();
-  final StreamController<bool> _statusController =
-      StreamController<bool>.broadcast();
+  final StreamController<CoreStatus> _statusController =
+      StreamController<CoreStatus>.broadcast();
 
   bool _running = false;
   String? _endpoint;
@@ -40,7 +40,7 @@ class AndroidCore implements VpnCore {
   Stream<String> get logs => _logController.stream;
 
   @override
-  Stream<bool> get statusChanges => _statusController.stream;
+  Stream<CoreStatus> get statusChanges => _statusController.stream;
 
   @override
   bool get isRunning => _running;
@@ -54,9 +54,10 @@ class AndroidCore implements VpnCore {
         final line = call.arguments;
         if (line is String && line.isNotEmpty) _logController.add(line);
       case 'status':
-        _running = call.arguments == true;
+        final status = CoreStatus.fromPayload(call.arguments);
+        _running = status.running;
         _ownTraffic(_running);
-        _statusController.add(_running);
+        _statusController.add(status);
       default:
         break;
     }
@@ -129,10 +130,20 @@ class AndroidCore implements VpnCore {
     // Туннель Android снимает сам вместе с остановкой сервиса, но состояние
     // сервиса переживает закрытие экрана: его надо спросить, иначе UI
     // отрисуется «Отключён» при поднятом туннеле.
-    _running = await _channel.invokeMethod<bool>('status') == true;
+    final status = CoreStatus.fromPayload(
+      await _channel.invokeMethod<Object>('status'),
+    );
+    _running = status.running;
     _ownTraffic(_running);
-    _statusController.add(_running);
+    _statusController.add(status);
   }
+
+  @override
+  Future<void> markTunnelFresh() => _channel.invokeMethod<void>('markTunnelFresh');
+
+  @override
+  Future<bool> takePendingConnect() async =>
+      await _channel.invokeMethod<bool>('takePendingConnect') == true;
 
   @override
   Future<void> dispose() async {

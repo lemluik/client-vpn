@@ -1093,6 +1093,24 @@ abstract class AppLocalizations {
   /// In ru, this message translates to:
   /// **'Программа тестирования действительна до 31.10.2026'**
   String get expiredProgramNote;
+
+  /// No description provided for @tileTitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Плитка в шторке'**
+  String get tileTitle;
+
+  /// No description provided for @tileSubtitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Включать и выключать туннель без открытия приложения'**
+  String get tileSubtitle;
+
+  /// No description provided for @tileFallback.
+  ///
+  /// In ru, this message translates to:
+  /// **'Откройте шторку, нажмите редактировать и перетащите плитку «Туннель» на панель быстрых настроек'**
+  String get tileFallback;
 }
 
 class _AppLocalizationsDelegate

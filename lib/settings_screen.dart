@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'about_screen.dart';
 import 'app_state.dart';
@@ -175,6 +176,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 context,
               ).push(MaterialPageRoute(builder: (_) => const UpdateScreen())),
             ),
+            if (defaultTargetPlatform == TargetPlatform.android)
+              ListTile(
+                key: const ValueKey('tile'),
+                leading: const Icon(Icons.dashboard_outlined),
+                title: Text(l.tileTitle),
+                subtitle: Text(l.tileSubtitle),
+                onTap: _addTile,
+              ),
             ListTile(
               key: const ValueKey('about'),
               leading: const Icon(Icons.info_outline),
@@ -482,6 +491,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
     if (confirmed != true) return;
     await _state.remove(profile.id);
+  }
+
+  /// Системный запрос добавления плитки. На старых Android система запрос
+  /// не принимает — там показываем текстовую инструкцию.
+  Future<void> _addTile() async {
+    bool added;
+    try {
+      added =
+          await const MethodChannel(
+            'client_vpn/tunnel',
+          ).invokeMethod<bool>('addTile') ==
+          true;
+    } on Exception {
+      added = false;
+    }
+    if (!added && mounted) _notify(AppLocalizations.of(context).tileFallback);
   }
 
   void _notify(String text) {

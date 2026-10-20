@@ -237,5 +237,8 @@
   "expiredBody": "Your temporary key has expired.",
   "expiredSupport": "To renew it, contact the support team",
   "expiredOpenSupport": "Open support",
-  "expiredProgramNote": "The testing program is valid until 31.10.2026"
+  "expiredProgramNote": "The testing program is valid until 31.10.2026",
+  "tileTitle": "Quick settings tile",
+  "tileSubtitle": "Start and stop the tunnel without opening the app",
+  "tileFallback": "Open the shade, tap edit and drag the Tunnel tile onto the quick settings panel"
 }

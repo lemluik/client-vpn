@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart' show MissingPluginException;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'autostart.dart';
@@ -177,7 +178,7 @@ class AppState extends ChangeNotifier {
   String _probeEndpoint;
 
   StreamSubscription<String>? _logSubscription;
-  StreamSubscription<bool>? _statusSubscription;
+  StreamSubscription<CoreStatus>? _statusSubscription;
   StreamSubscription<TrafficSnapshot>? _trafficSubscription;
   TrafficSnapshot? _traffic;
   StreamSubscription<List<ConnectivityResult>>? _networkSubscription;
@@ -386,6 +387,36 @@ class AppState extends ChangeNotifier {
   Future<void> recover() async {
     await _core.recoverAfterCrash();
     await refreshDue();
+    await connectFromShell();
+  }
+
+  /// Ставит метку свежести на сохранённый конфиг туннеля: пока она стоит,
+  /// плитка шторки поднимает туннель без открытия приложения.
+  Future<void> markTunnelFresh() async {
+    if (!Platform.isAndroid) return;
+    try {
+      await _core.markTunnelFresh();
+    } on MissingPluginException {
+      // Старая нативная часть: метку поставить некому, плитка пойдёт путём Б.
+    }
+  }
+
+  /// Путь Б плитки: приложение открыто тапом по плитке, подключается само.
+  Future<void> connectFromShell() async {
+    if (!Platform.isAndroid) return;
+    final bool pending;
+    try {
+      pending = await _core.takePendingConnect();
+    } on MissingPluginException {
+      return;
+    }
+    if (!pending ||
+        _state == TunnelState.on ||
+        _state == TunnelState.connecting) {
+      return;
+    }
+    _addLog('Подключение по плитке шторки');
+    await connect();
   }
 
   Future<void> select(String id) async {
@@ -477,6 +508,7 @@ class AppState extends ChangeNotifier {
       // требует, чтобы пользователь помнил про сохранение заранее.
       await _appExclusions?.call(_directApps);
       await _core.start(config);
+      await markTunnelFresh();
       _state = TunnelState.on;
       _reconnect.reset();
       _stopReconnectTimers();
@@ -744,14 +776,30 @@ class AppState extends ChangeNotifier {
     );
   }
 
-  void _onStatus(bool running) {
-    if (running) {
+  void _onStatus(CoreStatus status) {
+    if (status.running) {
+      // Подъём из шторки — тоже намерение пользователя: без него переподъём
+      // при смене сети (позиция 27) и подъём после «нет связи» (МК-5) не
+      // работают, обе ветки читают этот флаг.
+      _userWantsTunnel = true;
       _state = TunnelState.on;
       _failure = null;
       _startTrafficWatch();
     } else if (_stopping || _state != TunnelState.on) {
       _stopTrafficWatch();
       _state = TunnelState.off;
+      if (status.byShell) _userWantsTunnel = false;
+    } else if (status.byShell) {
+      // Снято плиткой: пользователь отключился сам, это не сбой, и лестница
+      // переподключения не должна поднимать туннель обратно.
+      _stopping = true;
+      _reconnect.reset();
+      _stopReconnectTimers();
+      _userWantsTunnel = false;
+      _state = TunnelState.off;
+      _failure = null;
+      _stopping = false;
+      _addLog('Отключено из шторки');
     } else {
       _stopTrafficWatch();
       // Ядро остановилось само: для пользователя это сбой, а не отключение.

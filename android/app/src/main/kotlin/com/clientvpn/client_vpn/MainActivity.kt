@@ -1,16 +1,22 @@
 package com.clientvpn.client_vpn
 
 import android.app.Activity
+import android.app.StatusBarManager
+import android.graphics.drawable.Icon
+import android.content.ComponentName
 import android.content.Intent
 import android.net.Uri
 import android.net.VpnService
 import android.os.Build
 import android.os.Bundle
+import android.widget.Toast
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
+import java.util.concurrent.Executor
 import java.util.concurrent.TimeUnit
+import java.util.function.Consumer
 
 class MainActivity : FlutterActivity() {
 
@@ -20,6 +26,10 @@ class MainActivity : FlutterActivity() {
         private const val APP_CHANNEL = "client_vpn/app"
         private const val USER_CONFIG = "user-config.json"
         private const val CONSENT_REQUEST = 4242
+
+        /** Тап по плитке, когда consent не дан или конфиг устарел: активность
+         *  получает этот признак, а Dart забирает его одним чтением. */
+        const val TILE_ACTION = "com.clientvpn.client_vpn.action.TILE_CONNECT"
     }
 
     private lateinit var channel: MethodChannel
@@ -28,9 +38,13 @@ class MainActivity : FlutterActivity() {
     private var deepLinkChannel: MethodChannel? = null
     private var pendingLink: String? = null
 
+    /** Команда «подключить» из плитки: её забирает Dart ровно один раз. */
+    private var pendingTileConnect = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         pendingLink = linkOf(intent)
+        pendingTileConnect = intent?.action == TILE_ACTION
         TunnelBus.subscribe { method, argument ->
             runOnUiThread { channel.invokeMethod(method, argument) }
         }
@@ -49,7 +63,14 @@ class MainActivity : FlutterActivity() {
                 "validate" -> validate(call.arguments as? String, result)
                 "start" -> start(call.arguments as? String, result)
                 "stop" -> stop(result)
-                "status" -> result.success(TunnelBus.lastStatus)
+                "status" -> result.success(tileStatusPayload())
+                "markTunnelFresh" -> markTunnelFresh(result)
+                "takePendingConnect" -> {
+                    val pending = pendingTileConnect
+                    pendingTileConnect = false
+                    result.success(pending)
+                }
+                "addTile" -> addTile(result)
                 "setExcludedApps" -> setExcludedApps(call.arguments, result)
                 "listApps" -> listApps(result)
                 "openUrl" -> openUrl(call.arguments, result)
@@ -98,6 +119,12 @@ class MainActivity : FlutterActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        if (intent.action == TILE_ACTION) {
+            // Отметку свежести ставит Dart перед подключением; здесь она уже
+            // стоит, поэтому остаётся только поднять команду.
+            pendingTileConnect = true
+            return
+        }
         val link = linkOf(intent) ?: return
         val deepLinks = deepLinkChannel
         if (deepLinks == null) {
@@ -244,6 +271,9 @@ class MainActivity : FlutterActivity() {
             return
         }
         File(filesDir, TunnelService.TUNNEL_CONFIG).writeText(tunConfig)
+        // Новый конфиг ещё не подтверждён поднятием: метку свежести вернёт
+        // Dart, когда подключение действительно состоится.
+        File(filesDir, TunnelService.FRESH_MARKER).delete()
 
         val consent = VpnService.prepare(this)
         if (consent != null) {
@@ -259,6 +289,57 @@ class MainActivity : FlutterActivity() {
 
         launchTunnel()
         result.success(true)
+    }
+
+    /** Метка свежести: её ставит Dart после успешного подключения, она же
+     *  разрешает плитке поднимать туннель без открытия приложения. */
+    private fun markTunnelFresh(result: MethodChannel.Result) {
+        try {
+            File(filesDir, TunnelService.FRESH_MARKER).writeText(
+                "${System.currentTimeMillis()}\n",
+            )
+            result.success(null)
+        } catch (e: Exception) {
+            result.error("write_failed", e.message, null)
+        }
+    }
+
+    private fun tileStatusPayload(): Map<String, Boolean> =
+        mapOf("running" to TunnelBus.lastStatus, "byShell" to TunnelBus.lastByShell)
+
+    /** Системный запрос добавления плитки (API 33+); для более старых версий
+     *  показываем текстовую инструкцию. */
+    private fun addTile(result: MethodChannel.Result) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            Toast.makeText(
+                this,
+                getString(R.string.tile_instructions),
+                Toast.LENGTH_LONG,
+            ).show()
+            result.success(false)
+            return
+        }
+        val manager = getSystemService(StatusBarManager::class.java)
+        if (manager == null) {
+            result.success(false)
+            return
+        }
+        try {
+            manager.requestAddTileService(
+                ComponentName(this, TunnelTileService::class.java),
+                getString(R.string.tile_label),
+                Icon.createWithResource(this, R.drawable.ic_tile_tunnel),
+                Executor { command -> command.run() },
+                Consumer<Int> { code ->
+                    val added =
+                        code == StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ADDED ||
+                        code == StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ALREADY_ADDED
+                    runOnUiThread { result.success(added) }
+                },
+            )
+        } catch (e: Exception) {
+            result.success(false)
+        }
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {

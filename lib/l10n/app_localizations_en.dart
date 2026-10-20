@@ -571,4 +571,15 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get expiredProgramNote =>
       'The testing program is valid until 31.10.2026';
+
+  @override
+  String get tileTitle => 'Quick settings tile';
+
+  @override
+  String get tileSubtitle =>
+      'Start and stop the tunnel without opening the app';
+
+  @override
+  String get tileFallback =>
+      'Open the shade, tap edit and drag the Tunnel tile onto the quick settings panel';
 }

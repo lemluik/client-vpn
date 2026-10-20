@@ -25,13 +25,19 @@ const brokenLink = 'vless://не-ссылка';
 /// Ядро без процесса и без счёта: тест проверяет только путь ссылки.
 class QuietCore implements VpnCore {
   final StreamController<String> _logs = StreamController<String>.broadcast();
-  final StreamController<bool> _status = StreamController<bool>.broadcast();
+  final StreamController<CoreStatus> _status = StreamController<CoreStatus>.broadcast();
 
   @override
   Stream<String> get logs => _logs.stream;
 
   @override
-  Stream<bool> get statusChanges => _status.stream;
+  Stream<CoreStatus> get statusChanges => _status.stream;
+
+  @override
+  Future<void> markTunnelFresh() async {}
+
+  @override
+  Future<bool> takePendingConnect() async => false;
 
   @override
   bool get isRunning => false;

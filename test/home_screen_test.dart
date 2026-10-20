@@ -35,7 +35,7 @@ const linkTwo =
 /// Ядро без процесса и без сети: состояние переключается вручную.
 class FakeCore implements VpnCore {
   final StreamController<String> _logs = StreamController<String>.broadcast();
-  final StreamController<bool> _status = StreamController<bool>.broadcast();
+  final StreamController<CoreStatus> _status = StreamController<CoreStatus>.broadcast();
 
   Object? validateError;
   int startCalls = 0;
@@ -46,7 +46,13 @@ class FakeCore implements VpnCore {
   Stream<String> get logs => _logs.stream;
 
   @override
-  Stream<bool> get statusChanges => _status.stream;
+  Stream<CoreStatus> get statusChanges => _status.stream;
+
+  @override
+  Future<void> markTunnelFresh() async {}
+
+  @override
+  Future<bool> takePendingConnect() async => false;
 
   @override
   bool get isRunning => _running;
@@ -65,13 +71,13 @@ class FakeCore implements VpnCore {
     startCalls++;
     lastConfig = config;
     _running = true;
-    _status.add(true);
+    _status.add(const CoreStatus(true));
   }
 
   @override
   Future<void> stop() async {
     _running = false;
-    _status.add(false);
+    _status.add(const CoreStatus(false));
   }
 
   @override
@@ -85,7 +91,7 @@ class FakeCore implements VpnCore {
   /// Обрыв со стороны ядра: приложение остановки не просило.
   void dropConnection() {
     _running = false;
-    _status.add(false);
+    _status.add(const CoreStatus(false));
   }
 }
 
