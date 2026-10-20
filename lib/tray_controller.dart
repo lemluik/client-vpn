@@ -4,21 +4,21 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'package:path/path.dart' as p;
 import 'package:tray_manager/tray_manager.dart';
 
-/// Строка контекстного меню трея.
+/// A row of the tray context menu.
 ///
-/// Пустая `label` — разделитель; клик по пункту вызывает `onTap`.
+/// An empty `label` is a separator; clicking an item calls `onTap`.
 typedef TrayMenuRow = ({String? label, void Function()? onTap});
 
-/// То, что трей-контроллер требует от нативного плагина.
+/// What the tray controller needs from the native plugin.
 ///
-/// Нужен именно слой, а не прямые вызовы плагина: с 0.7.0 `tray_manager`
-/// работает через FFI без платформенного канала, поэтому единственный способ
-/// проверить порядок вызовов на подъёме трея — подменить весь нативный слой.
-/// Прошлый дефект (`setTitle` ронял трей на полу-подъёме) тесты не поймали
-/// именно потому, что подменять было нечего.
+/// A layer rather than direct plugin calls: since 0.7.0 `tray_manager` works
+/// over FFI without a platform channel, so the only way to test the order of
+/// calls while mounting the tray is to replace the whole native layer. The
+/// previous defect (`setTitle` crashed a half-mounted tray) slipped past the
+/// tests precisely because there was nothing to replace.
 abstract class TrayPort {
-  /// Ставит иконку, подсказку и меню; `onIconClick` — левый клик по иконке.
-  /// Бросает исключение, если трей недоступен.
+  /// Sets the icon, tooltip and menu; `onIconClick` is a left click on the
+  /// icon. Throws if the tray is unavailable.
   void mount({
     required String iconPath,
     required String tooltip,
@@ -26,16 +26,16 @@ abstract class TrayPort {
     required void Function() onIconClick,
   });
 
-  /// Подсказка на иконке: единственный способ показать состояние трею
-  /// на Windows. `setTitle` в интерфейс не входит — на Windows он
-  /// игнорируется молча, а на macOS это отдельный текст рядом с иконкой.
+  /// The icon tooltip: the only way to show the state in the Windows tray.
+  /// `setTitle` is not part of the interface: Windows silently ignores it,
+  /// and on macOS it is separate text next to the icon.
   void setTooltip(String tooltip);
 
-  /// Снимает иконку. Идемпотентен: повторный вызов ничего не делает.
+  /// Removes the icon. Idempotent: a repeated call does nothing.
   void dispose();
 }
 
-/// Нативная реализация: один `TrayIcon` на приложение.
+/// Native implementation: one `TrayIcon` per app.
 class NativeTrayPort implements TrayPort {
   TrayIcon? _icon;
   Menu? _menu;
@@ -58,6 +58,9 @@ class NativeTrayPort implements TrayPort {
     if (icon == null) throw const TrayIconUnavailable('платформа не даёт трей');
     _image = image;
     _icon = icon;
+    // A template image on macOS: the menu bar paints it in the system colour
+    // for the light and dark appearance, like the icons of other apps.
+    icon.isIconTemplate = Platform.isMacOS;
     icon.icon = image;
 
     icon.setTooltip(tooltip);
@@ -109,7 +112,7 @@ class NativeTrayPort implements TrayPort {
       icon.setContextMenu(null);
       icon.dispose();
     }
-    // Порядок важен: иконка держит меню, поэтому меню освобождаем после.
+    // Order matters: the icon holds the menu, so the menu is released after.
     for (final item in _items) {
       item.dispose();
     }
@@ -121,18 +124,19 @@ class NativeTrayPort implements TrayPort {
   }
 }
 
-/// Трей не поднялся: нет иконки, меню или поддержки платформы.
+/// The tray did not mount: no icon, no menu or no platform support.
 class TrayIconUnavailable implements Exception {
   const TrayIconUnavailable(this.reason);
 
   final String reason;
 }
 
-/// Иконка в системном трее: показать окно, выйти, состояние в подсказке.
+/// The system tray icon: show the window, quit, the state in the tooltip.
 ///
-/// Нужна именно она, а не только реестр прокси: закрытое окно раньше означало
-/// разрыв подключения, и пользователь закрывал окно только вместе с туннелем.
-/// Теперь закрытие сворачивает в трей, а выход — осознанное действие из меню.
+/// It is needed on top of the proxy settings: closing the window used to mean
+/// dropping the connection, so the user closed the window only together with
+/// the tunnel. Now closing hides to the tray, and quitting is a deliberate
+/// menu action.
 class AppTray {
   AppTray({
     required this.onShowWindow,
@@ -146,12 +150,12 @@ class AppTray {
 
   bool _mounted = false;
 
-  /// Ставит иконку и меню. Возвращает false, если трей недоступен (например,
-  /// иконку не удалось распаковать из assets) — интерфейс тогда работает без
-  /// него, а закрытие окна остаётся выходом.
+  /// Sets the icon and menu. Returns false if the tray is unavailable (for
+  /// example, the icon could not be unpacked from assets): the UI then works
+  /// without it, and closing the window stays a quit.
   ///
-  /// Подсказка на иконке — это `setToolTip`: Windows-реализация не знает
-  /// `setTitle` и состояние вешать больше некуда.
+  /// The icon tooltip is `setToolTip`: the Windows implementation does not
+  /// know `setTitle`, and there is nowhere else to put the state.
   Future<bool> mount({
     required String tooltip,
     required String showLabel,
@@ -179,13 +183,13 @@ class AppTray {
     return true;
   }
 
-  /// Подсказка на иконке: пользователь видит состояние, не открывая окно.
+  /// The icon tooltip: the user sees the state without opening the window.
   Future<void> setTooltip(String tooltip) async {
     if (!_mounted) return;
     try {
       _port.setTooltip(tooltip);
     } catch (_) {
-      // Состояние на иконке — косметика: ошибка здесь не должна ронять окно.
+      // The state on the icon is cosmetic: an error here must not break the window.
     }
   }
 
@@ -194,14 +198,22 @@ class AppTray {
     _port.dispose();
   }
 
-  /// `LoadImage` на Windows берёт иконку файлом, а не из бандла Flutter,
-  /// поэтому asset выгружается в временный каталог при каждом запуске.
+  /// The native tray takes the icon as a file, not from the Flutter bundle
+  /// (`LoadImage` on Windows), so the asset is unpacked to the temp directory
+  /// on every launch. macOS gets a monochrome template PNG for the menu bar;
+  /// other platforms keep the colour `.ico`.
   static Future<String?> _materializeIcon() async {
+    final asset = Platform.isMacOS
+        ? 'assets/tray/tray_macos.png'
+        : 'assets/tray/tray.ico';
     try {
-      final data = await rootBundle.load('assets/tray/tray.ico');
-      final path = p.join(Directory.systemTemp.path, 'client_vpn_tray.ico');
+      final data = await rootBundle.load(asset);
+      final path = p.join(
+        Directory.systemTemp.path,
+        'client_vpn_tray${p.extension(asset)}',
+      );
       final file = File(path);
-      // Файл переписывается всегда: старый кэш мог остаться от другой сборки.
+      // Always rewritten: a stale copy may be left over from another build.
       await file.writeAsBytes(
         data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
         flush: true,

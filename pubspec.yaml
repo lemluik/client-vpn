@@ -12,8 +12,8 @@ dependencies:
   flutter_localizations:
     sdk: flutter
   crypto: ^3.0.6
-  # Прямая зависимость: FFI-обёртки Win32 (мьютекс, Job Object) работают с
-  # `calloc` и `Utf16`. Пакет и так был в графе через flutter_secure_storage.
+  # Direct dependency: the Win32 FFI wrappers (mutex, Job Object) use `calloc`
+  # and `Utf16`. The package was already in the graph via flutter_secure_storage.
   ffi: ^2.2.0
   file_picker: ^13.1.0
   flutter_secure_storage: ^11.2.0
@@ -22,16 +22,16 @@ dependencies:
   window_manager: ^0.5.2
   connectivity_plus: ^7.3.2
   intl: ^0.20.3
-  # 1.9.0 — последняя ветка, отдающая ColorScheme из Flutter: с 2.0.0 (CHANGELOG
-  # пакета) палитра приходит из material_ui с собственным типом схемы,
-  # несовместимым с ThemeData текущей версии Flutter.
+  # 1.9.0 is the last line that returns a Flutter ColorScheme: since 2.0.0 (the
+  # package CHANGELOG) the palette comes from material_ui with its own scheme
+  # type, incompatible with ThemeData in the current Flutter version.
   dynamic_color: 1.9.0
-  # 0.8.0: с 0.7.0 пакет живёт на нативном API (nativeapi), legacy-синглтон
-  # trayManager переехал в legacy.dart и помечен на удаление.
+  # 0.8.0: since 0.7.0 the package is built on the native API (nativeapi); the
+  # legacy trayManager singleton moved to legacy.dart and is marked for removal.
   tray_manager: 0.7.0
-  # gRPC-клиент к StatsService ядра: на десктопе трафик туннеля виден только
-  # в счётчиках Xray (в журнале доступа байтов нет). Сообщения QueryStats
-  # кодируются вручную, поэтому protoc и пакет protobuf не нужны.
+  # gRPC client for the core's StatsService: on desktop the tunnel traffic is
+  # visible only in Xray counters (the access log has no bytes). QueryStats
+  # messages are encoded by hand, so protoc and the protobuf package are not needed.
   grpc: ^4.0.0
 
 dev_dependencies:
@@ -41,13 +41,15 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
-  # Строки интерфейса генерируются из lib/l10n по l10n.yaml.
+  # UI strings are generated from lib/l10n according to l10n.yaml.
   generate: true
   assets:
-    # Иконка для трея: Windows берёт её файлом, поэтому при старте она
-    # выгружается из бандла во временный каталог.
+    # Tray icons: the native tray takes them as files, so at startup they are
+    # unpacked from the bundle to the temp directory. tray.ico is the colour
+    # icon for Windows; tray_macos.png is the monochrome menu bar template.
     - assets/tray/tray.ico
-    # Экран «О программе» показывает лицензионные файлы целиком, поэтому они
-    # лежат в бандле (пункт У-6: пользователь обязан получить LICENSE и NOTICE).
+    - assets/tray/tray_macos.png
+    # The About screen shows the license files in full, so they ship in the
+    # bundle (item U-6: the user must receive LICENSE and NOTICE).
     - LICENSE
     - NOTICE
