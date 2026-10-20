@@ -516,4 +516,70 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get splitTunnelRuleTitle => 'Exceptions: into the tunnel';
+
+  @override
+  String trialConnectTitle(String serviceName) {
+    return 'Connect $serviceName';
+  }
+
+  @override
+  String get trialConnectSubtitle => 'Free trial key';
+
+  @override
+  String get registrationLoginLabel => 'Telegram login';
+
+  @override
+  String get registrationLoginHint => '@username';
+
+  @override
+  String get registrationTerms => 'I agree to the testing program terms';
+
+  @override
+  String get registrationSubmit => 'Connect';
+
+  @override
+  String get registrationInfo =>
+      'This is a testing program. Keys are issued free of charge until the end of the year. The support team may run surveys to improve the service.';
+
+  @override
+  String get registrationNeedConsent => 'You must agree to the program terms';
+
+  @override
+  String get registrationBadLogin =>
+      'Enter a Telegram login: @username, 5 to 32 characters';
+
+  @override
+  String get registrationSuccess => 'Connected! The key is added.';
+
+  @override
+  String registrationFailed(String reason) {
+    return 'Could not connect: $reason';
+  }
+
+  @override
+  String get expiredTitle => 'Key expired';
+
+  @override
+  String get expiredBody => 'Your temporary key has expired.';
+
+  @override
+  String get expiredSupport => 'To renew it, contact the support team';
+
+  @override
+  String get expiredOpenSupport => 'Open support';
+
+  @override
+  String get expiredProgramNote =>
+      'The testing program is valid until 31.10.2026';
+
+  @override
+  String get tileTitle => 'Quick settings tile';
+
+  @override
+  String get tileSubtitle =>
+      'Start and stop the tunnel without opening the app';
+
+  @override
+  String get tileFallback =>
+      'Open the shade, tap edit and drag the Tunnel tile onto the quick settings panel';
 }

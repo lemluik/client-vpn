@@ -13,7 +13,9 @@ import 'package:client_vpn/settings_store.dart';
 import 'package:client_vpn/split_screen.dart';
 import 'package:client_vpn/vpn_config.dart';
 import 'package:client_vpn/vpn_core.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -36,7 +38,13 @@ class _NoCore implements VpnCore {
   Stream<String> get logs => const Stream<String>.empty();
 
   @override
-  Stream<bool> get statusChanges => const Stream<bool>.empty();
+  Stream<CoreStatus> get statusChanges => const Stream<CoreStatus>.empty();
+
+  @override
+  Future<void> markTunnelFresh() async {}
+
+  @override
+  Future<bool> takePendingConnect() async => false;
 
   @override
   bool get isRunning => false;
@@ -387,6 +395,78 @@ void main() {
         find.byKey(const ValueKey('split-host-example.com')),
         findsOneWidget,
       );
+    });
+
+    testWidgets(
+      'Android предлагает плитку, без системного ответа — инструкция',
+      (tester) async {
+        final state = await makeState();
+        addTearDown(state.dispose);
+        // Плитку добавляет система: в тесте она отвечает «отказ», и экран
+        // обязан объяснить, как положить плитку руками.
+        const channel = MethodChannel('client_vpn/tunnel');
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(
+              channel,
+              (call) async => call.method == 'addTile' ? false : null,
+            );
+        addTearDown(
+          () => TestDefaultBinaryMessengerBinding
+              .instance
+              .defaultBinaryMessenger
+              .setMockMethodCallHandler(channel, null),
+        );
+
+        debugDefaultTargetPlatformOverride = TargetPlatform.android;
+        await openSettings(tester, state);
+
+        final row = find.byKey(const ValueKey('tile'));
+        await tester.scrollUntilVisible(row, 200);
+        await tester.pumpAndSettle();
+        expect(row, findsOneWidget);
+
+        await tester.tap(row);
+        await tester.pumpAndSettle();
+        expect(find.textContaining('Откройте шторку'), findsOneWidget);
+
+        debugDefaultTargetPlatformOverride = null;
+      },
+    );
+
+    testWidgets('система приняла запрос — инструкции нет', (tester) async {
+      final state = await makeState();
+      addTearDown(state.dispose);
+      const channel = MethodChannel('client_vpn/tunnel');
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async => true);
+      addTearDown(
+        () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, null),
+      );
+
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      await openSettings(tester, state);
+
+      final row = find.byKey(const ValueKey('tile'));
+      await tester.scrollUntilVisible(row, 200);
+      await tester.pumpAndSettle();
+      await tester.tap(row);
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Откройте шторку'), findsNothing);
+
+      debugDefaultTargetPlatformOverride = null;
+    });
+
+    testWidgets('на Windows строки плитки в настройках нет', (tester) async {
+      final state = await makeState();
+      addTearDown(state.dispose);
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      await openSettings(tester, state);
+
+      expect(find.byKey(const ValueKey('tile')), findsNothing);
+
+      debugDefaultTargetPlatformOverride = null;
     });
   });
 

@@ -41,7 +41,7 @@ ManualRule rule({
 /// Ядро, которое помнит конфиг подключения и отдаёт его тесту.
 class CapturingCore implements VpnCore {
   final StreamController<String> _logs = StreamController<String>.broadcast();
-  final StreamController<bool> _status = StreamController<bool>.broadcast();
+  final StreamController<CoreStatus> _status = StreamController<CoreStatus>.broadcast();
 
   String? lastConfig;
 
@@ -49,7 +49,13 @@ class CapturingCore implements VpnCore {
   Stream<String> get logs => _logs.stream;
 
   @override
-  Stream<bool> get statusChanges => _status.stream;
+  Stream<CoreStatus> get statusChanges => _status.stream;
+
+  @override
+  Future<void> markTunnelFresh() async {}
+
+  @override
+  Future<bool> takePendingConnect() async => false;
 
   @override
   bool get isRunning => true;

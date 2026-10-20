@@ -514,4 +514,71 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get splitTunnelRuleTitle => 'Исключения: в туннель';
+
+  @override
+  String trialConnectTitle(String serviceName) {
+    return 'Подключить $serviceName';
+  }
+
+  @override
+  String get trialConnectSubtitle => 'Пробный ключ бесплатно';
+
+  @override
+  String get registrationLoginLabel => 'Telegram login';
+
+  @override
+  String get registrationLoginHint => '@username';
+
+  @override
+  String get registrationTerms => 'Согласен с условиями программы тестирования';
+
+  @override
+  String get registrationSubmit => 'Подключить';
+
+  @override
+  String get registrationInfo =>
+      'Это программа тестирования. Ключи выдаются бесплатно до конца года. Служба поддержки может проводить опросы для улучшения сервиса.';
+
+  @override
+  String get registrationNeedConsent =>
+      'Необходимо согласиться с условиями программы';
+
+  @override
+  String get registrationBadLogin =>
+      'Введите Telegram login: @username, от 5 до 32 символов';
+
+  @override
+  String get registrationSuccess => 'Подключено! Ключ добавлен.';
+
+  @override
+  String registrationFailed(String reason) {
+    return 'Не удалось подключиться: $reason';
+  }
+
+  @override
+  String get expiredTitle => 'Ключ истёк';
+
+  @override
+  String get expiredBody => 'Ваш временный ключ закончился.';
+
+  @override
+  String get expiredSupport => 'Для продления обратитесь в службу поддержки';
+
+  @override
+  String get expiredOpenSupport => 'Открыть поддержку';
+
+  @override
+  String get expiredProgramNote =>
+      'Программа тестирования действительна до 31.10.2026';
+
+  @override
+  String get tileTitle => 'Плитка в шторке';
+
+  @override
+  String get tileSubtitle =>
+      'Включать и выключать туннель без открытия приложения';
+
+  @override
+  String get tileFallback =>
+      'Откройте шторку, нажмите редактировать и перетащите плитку «Туннель» на панель быстрых настроек';
 }

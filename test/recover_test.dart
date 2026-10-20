@@ -21,13 +21,19 @@ class RecoveringCore implements VpnCore {
   int recoverCalls = 0;
 
   final StreamController<String> _logs = StreamController<String>.broadcast();
-  final StreamController<bool> _status = StreamController<bool>.broadcast();
+  final StreamController<CoreStatus> _status = StreamController<CoreStatus>.broadcast();
 
   @override
   Stream<String> get logs => _logs.stream;
 
   @override
-  Stream<bool> get statusChanges => _status.stream;
+  Stream<CoreStatus> get statusChanges => _status.stream;
+
+  @override
+  Future<void> markTunnelFresh() async {}
+
+  @override
+  Future<bool> takePendingConnect() async => false;
 
   @override
   bool get isRunning => statusAfterRecover;
@@ -50,7 +56,7 @@ class RecoveringCore implements VpnCore {
   @override
   Future<void> recoverAfterCrash() async {
     recoverCalls++;
-    _status.add(statusAfterRecover);
+    _status.add(CoreStatus(statusAfterRecover));
   }
 }
 
@@ -147,7 +153,7 @@ void main() {
       addTearDown(() => mockNative((_) => false));
 
       final core = AndroidCore();
-      final seen = <bool>[];
+      final seen = <CoreStatus>[];
       core.statusChanges.listen(seen.add);
       // Подписка на поток событий выполняется до запроса статуса.
       await Future<void>.delayed(Duration.zero);
@@ -158,7 +164,7 @@ void main() {
 
       expect(calls.map((call) => call.method), ['status']);
       expect(core.isRunning, isTrue);
-      expect(seen, [true]);
+      expect(seen.map((s) => s.running).toList(), [true]);
     });
 
     test('восстановленный туннель возвращает приложению локальный вход', () async {
@@ -179,7 +185,7 @@ void main() {
       addTearDown(() => mockNative((_) => false));
 
       final core = AndroidCore();
-      final seen = <bool>[];
+      final seen = <CoreStatus>[];
       core.statusChanges.listen(seen.add);
       await Future<void>.delayed(Duration.zero);
 
@@ -187,7 +193,7 @@ void main() {
       await Future<void>.delayed(Duration.zero);
 
       expect(core.isRunning, isFalse);
-      expect(seen, [false]);
+      expect(seen.map((s) => s.running).toList(), [false]);
     });
 
     test('снятый туннель снимает и локальный вход приложения', () async {

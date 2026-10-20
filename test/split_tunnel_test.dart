@@ -23,7 +23,7 @@ class _NoCore implements VpnCore {
   Stream<String> get logs => const Stream<String>.empty();
 
   @override
-  Stream<bool> get statusChanges => const Stream<bool>.empty();
+  Stream<CoreStatus> get statusChanges => const Stream<CoreStatus>.empty();
 
   @override
   bool get isRunning => false;
@@ -33,6 +33,12 @@ class _NoCore implements VpnCore {
 
   @override
   Future<void> validate(VpnConfig config) async {}
+
+  @override
+  Future<void> markTunnelFresh() async {}
+
+  @override
+  Future<bool> takePendingConnect() async => false;
 
   @override
   Future<void> start(VpnConfig config) async {}
@@ -98,7 +104,14 @@ void main() {
     test('метка, смешавшая кириллицу с латиницей, отклоняется', () {
       // Метка проверена склейкой: целиком такое написание в исходнике
       // видит гейт смешанного написания, а не тест.
-      expect(exceptionHost('a' 'рф' '.ru'), isNull);
+      expect(
+        exceptionHost(
+          'a'
+          'рф'
+          '.ru',
+        ),
+        isNull,
+      );
     });
   });
 
@@ -155,7 +168,13 @@ example.com
       expect(idnAsciiLabel('-ru'), isNull);
       expect(idnAsciiLabel('ru-'), isNull);
       expect(idnAsciiLabel('a_b'), isNull);
-      expect(idnAsciiLabel('a' 'рф'), isNull);
+      expect(
+        idnAsciiLabel(
+          'a'
+          'рф',
+        ),
+        isNull,
+      );
     });
   });
 

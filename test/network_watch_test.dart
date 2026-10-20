@@ -19,7 +19,7 @@ const link = 'vless://2f6bd5a1-1e73-4b1a-9d3c-000000000001@example.org:443'
 /// Ядро, которое считает подъёмы и падения: по ним проверяется переподъём.
 class CountingCore implements VpnCore {
   final StreamController<String> _logs = StreamController<String>.broadcast();
-  final StreamController<bool> _status = StreamController<bool>.broadcast();
+  final StreamController<CoreStatus> _status = StreamController<CoreStatus>.broadcast();
 
   int startCalls = 0;
   int stopCalls = 0;
@@ -29,7 +29,13 @@ class CountingCore implements VpnCore {
   Stream<String> get logs => _logs.stream;
 
   @override
-  Stream<bool> get statusChanges => _status.stream;
+  Stream<CoreStatus> get statusChanges => _status.stream;
+
+  @override
+  Future<void> markTunnelFresh() async {}
+
+  @override
+  Future<bool> takePendingConnect() async => false;
 
   @override
   bool get isRunning => _running;
@@ -44,14 +50,14 @@ class CountingCore implements VpnCore {
   Future<void> start(VpnConfig config) async {
     startCalls++;
     _running = true;
-    _status.add(true);
+    _status.add(const CoreStatus(true));
   }
 
   @override
   Future<void> stop() async {
     stopCalls++;
     _running = false;
-    _status.add(false);
+    _status.add(const CoreStatus(false));
   }
 
   @override

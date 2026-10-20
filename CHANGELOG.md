@@ -9,6 +9,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Connecting to a provider that hands out keys is now one button. The add-connection menu offers
+  «Подключить {имя сервиса}», which asks the provider's control point for a trial key and adds the
+  link it gets back — no pasting, no config file. The service name comes from the closed build's
+  config asset, the registration response or a subscription header; with none of them the item reads
+  «Подключить сервис», so the brand stays out of the source and the open client stays universal.
+- The connection screen states why a request was refused, in the user's terms rather than a server
+  code: this device already received a trial key, the key expired, the control point is unreachable.
+  An expired key leads to the support chat instead of ending the flow.
+- The device is identified by a UUID v4 kept in the OS secure storage (Keystore / Credential
+  Manager), so a repeated request from the same installation is recognised by the provider instead of
+  quietly issuing another key. Reinstalling or clearing the app's data gives a new identifier.
+- Android quick-settings tile for the tunnel: one tap in the pull-down panel raises or drops the
+  tunnel without opening the app, and its state is read from the actual tunnel interface rather than
+  from the process memory, so a restarted shell still shows the truth. The client asks the system to
+  place the tile from the settings screen (Android 13+); older versions get the manual instructions.
+  The tile starts the tunnel directly only while a freshness marker on the saved config stands —
+  every successful in-app connection sets it — otherwise the tap opens the app and connects from
+  there, and with no saved connection the tile is greyed out.
+
+### Security
+
+- `assets/service_config.json` is gitignored. It was untracked but not ignored, so one bulk
+  `git add` in a working copy of the closed build would have published the brand and the control
+  point address into this public repository. The file now lives outside the repo and is overlaid
+  before the build.
+
+## [0.4.0] - 2026-10-17
+
+### Added
+
 - Closing the window asks what to do instead of guessing: minimize to the tray keeps the tunnel
   running, quit tears it down, and the checkbox remembers which one was chosen. Both answers stay
   editable in settings, and a remembered minimize still quits when no tray icon could be mounted,
@@ -22,6 +52,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   homeserver and sent as an `m.image` event, and incoming images are downloaded and shown inline.
   Both the authenticated media API (Matrix 1.11+) and the legacy one are tried, so homeservers that
   serve media only on the old path keep working
+- Routing rules the user can write: an editor with manual domain and IP rules, presets (everything
+  through the tunnel / everything direct / split), per-address exceptions and, on Android, per-app
+  exclusions. The Russian preset ships with banks and government services so they keep going direct.
+- Nodes inside one region are balanced between each other with a stickiness threshold taken from
+  measurements, and the probe target became a setting the user can change.
+- The tunnel is raised again when the device switches network, and the service recovers after an
+  outage. A subscription that stops answering freezes the service instead of dropping connections.
+- Tapping a `vless://` link outside the app — in a browser or a messenger — opens the client and
+  adds the connection itself on Android.
+- Live traffic counters: the Android VPN notification shows the speed and the session total, and
+  Windows reads the same numbers from the core's gRPC StatsService and puts them in the tray tooltip.
+- Update check: the client asks GitHub Releases for the newest version, understands both manifest
+  formats, and shows a screen with the release description and a download link.
+- About screen with the app version, the MPL-2.0 license, third-party notices and the no-telemetry
+  statement. The app icon is the Neutrino atom: adaptive on Android, plus favicon and store icon.
+- Windows keeps a single client window and puts the connection control in the tray icon.
+- CI runs the analysis, the tests and the repository gates on every pull request, Dependabot tracks
+  workflow action versions, and a tag build publishes the GitHub Release itself with the license
+  files and `SHA256SUMS.txt` next to the artifacts.
+- Android: cloud backup is switched off so a saved key does not leave the device, and the release
+  signing configuration is prepared.
 
 ### Changed
 

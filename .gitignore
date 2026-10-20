@@ -40,3 +40,8 @@ android/.kotlin/
 
 # Ядро Xray и geo-базы для macOS (download separately via scripts/download_xray_macos.sh)
 macos/xray/
+
+# Конфиг сервиса закрытой сборки (имя сервиса и точка контроля). Накладывается
+# перед сборкой из приватного слоя: в репозитории его нет, поэтому открытый
+# клиент остаётся универсальным.
+assets/service_config.json

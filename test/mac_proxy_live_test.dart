@@ -126,8 +126,8 @@ void main() {
     () async {
       final core = DesktopCore();
       final down = Completer<void>();
-      final sub = core.statusChanges.listen((on) {
-        if (!on && !down.isCompleted) down.complete();
+      final sub = core.statusChanges.listen((status) {
+        if (!status.running && !down.isCompleted) down.complete();
       });
       final cfg = await config();
 

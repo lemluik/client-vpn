@@ -8,6 +8,7 @@ import 'package:client_vpn/failover.dart';
 import 'package:client_vpn/home_screen.dart';
 import 'package:client_vpn/main.dart';
 import 'package:client_vpn/profile_store.dart';
+import 'package:client_vpn/services/service_config.dart';
 import 'package:client_vpn/settings_store.dart';
 import 'package:client_vpn/vpn_config.dart';
 import 'package:client_vpn/vpn_core.dart';
@@ -34,7 +35,7 @@ const linkTwo =
 /// Ядро без процесса и без сети: состояние переключается вручную.
 class FakeCore implements VpnCore {
   final StreamController<String> _logs = StreamController<String>.broadcast();
-  final StreamController<bool> _status = StreamController<bool>.broadcast();
+  final StreamController<CoreStatus> _status = StreamController<CoreStatus>.broadcast();
 
   Object? validateError;
   int startCalls = 0;
@@ -45,7 +46,13 @@ class FakeCore implements VpnCore {
   Stream<String> get logs => _logs.stream;
 
   @override
-  Stream<bool> get statusChanges => _status.stream;
+  Stream<CoreStatus> get statusChanges => _status.stream;
+
+  @override
+  Future<void> markTunnelFresh() async {}
+
+  @override
+  Future<bool> takePendingConnect() async => false;
 
   @override
   bool get isRunning => _running;
@@ -64,13 +71,13 @@ class FakeCore implements VpnCore {
     startCalls++;
     lastConfig = config;
     _running = true;
-    _status.add(true);
+    _status.add(const CoreStatus(true));
   }
 
   @override
   Future<void> stop() async {
     _running = false;
-    _status.add(false);
+    _status.add(const CoreStatus(false));
   }
 
   @override
@@ -84,7 +91,7 @@ class FakeCore implements VpnCore {
   /// Обрыв со стороны ядра: приложение остановки не просило.
   void dropConnection() {
     _running = false;
-    _status.add(false);
+    _status.add(const CoreStatus(false));
   }
 }
 
@@ -101,7 +108,11 @@ class _NullVault implements TokenVault {
   Future<void> erase(String key) async {}
 }
 
-Future<AppState> makeState({FakeCore? core, Autostart? autostart}) async {
+Future<AppState> makeState({
+  FakeCore? core,
+  Autostart? autostart,
+  ServiceConfig? serviceConfig,
+}) async {
   SharedPreferences.setMockInitialValues({});
   return AppState(
     await ProfileStore.open(),
@@ -110,6 +121,7 @@ Future<AppState> makeState({FakeCore? core, Autostart? autostart}) async {
     autostart: autostart ?? FakeAutostart(),
     // Запись служебного конфига проверена отдельно в temp_config_test.
     configWriter: (config) async => config,
+    serviceConfig: serviceConfig ?? const ServiceConfig(),
   );
 }
 
@@ -657,6 +669,99 @@ void main() {
       expect(json, contains('"balancerTag":"cvpn-lb"'));
       expect(json, contains('"strategy":{"type":"leastPing"'));
       expect(json, contains('"tolerance":$regionToleranceMs'));
+    });
+  });
+
+  group('подключение пробного ключа в меню «+»', () {
+    const trialConfig = ServiceConfig(
+      serviceName: 'Example',
+      controlPoint: 'https://control.example.com/',
+      trialEnabled: true,
+    );
+
+    testWidgets('пункт первый, с молнией и именем из конфига', (tester) async {
+      final state = await makeState(serviceConfig: trialConfig);
+      addTearDown(state.dispose);
+
+      await pumpApp(tester, state);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Добавить подключение'));
+      await tester.pumpAndSettle();
+
+      final trial = find.text('Подключить Example');
+      expect(trial, findsOneWidget);
+      expect(find.byIcon(Icons.bolt_rounded), findsOneWidget);
+      // Пробный ключ — первый пункт, выше импорта ссылки.
+      expect(
+        tester.getTopLeft(trial).dy,
+        lessThan(tester.getTopLeft(find.text('Ссылка или подписка')).dy),
+      );
+    });
+
+    testWidgets('имя берётся из конфига, а не зашито в код', (tester) async {
+      final state = await makeState(serviceConfig: trialConfig);
+      addTearDown(state.dispose);
+
+      await pumpApp(tester, state);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Добавить подключение'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Подключить Example'), findsOneWidget);
+      expect(find.text('Подключить сервис'), findsNothing);
+    });
+
+    testWidgets('без бренда в конфиге пункт читается «Подключить сервис»', (
+      tester,
+    ) async {
+      final state = await makeState(
+        serviceConfig: const ServiceConfig(trialEnabled: true),
+      );
+      addTearDown(state.dispose);
+
+      await pumpApp(tester, state);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Добавить подключение'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Подключить сервис'), findsOneWidget);
+    });
+
+    testWidgets(
+      'открытый клиент без конфига: пункт виден с нейтральной меткой',
+      (tester) async {
+        final state = await makeState();
+        addTearDown(state.dispose);
+
+        await pumpApp(tester, state);
+        await tester.pumpAndSettle();
+        await tester.tap(find.byTooltip('Добавить подключение'));
+        await tester.pumpAndSettle();
+
+        // Кнопка видна всегда (решение владельца 20.10), без конфига — fallback.
+        expect(find.byIcon(Icons.bolt_rounded), findsOneWidget);
+        expect(find.text('Подключить сервис'), findsOneWidget);
+        // Универсальные пункты на месте.
+        expect(find.text('Ссылка или подписка'), findsOneWidget);
+      },
+    );
+
+    testWidgets('тап по пункту открывает экран подключения', (tester) async {
+      final state = await makeState(serviceConfig: trialConfig);
+      addTearDown(state.dispose);
+
+      await pumpApp(tester, state);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Добавить подключение'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Подключить Example'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Согласен с условиями программы тестирования'),
+        findsOneWidget,
+      );
+      expect(find.text('Подключить'), findsOneWidget);
     });
   });
 }

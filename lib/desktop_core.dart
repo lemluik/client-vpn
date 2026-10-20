@@ -60,8 +60,8 @@ class DesktopCore implements VpnCore {
 
   final StreamController<String> _logController =
       StreamController<String>.broadcast();
-  final StreamController<bool> _statusController =
-      StreamController<bool>.broadcast();
+  final StreamController<CoreStatus> _statusController =
+      StreamController<CoreStatus>.broadcast();
 
   ProxyEndpoint? _proxy;
 
@@ -77,7 +77,7 @@ class DesktopCore implements VpnCore {
   Stream<String> get logs => _logController.stream;
 
   @override
-  Stream<bool> get statusChanges => _statusController.stream;
+  Stream<CoreStatus> get statusChanges => _statusController.stream;
 
   @override
   bool get isRunning => _process != null;
@@ -334,11 +334,11 @@ class DesktopCore implements VpnCore {
             'Килл-свитч: прокси держим включённым на мёртвый порт',
           );
         }
-        _statusController.add(false);
+        _statusController.add(const CoreStatus(false));
       }),
     );
 
-    _statusController.add(true);
+    _statusController.add(const CoreStatus(true));
     _logController.add('Xray запущен (PID: ${_process!.pid})');
   }
 
@@ -374,7 +374,7 @@ class DesktopCore implements VpnCore {
     if (_process == null) {
       AppProxy.attach(null);
       await SystemProxy.disable();
-      _statusController.add(false);
+      _statusController.add(const CoreStatus(false));
       return;
     }
 
@@ -403,7 +403,7 @@ class DesktopCore implements VpnCore {
     if (Platform.isMacOS) await _macGuard.detach();
     AppProxy.attach(null);
     await SystemProxy.disable();
-    _statusController.add(false);
+    _statusController.add(const CoreStatus(false));
     _logController.add('Xray остановлен, системный прокси отключён');
   }
 
@@ -417,6 +417,14 @@ class DesktopCore implements VpnCore {
     }
     await SystemProxy.cleanupAfterCrash();
   }
+
+  /// Плитки шторки на десктопе нет: метка свежести и команда из
+  /// оболочки здесь всегда неактуальны.
+  @override
+  Future<void> markTunnelFresh() async {}
+
+  @override
+  Future<bool> takePendingConnect() async => false;
 
   @override
   Future<void> dispose() async {

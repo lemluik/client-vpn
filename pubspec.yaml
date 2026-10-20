@@ -32,7 +32,7 @@ dependencies:
   # gRPC client for the core's StatsService: on desktop the tunnel traffic is
   # visible only in Xray counters (the access log has no bytes). QueryStats
   # messages are encoded by hand, so protoc and the protobuf package are not needed.
-  grpc: ^4.0.0
+  grpc: ^5.2.0
 
 dev_dependencies:
   flutter_test:

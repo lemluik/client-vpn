@@ -1,5 +1,10 @@
 package com.clientvpn.client_vpn
 
+import android.content.ComponentName
+import android.content.Context
+import android.os.Build
+import android.service.quicksettings.TileService
+
 /**
  * Мост событий фонового сервиса к интерфейсу.
  *
@@ -19,6 +24,11 @@ object TunnelBus {
     var lastStatus = false
         private set
 
+    /** Тем ли событием статус поменялся, что команду отдала оболочка. */
+    @Volatile
+    var lastByShell = false
+        private set
+
     private var attachedOnce = false
 
     fun subscribe(sink: (method: String, argument: Any) -> Unit) {
@@ -27,7 +37,7 @@ object TunnelBus {
         val replay = attachedOnce
         attachedOnce = true
         this.sink = sink
-        if (replay) sink("status", lastStatus)
+        if (replay) sink("status", payload(lastStatus, lastByShell))
     }
 
     fun unsubscribe() {
@@ -38,8 +48,30 @@ object TunnelBus {
         sink?.invoke("log", line)
     }
 
-    fun status(running: Boolean) {
+    fun status(running: Boolean, byShell: Boolean = false, context: Context? = null) {
         lastStatus = running
-        sink?.invoke("status", running)
+        lastByShell = byShell
+        sink?.invoke("status", payload(running, byShell))
+        context?.let { refreshTile(it) }
+    }
+
+    private fun payload(running: Boolean, byShell: Boolean): Map<String, Boolean> =
+        mapOf("running" to running, "byShell" to byShell)
+
+    /**
+     * Просит оболочку переспросить состояние плитки. Единственное место, откуда
+     * это делается: подписываться на шину самой плитке нельзя — у неё один
+     * подписчик, и интерфейс потерял бы события.
+     */
+    fun refreshTile(context: Context) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
+        try {
+            TileService.requestListeningState(
+                context.applicationContext,
+                ComponentName(context, TunnelTileService::class.java),
+            )
+        } catch (e: Exception) {
+            // Плитка ещё не добавлена пользователем — переспрашивать некого.
+        }
     }
 }
