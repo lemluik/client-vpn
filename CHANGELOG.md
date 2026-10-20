@@ -20,6 +20,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - The device is identified by a UUID v4 kept in the OS secure storage (Keystore / Credential
   Manager), so a repeated request from the same installation is recognised by the provider instead of
   quietly issuing another key. Reinstalling or clearing the app's data gives a new identifier.
+- Android quick-settings tile for the tunnel: one tap in the pull-down panel raises or drops the
+  tunnel without opening the app, and its state is read from the actual tunnel interface rather than
+  from the process memory, so a restarted shell still shows the truth. The client asks the system to
+  place the tile from the settings screen (Android 13+); older versions get the manual instructions.
+  The tile starts the tunnel directly only while a freshness marker on the saved config stands —
+  every successful in-app connection sets it — otherwise the tap opens the app and connects from
+  there, and with no saved connection the tile is greyed out.
 
 ### Security
 
