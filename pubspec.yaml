@@ -22,11 +22,17 @@ dependencies:
   window_manager: ^0.5.2
   connectivity_plus: ^7.3.2
   intl: ^0.20.3
-  # 1.9.0 — последняя ветка, отдающая ColorScheme из Flutter: в 2.x палитра
-  # приходит из пакета material_ui с собственным типом схемы, несовместимым
-  # с ThemeData текущей версии Flutter.
+  # 1.9.0 — последняя ветка, отдающая ColorScheme из Flutter: с 2.0.0 (CHANGELOG
+  # пакета) палитра приходит из material_ui с собственным типом схемы,
+  # несовместимым с ThemeData текущей версии Flutter.
   dynamic_color: 1.9.0
-  tray_manager: 0.5.2
+  # 0.8.0: с 0.7.0 пакет живёт на нативном API (nativeapi), legacy-синглтон
+  # trayManager переехал в legacy.dart и помечен на удаление.
+  tray_manager: 0.7.0
+  # gRPC-клиент к StatsService ядра: на десктопе трафик туннеля виден только
+  # в счётчиках Xray (в журнале доступа байтов нет). Сообщения QueryStats
+  # кодируются вручную, поэтому protoc и пакет protobuf не нужны.
+  grpc: ^5.2.0
 
 dev_dependencies:
   flutter_test:

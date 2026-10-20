@@ -2,24 +2,22 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import 'about_screen.dart';
 import 'app_state.dart';
-import 'failover.dart';
 import 'l10n/app_localizations.dart';
 import 'log_screen.dart';
 import 'profile_store.dart';
 import 'provider.dart';
 import 'region.dart';
-import 'routing_presets.dart';
-import 'rules_screen.dart';
+import 'screens/registration/registration_screen.dart';
 import 'settings_screen.dart';
 import 'support_chat_screen.dart';
-import 'update_screen.dart';
+import 'traffic.dart';
 
 /// Главный экран: состояние туннеля, список подключений и добавление новых.
 ///
-/// Журнал и способ входа сырым файлом убраны отсюда: первый экран отвечает на
-/// вопрос «подключено ли», а не «что пишет ядро».
+/// Настройки, журнал-инструменты и «что куда идёт» живут на экране настроек:
+/// первый экран отвечает на вопрос «подключено ли», а не «как маршрутизирован
+/// трафик».
 class HomeScreen extends StatefulWidget {
   const HomeScreen({required this.state, super.key});
 
@@ -57,10 +55,24 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         title: Text(l.appTitle),
         centerTitle: true,
-        leading: IconButton(
-          tooltip: l.tooltipSettings,
-          icon: const Icon(Icons.settings_outlined),
-          onPressed: _openSettings,
+        // Редкие действия — слева, частые — справа: настройки и журнал нужны не
+        // каждый день, а добавление подключения и чат поддержки живут на
+        // переднем плане. По две кнопки с каждой стороны, заголовок по центру.
+        leadingWidth: 96,
+        leading: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              tooltip: l.tooltipSettings,
+              icon: const Icon(Icons.settings_outlined),
+              onPressed: _openSettings,
+            ),
+            IconButton(
+              tooltip: l.tooltipLog,
+              icon: const Icon(Icons.article_outlined),
+              onPressed: _openLog,
+            ),
+          ],
         ),
         actions: [
           if (!empty && _state.activeProvider != null)
@@ -73,16 +85,6 @@ class _HomeScreenState extends State<HomeScreen> {
             tooltip: l.tooltipAddConnection,
             icon: const Icon(Icons.add),
             onPressed: _state.isBusy ? null : _showAddSheet,
-          ),
-          IconButton(
-            tooltip: l.tooltipMore,
-            icon: const Icon(Icons.tune),
-            onPressed: _state.isBusy ? null : _showSettingsSheet,
-          ),
-          IconButton(
-            tooltip: l.tooltipLog,
-            icon: const Icon(Icons.article_outlined),
-            onPressed: _openLog,
           ),
           IconButton(
             tooltip: l.tooltipSupport,
@@ -166,10 +168,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _select(String id) async {
     if (_state.isConnected) {
       final l = AppLocalizations.of(context);
-      final leave = await _confirm(
-        l.switchProfileTitle,
-        l.switchProfileBody,
-      );
+      final leave = await _confirm(l.switchProfileTitle, l.switchProfileBody);
       if (!leave) return;
       await _state.disconnect();
     }
@@ -191,10 +190,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     final l = AppLocalizations.of(context);
-    final leave = await _confirm(
-      l.switchRegionTitle,
-      l.switchRegionBody,
-    );
+    final leave = await _confirm(l.switchRegionTitle, l.switchRegionBody);
     if (!leave) return;
     await _state.disconnect();
     await _state.selectRegion(key);
@@ -265,7 +261,8 @@ class _HomeScreenState extends State<HomeScreen> {
     Navigator.push(
       context,
       MaterialPageRoute<void>(
-          builder: (context) => SettingsScreen(state: _state)),
+        builder: (context) => SettingsScreen(state: _state),
+      ),
     );
   }
 
@@ -284,6 +281,17 @@ class _HomeScreenState extends State<HomeScreen> {
       MaterialPageRoute<void>(
         builder: (context) =>
             SupportChatScreen(state: _state, provider: _state.activeProvider),
+      ),
+    );
+  }
+
+  /// Подключение пробного ключа: первый пункт меню «+», виден только когда
+  /// конфигурация сервиса включает программу тестирования.
+  Future<void> _openRegistration() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute<void>(
+        builder: (context) => RegistrationScreen(state: _state),
       ),
     );
   }
@@ -316,6 +324,18 @@ class _HomeScreenState extends State<HomeScreen> {
                     fontWeight: FontWeight.w600,
                   ),
                 ),
+              ),
+              ListTile(
+                leading: Icon(
+                  Icons.bolt_rounded,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+                title: Text(l.trialConnectTitle(_state.serviceName)),
+                subtitle: Text(l.trialConnectSubtitle),
+                onTap: () async {
+                  Navigator.pop(context);
+                  await _openRegistration();
+                },
               ),
               ListTile(
                 leading: const Icon(Icons.link),
@@ -351,214 +371,6 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
     );
-  }
-
-  /// Нижняя панель настроек: контекст главного экрана не теряется.
-  ///
-  /// Пресет нужен **до** первого подключения, поэтому выбор применяется сразу
-  /// и поднятый туннель перезапускается, а не ждёт следующего запуска.
-  Future<void> _showSettingsSheet() async {
-    final l = AppLocalizations.of(context);
-    await showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) => SafeArea(
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
-                child: Text(
-                  l.settingsTitle,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              for (final preset in routingPresets)
-                ListTile(
-                  title: Text(_presetLabel(l, preset)),
-                  subtitle: Text(
-                    preset.isOff ? l.presetOffSubtitle : l.presetOnSubtitle,
-                  ),
-                  trailing: preset.key == _state.routingPreset.key
-                      ? const Icon(Icons.check)
-                      : null,
-                  onTap: () async {
-                    Navigator.pop(context);
-                    await _applyPreset(preset);
-                  },
-                ),
-              ListTile(
-                title: Text(l.myRules),
-                subtitle: Text(
-                  _state.manualRules.isEmpty
-                      ? l.myRulesEmpty
-                      : l.myRulesCount(_state.manualRules.length),
-                ),
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.of(this.context).push(
-                    MaterialPageRoute(
-                      builder: (_) => RulesScreen(state: _state),
-                    ),
-                  );
-                },
-              ),
-              ListTile(
-                title: Text(l.probeTarget),
-                subtitle: Text(_state.probeEndpoint),
-                onTap: () async {
-                  Navigator.pop(context);
-                  await _editProbeTarget();
-                },
-              ),
-              ListTile(
-                title: Text(l.updateTitle),
-                subtitle: Text(l.updateSourceSubtitle),
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.of(this.context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const UpdateScreen(),
-                    ),
-                  );
-                },
-              ),
-              if (defaultTargetPlatform == TargetPlatform.android)
-                ListTile(
-                  title: Text(l.tileTitle),
-                  subtitle: Text(l.tileSubtitle),
-                  onTap: () async {
-                    Navigator.pop(context);
-                    await _addTile();
-                  },
-                ),
-              ListTile(
-                title: Text(l.aboutTitle),
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.of(this.context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const AboutScreen(),
-                    ),
-                  );
-                },
-              ),
-              const SizedBox(height: 8),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// Системный запрос добавления плитки. На старых Android система его не
-  /// принимает — там показываем текстовую инструкцию.
-  Future<void> _addTile() async {
-    bool added = false;
-    try {
-      added = await const MethodChannel('client_vpn/tunnel')
-              .invokeMethod<bool>('addTile') ==
-          true;
-    } on Exception {
-      added = false;
-    }
-    if (added || !mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(AppLocalizations.of(context).tileFallback)),
-    );
-  }
-
-  /// Название пресета на языке интерфейса. Модель список не переводит:
-  /// она работает до первого кадра, а язык известен только в виджете.
-  String _presetLabel(AppLocalizations l, RoutingPreset preset) =>
-      switch (preset.key) {
-        'ru' => l.presetRu,
-        'none' => l.presetOff,
-        _ => preset.label,
-      };
-
-  Future<void> _applyPreset(RoutingPreset preset) async {
-    if (preset.key == _state.routingPreset.key) return;
-
-    final l = AppLocalizations.of(context);
-    final label = _presetLabel(l, preset);
-    if (!_state.isConnected) {
-      await _state.setRoutingPreset(preset.key);
-      _notify(l.presetSelected(label));
-      return;
-    }
-
-    final restart = await _confirm(
-      l.restartForPresetTitle,
-      l.restartForPresetBody,
-    );
-    if (!restart) return;
-    await _state.disconnect();
-    await _state.setRoutingPreset(preset.key);
-    await _state.connect();
-    _notify(l.presetApplied(label));
-  }
-
-  /// Точка проб наблюдателя (У-3): значение вводит пользователь, нейтральное
-  /// по умолчанию ничего о провайдере не сообщает.
-  Future<void> _editProbeTarget() async {
-    final l = AppLocalizations.of(context);
-    final controller = TextEditingController(text: _state.probeEndpoint);
-    final value = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(l.probeTarget),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(l.probeTargetSubtitle),
-            const SizedBox(height: 12),
-            TextField(
-              controller: controller,
-              autofocus: true,
-              keyboardType: TextInputType.url,
-              decoration: const InputDecoration(
-                hintText: defaultProbeEndpoint,
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(l.buttonCancel),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, controller.text),
-            child: Text(l.buttonSave),
-          ),
-        ],
-      ),
-    );
-    if (value == null) return;
-
-    final error = await _state.setProbeEndpoint(value);
-    if (error != null) {
-      _notify(error);
-      return;
-    }
-    if (!_state.isConnected) {
-      _notify(l.probeApplied);
-      return;
-    }
-
-    // Значение уже сохранено; переподключение только применяет его к каналу.
-    if (await _confirm(l.restartForPresetTitle, l.restartForProbeBody)) {
-      await _state.disconnect();
-      await _state.connect();
-    }
-    _notify(l.probeApplied);
   }
 
   Future<void> _addFromText() async {
@@ -757,8 +569,7 @@ class _ProfileCard extends StatelessWidget {
     final l = AppLocalizations.of(context);
 
     return Card(
-      color:
-          selected ? Theme.of(context).colorScheme.secondaryContainer : null,
+      color: selected ? Theme.of(context).colorScheme.secondaryContainer : null,
       child: ListTile(
         onTap: onSelect,
         leading: Icon(_iconOf(profile.kind)),
@@ -784,10 +595,10 @@ class _ProfileCard extends StatelessWidget {
   }
 
   IconData _iconOf(ProfileKind kind) => switch (kind) {
-        ProfileKind.links => Icons.key_outlined,
-        ProfileKind.subscription => Icons.rss_feed,
-        ProfileKind.file => Icons.description_outlined,
-      };
+    ProfileKind.links => Icons.key_outlined,
+    ProfileKind.subscription => Icons.rss_feed,
+    ProfileKind.file => Icons.description_outlined,
+  };
 
   String _subtitleOf(
     AppLocalizations l,
@@ -802,11 +613,10 @@ class _ProfileCard extends StatelessWidget {
       ProfileKind.file => l.profileKindFile,
       ProfileKind.links =>
         count == 1 ? l.profileCountOne : l.profileCountMany(count),
-      ProfileKind.subscription => left == null
-          ? (count == 1
-              ? l.subscriptionOne
-              : l.subscriptionMany(count))
-          : l.subscriptionLeftMb(_megabytes(left)),
+      ProfileKind.subscription =>
+        left == null
+            ? (count == 1 ? l.subscriptionOne : l.subscriptionMany(count))
+            : l.subscriptionLeftMb(_megabytes(left)),
     };
   }
 
@@ -849,9 +659,7 @@ class _RegionPicker extends StatelessWidget {
             Text(l.regionTitle),
             const SizedBox(width: 8),
             const Spacer(),
-            Flexible(
-              child: _CountryLabel(region),
-            ),
+            Flexible(child: _CountryLabel(region)),
             const Icon(Icons.keyboard_arrow_down, size: 20),
           ],
         ),
@@ -877,8 +685,9 @@ class _RegionPicker extends StatelessWidget {
               ListTile(
                 title: _CountryLabel(region),
                 subtitle: Text(l.regionProfileCount(region.links.length)),
-                trailing:
-                    region.key == current ? const Icon(Icons.check) : null,
+                trailing: region.key == current
+                    ? const Icon(Icons.check)
+                    : null,
                 onTap: () {
                   Navigator.pop(sheetContext);
                   if (region.key != current) onChanged(region.key);
@@ -904,11 +713,11 @@ class _CountryLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Text(
-        defaultTargetPlatform == TargetPlatform.windows || region.flag.isEmpty
-            ? region.name
-            : region.label,
-        overflow: TextOverflow.ellipsis,
-      );
+    defaultTargetPlatform == TargetPlatform.windows || region.flag.isEmpty
+        ? region.name
+        : region.label,
+    overflow: TextOverflow.ellipsis,
+  );
 }
 
 /// Круглая кнопка подключения: цвет и кольцо показывают состояние,
@@ -955,40 +764,40 @@ class _ConnectOrbState extends State<_ConnectOrb> {
 
     final (fill, ring, glyph, glow, caption) = switch (_state.state) {
       TunnelState.on => (
-          colors.primary,
-          colors.primary.withValues(alpha: 0.35),
-          Colors.white,
-          colors.primary.withValues(alpha: 0.40),
-          l.orbDisconnect,
-        ),
+        colors.primary,
+        colors.primary.withValues(alpha: 0.35),
+        Colors.white,
+        colors.primary.withValues(alpha: 0.40),
+        l.orbDisconnect,
+      ),
       TunnelState.connecting => (
-          colors.primaryContainer,
-          colors.primary.withValues(alpha: 0.55),
-          colors.onPrimaryContainer,
-          colors.primary.withValues(alpha: 0.18),
-          l.statusConnecting,
-        ),
+        colors.primaryContainer,
+        colors.primary.withValues(alpha: 0.55),
+        colors.onPrimaryContainer,
+        colors.primary.withValues(alpha: 0.18),
+        l.statusConnecting,
+      ),
       TunnelState.failure => (
-          colors.errorContainer,
-          colors.error.withValues(alpha: 0.45),
-          colors.onErrorContainer,
-          colors.error.withValues(alpha: 0.18),
-          l.orbRetry,
-        ),
+        colors.errorContainer,
+        colors.error.withValues(alpha: 0.45),
+        colors.onErrorContainer,
+        colors.error.withValues(alpha: 0.18),
+        l.orbRetry,
+      ),
       TunnelState.noLink => (
-          colors.errorContainer,
-          colors.error.withValues(alpha: 0.45),
-          colors.onErrorContainer,
-          colors.error.withValues(alpha: 0.18),
-          l.orbRetry,
-        ),
+        colors.errorContainer,
+        colors.error.withValues(alpha: 0.45),
+        colors.onErrorContainer,
+        colors.error.withValues(alpha: 0.18),
+        l.orbRetry,
+      ),
       TunnelState.off => (
-          colors.surfaceContainerHighest,
-          colors.outline,
-          colors.onSurfaceVariant,
-          Colors.transparent,
-          l.orbConnect,
-        ),
+        colors.surfaceContainerHighest,
+        colors.outline,
+        colors.onSurfaceVariant,
+        Colors.transparent,
+        l.orbConnect,
+      ),
     };
 
     return Semantics(
@@ -1045,8 +854,8 @@ class _ConnectOrbState extends State<_ConnectOrb> {
                         connecting
                             ? Icons.hourglass_top
                             : failed
-                                ? Icons.refresh
-                                : Icons.power_settings_new,
+                            ? Icons.refresh
+                            : Icons.power_settings_new,
                         key: ValueKey(_state.state),
                         size: connecting ? 34 : 52,
                         color: glyph,
@@ -1063,9 +872,9 @@ class _ConnectOrbState extends State<_ConnectOrb> {
                 caption,
                 key: ValueKey(_state.state),
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: enabled ? null : colors.outline,
-                    ),
+                  fontWeight: FontWeight.w600,
+                  color: enabled ? null : colors.outline,
+                ),
               ),
             ),
           ],
@@ -1083,46 +892,81 @@ class _StatusLine extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
+    final traffic = state.traffic;
     final (text, color, icon) = switch (state.state) {
       TunnelState.on => (
-          l.statusProtected,
-          Colors.green.shade700,
-          Icons.verified_user_outlined,
-        ),
+        l.statusProtected,
+        Colors.green.shade700,
+        Icons.verified_user_outlined,
+      ),
       TunnelState.connecting => (
-          l.statusConnecting,
-          Theme.of(context).colorScheme.primary,
-          Icons.hourglass_top,
-        ),
+        l.statusConnecting,
+        Theme.of(context).colorScheme.primary,
+        Icons.hourglass_top,
+      ),
       TunnelState.failure => (
-          l.statusFailed,
-          Theme.of(context).colorScheme.error,
-          Icons.error_outline,
-        ),
+        l.statusFailed,
+        Theme.of(context).colorScheme.error,
+        Icons.error_outline,
+      ),
       TunnelState.noLink => (
-          l.statusNoLink,
-          Theme.of(context).colorScheme.error,
-          Icons.wifi_off,
-        ),
+        l.statusNoLink,
+        Theme.of(context).colorScheme.error,
+        Icons.wifi_off,
+      ),
       TunnelState.off => (
-          l.statusOff,
-          Theme.of(context).colorScheme.outline,
-          Icons.shield_outlined,
-        ),
+        l.statusOff,
+        Theme.of(context).colorScheme.outline,
+        Icons.shield_outlined,
+      ),
     };
 
-    return Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 18, color: color),
-        const SizedBox(width: 8),
-        Text(text, style: TextStyle(color: color, fontWeight: FontWeight.w600)),
-        if (state.endpoint != null && state.isConnected) ...[
-          const Spacer(),
-          Flexible(
+        Row(
+          children: [
+            Icon(icon, size: 18, color: color),
+            const SizedBox(width: 8),
+            Text(
+              text,
+              style: TextStyle(color: color, fontWeight: FontWeight.w600),
+            ),
+            if (state.endpoint != null && state.isConnected) ...[
+              const Spacer(),
+              Flexible(
+                child: Text(
+                  state.endpoint!,
+                  style: Theme.of(context).textTheme.bodySmall,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ],
+        ),
+        // Трафик туннеля: зеркало Android-уведомления — скорость и итог
+        // сессии (Д2-W1). На Android снимков нет, строки не появляются.
+        if (traffic != null && state.isConnected) ...[
+          const SizedBox(height: 2),
+          Padding(
+            padding: const EdgeInsets.only(left: 26),
             child: Text(
-              state.endpoint!,
+              l.trafficRate(
+                formatBytes(traffic.upSpeed),
+                formatBytes(traffic.downSpeed),
+              ),
               style: Theme.of(context).textTheme.bodySmall,
-              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(left: 26),
+            child: Text(
+              l.trafficSession(
+                formatBytes(traffic.totalUp),
+                formatBytes(traffic.totalDown),
+              ),
+              style: Theme.of(context).textTheme.bodySmall,
             ),
           ),
         ],

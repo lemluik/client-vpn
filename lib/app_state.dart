@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'autostart.dart';
 import 'chat_service.dart';
 import 'chat_store.dart';
+import 'core_stats.dart';
 import 'deep_link.dart';
 import 'failover.dart';
 import 'log_mask.dart';
@@ -19,10 +20,12 @@ import 'provider.dart';
 import 'reconnect.dart';
 import 'region.dart';
 import 'routing_presets.dart';
+import 'services/service_config.dart';
 import 'settings_store.dart';
 import 'share_link.dart';
 import 'subscription.dart';
 import 'temp_config.dart';
+import 'traffic.dart';
 import 'vpn_config.dart';
 import 'vpn_core.dart';
 
@@ -60,12 +63,13 @@ const Set<ConnectivityResult> networkTransports = {
 
 /// Сеть в виде строки для сравнения: `'wifi'`, `'mobile'`, `''` — связи нет.
 String networkKey(List<ConnectivityResult> networks) {
-  final names = networks
-      .where(networkTransports.contains)
-      .map((network) => network.name)
-      .toSet()
-      .toList()
-    ..sort();
+  final names =
+      networks
+          .where(networkTransports.contains)
+          .map((network) => network.name)
+          .toSet()
+          .toList()
+        ..sort();
   return names.join(',');
 }
 
@@ -90,22 +94,26 @@ class AppState extends ChangeNotifier {
     String languageCode = '',
     Stream<List<ConnectivityResult>>? networks,
     Stream<String>? deepLinks,
-  })  : _writeConfig = configWriter ??
-            (Platform.isAndroid ? _passThrough : ensureConfigOnDisk),
-        _chat = chat,
-        _settings = settings,
-        _autostart = autostart ?? const UnsupportedAutostart(),
-        _presets = presets,
-        _ruleStore = ruleStore,
-        _manualRules = ruleStore?.load() ?? const [],
-        _perApps = perApps,
-        _appExclusions = appExclusions,
-        _directApps = perApps?.load() ?? const [],
-        _probes = probes,
-        _reconnect = reconnect ?? ReconnectPlan(),
-        _probeEndpoint = probes?.load() ?? defaultProbeEndpoint,
-        _routingPreset =
-            presets?.load(languageCode) ?? defaultPresetFor(languageCode) {
+    ServiceConfig? serviceConfig,
+  }) : _writeConfig =
+           configWriter ??
+           (Platform.isAndroid ? _passThrough : ensureConfigOnDisk),
+       _chat = chat,
+       _settings = settings,
+       _autostart = autostart ?? const UnsupportedAutostart(),
+       _presets = presets,
+       _ruleStore = ruleStore,
+       _manualRules = ruleStore?.load() ?? const [],
+       _perApps = perApps,
+       _appExclusions = appExclusions,
+       _directApps = perApps?.load() ?? const [],
+       _probes = probes,
+       _reconnect = reconnect ?? ReconnectPlan(),
+       _probeEndpoint = probes?.load() ?? defaultProbeEndpoint,
+       _languageCode = languageCode,
+       _routingPreset =
+           presets?.load(languageCode) ?? defaultPresetFor(languageCode),
+       serviceConfig = serviceConfig ?? const ServiceConfig() {
     _logSubscription = _core.logs.listen(_onLog);
     _statusSubscription = _core.statusChanges.listen(_onStatus);
     _networkSubscription = networks?.listen(_onNetworks);
@@ -129,6 +137,7 @@ class AppState extends ChangeNotifier {
       languageCode: PlatformDispatcher.instance.locale.languageCode,
       networks: Connectivity().onConnectivityChanged,
       deepLinks: deepLinkStream(),
+      serviceConfig: await ServiceConfig.load(),
     );
   }
 
@@ -149,6 +158,14 @@ class AppState extends ChangeNotifier {
   final Autostart _autostart;
   final PresetStore? _presets;
 
+  /// Конфигурация сервиса: имя для надписей и точка контроля пробного ключа.
+  /// В открытом клиенте — значения по умолчанию (имя «сервис», пробный ключ
+  /// выключен), поэтому клиент остаётся универсальным.
+  final ServiceConfig serviceConfig;
+
+  /// Имя сервиса для надписей («Подключить {имя}»). Без конфига — «сервис».
+  String get serviceName => serviceConfig.serviceName;
+
   /// Правила пользователя: хранятся на устройстве, применяются поверх пресета.
   final RuleStore? _ruleStore;
   List<ManualRule> _manualRules;
@@ -162,6 +179,8 @@ class AppState extends ChangeNotifier {
 
   StreamSubscription<String>? _logSubscription;
   StreamSubscription<CoreStatus>? _statusSubscription;
+  StreamSubscription<TrafficSnapshot>? _trafficSubscription;
+  TrafficSnapshot? _traffic;
   StreamSubscription<List<ConnectivityResult>>? _networkSubscription;
   Timer? _networkTimer;
   Timer? _probeTimer;
@@ -182,6 +201,10 @@ class AppState extends ChangeNotifier {
   bool _userWantsTunnel = false;
   RoutingPreset _routingPreset;
 
+  /// Язык устройства: по нему определяется домашний регион переключателя
+  /// «сайты домашнего региона напрямую».
+  final String _languageCode;
+
   /// Чат поддержки, если он выпущен для активной подписки.
   ChatService? get chat => _chat;
 
@@ -190,6 +213,9 @@ class AppState extends ChangeNotifier {
   ThemeChoice get themeChoice => _settings.themeChoice;
 
   bool get autoConnect => _settings.autoConnect;
+
+  /// Крестик на окне: спросить, свернуть в трей или выйти.
+  CloseAction get closeAction => _settings.closeAction;
 
   /// Платформа без поддержки автозапуска прячет настройку целиком.
   bool get autostartSupported => _autostart.supported;
@@ -205,6 +231,11 @@ class AppState extends ChangeNotifier {
   bool get isConnected => _state == TunnelState.on;
 
   String? get endpoint => _core.endpointLabel;
+
+  /// Трафик туннеля: скорость и итог сессии. На Android этим занимается
+  /// уведомление службы, поэтому там всегда null; на десктопе — снимок
+  /// раз в секунду, пока туннель поднят.
+  TrafficSnapshot? get traffic => _traffic;
 
   List<StoredProfile> get profiles => _store.profiles;
 
@@ -254,6 +285,61 @@ class AppState extends ChangeNotifier {
     _failure = null;
     notifyListeners();
   }
+
+  /// Пресет домашнего региона: тот, что подходит языку устройства.
+  RoutingPreset get homePreset => defaultPresetFor(_languageCode);
+
+  /// Есть ли у домашнего региона доменные зоны: без них переключателю нечего
+  /// включать, и интерфейс прячет пункт.
+  bool get homeRegionKnown => homePreset.hasHomeDomains;
+
+  /// Включено ли «сайты домашнего региона напрямую».
+  ///
+  /// Это не отдельный флаг: переключатель и список-замена на экране настроек
+  /// управляют тем же выбранным пресетом (`routing.preset.v1`). Два хранимых
+  /// значения неизбежно разошлись бы, и пользователь получил бы экран, который
+  /// показывает не то, что реально ушло в ядро.
+  bool get homeRegionDirect =>
+      !_routingPreset.isOff && _routingPreset.hasHomeDomains;
+
+  /// Включает или выключает правила домашнего региона.
+  Future<void> setHomeRegionDirect(bool value) async {
+    if (value == homeRegionDirect) return;
+    await setRoutingPreset(
+      value
+          ? (_routingPreset.hasHomeDomains
+                ? _routingPreset.key
+                : homePreset.key)
+          : offPreset.key,
+    );
+  }
+
+  /// Адреса-исключения, которые идут мимо домашнего региона напрямую.
+  List<String> get splitDirectHosts =>
+      ManualRule.splitHosts(_manualRules, ManualRule.splitDirectId);
+
+  /// Адреса-исключения, которые возвращаются в туннель.
+  List<String> get splitTunnelHosts =>
+      ManualRule.splitHosts(_manualRules, ManualRule.splitTunnelId);
+
+  /// Заменяет списки исключений, сохраняя остальные правила пользователя.
+  ///
+  /// Названия правил приходят из интерфейса: правило — данные, а подпись на
+  /// нём — строка, и она обязана быть переведена.
+  Future<void> setSplitHosts({
+    required List<String> direct,
+    required List<String> tunnel,
+    required String directTitle,
+    required String tunnelTitle,
+  }) => setManualRules(
+    ManualRule.withSplitHosts(
+      _manualRules,
+      direct: direct,
+      tunnel: tunnel,
+      directTitle: directTitle,
+      tunnelTitle: tunnelTitle,
+    ),
+  );
 
   /// Правила пользователя в порядке применения.
   List<ManualRule> get manualRules => List.unmodifiable(_manualRules);
@@ -352,6 +438,12 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Запомнить или передумать, что делать с крестиком на окне.
+  Future<void> setCloseAction(CloseAction value) async {
+    await _settings.setCloseAction(value);
+    notifyListeners();
+  }
+
   Future<void> setAutoConnect(bool value) async {
     await _settings.setAutoConnect(value);
     notifyListeners();
@@ -376,7 +468,9 @@ class AppState extends ChangeNotifier {
   /// приложение подключённым к кнопке — пользователь нажмёт сам.
   Future<void> autoConnectOnLaunch() async {
     final id = _settings.lastProfileId;
-    if (!_settings.autoConnect || id == null || _state != TunnelState.off) return;
+    if (!_settings.autoConnect || id == null || _state != TunnelState.off) {
+      return;
+    }
 
     StoredProfile? profile;
     for (final candidate in _store.profiles) {
@@ -673,9 +767,11 @@ class AppState extends ChangeNotifier {
     final reason = await addFromText(link);
     // Ссылка держит ключ узла, а причина отказа повторяет саму строку:
     // в журнал она попадает только через маскирование.
-    _addLog(reason == null
-        ? 'Подключение добавлено по ссылке'
-        : maskSecrets('Ссылка не добавлена: $reason'));
+    _addLog(
+      reason == null
+          ? 'Подключение добавлено по ссылке'
+          : maskSecrets('Ссылка не добавлена: $reason'),
+    );
   }
 
   void _onStatus(CoreStatus status) {
@@ -686,7 +782,9 @@ class AppState extends ChangeNotifier {
       _userWantsTunnel = true;
       _state = TunnelState.on;
       _failure = null;
+      _startTrafficWatch();
     } else if (_stopping || _state != TunnelState.on) {
+      _stopTrafficWatch();
       _state = TunnelState.off;
       if (status.byShell) _userWantsTunnel = false;
     } else if (status.byShell) {
@@ -701,6 +799,7 @@ class AppState extends ChangeNotifier {
       _stopping = false;
       _addLog('Отключено из шторки');
     } else {
+      _stopTrafficWatch();
       // Ядро остановилось само: для пользователя это сбой, а не отключение.
       _state = TunnelState.failure;
       _failure = const Failure(
@@ -730,6 +829,24 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Секундный опрос счётчиков ядра — зеркало таймера TunnelService.kt.
+  /// На Android и без поднятого API статистики опрос не начинается: там
+  /// трафик показывает уведомление службы, а тестовые ядра API не поднимают.
+  void _startTrafficWatch() {
+    _stopTrafficWatch();
+    if (Platform.isAndroid || CoreStats.apiPort == null) return;
+    _trafficSubscription = TrafficPoller().watch().listen((snapshot) {
+      _traffic = snapshot;
+      notifyListeners();
+    });
+  }
+
+  void _stopTrafficWatch() {
+    _trafficSubscription?.cancel();
+    _trafficSubscription = null;
+    _traffic = null;
+  }
+
   String _skipReason(Subscription subscription) {
     if (subscription.skipped.isEmpty) return 'Не найдено ни одного профиля';
     final first = subscription.skipped.first;
@@ -740,6 +857,7 @@ class AppState extends ChangeNotifier {
   void dispose() {
     _logSubscription?.cancel();
     _statusSubscription?.cancel();
+    _stopTrafficWatch();
     _networkTimer?.cancel();
     _networkSubscription?.cancel();
     _stopReconnectTimers();

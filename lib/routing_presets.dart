@@ -14,6 +14,7 @@ class RoutingPreset {
     required this.label,
     required this.rules,
     this.language = '',
+    this.homeDomains = const [],
   });
 
   /// Ключ для хранения выбора: `'none'`, `'ru'`.
@@ -26,21 +27,81 @@ class RoutingPreset {
   /// пустая строка — не предлагается.
   final String language;
 
-  /// Правила встают перед завершающим «всё в прокси».
+  /// Правила, общие для всей страны: адреса и домены из geo-баз ядра.
   final List<Map<String, dynamic>> rules;
 
-  bool get isOff => rules.isEmpty;
+  /// Доменные зоны домашнего региона без ведущей точки: `('ru', 'su', 'рф')`.
+  ///
+  /// Это данные пресета, а не перечень в коде сборщика: новый регион приносит
+  /// свои зоны. Пишутся в том виде, в каком их видит пользователь, а в правило
+  /// ядра уходят в punycode (см. [idnAsciiLabel]).
+  ///
+  /// Форма записи выбрана замером на ядре 26.3.27 (`xray run`, живая запись
+  /// доступа, 16.10.2026):
+  /// - зона без точки (`ru`) ядро читает как подстроку: `ru.example.com`
+  ///   попадает в правило, хотя это не зона `.ru`;
+  /// - зона с ведущей точкой (`.ru`) — суффикс домена: совпадает `www.cbr.ru`
+  ///   и `cbr.ru`, а `ru.example.com` остаётся в туннеле;
+  /// - `full:` совпадает только с ровно этим именем, то есть зону не закрывает;
+  /// - `regexp:\.ru$` работает так же, как ведущая точка, но дороже;
+  /// - `keyword:` запрещён тем же замером: ловит подстроку.
+  ///
+  /// Кириллическую зону ядро получает **только** в punycode: браузер присылает
+  /// `xn--p1ai`, а имя хоста в кириллице SOCKS-вход отвергает как «invalid
+  /// domain name». Запись `.рф` в поле `domain` в этой сборке не просто не
+  /// работает — она рвёт запуск: паника `index out of range` в
+  /// `common/strmatcher`, и на `run`, и на `run -test` (замер 16.10.2026).
+  final List<String> homeDomains;
+
+  bool get isOff => rules.isEmpty && homeDomains.isEmpty;
+
+  /// Есть ли у пресета зоны: на них держится переключатель «сайты домашнего
+  /// региона напрямую».
+  bool get hasHomeDomains => homeDomains.isNotEmpty;
+
+  /// Зоны для интерфейса: как их написал автор пресета.
+  String get homeDomainsLabel => homeDomains.join(', ');
+
+  /// Правила пресета целиком, с зонным правилом домашнего региона.
+  ///
+  /// Зоны идут отдельным правилом, а не дописываются в перечень geo-кодов:
+  /// geo-кода для целой зоны в базах ядра нет (замер 15.10.2026:
+  /// `code not found in geosite.dat: RU`). Зона, которую не удалось перевести
+  /// в punycode, в правило не идёт: кириллическая запись обрушивает запуск
+  /// ядра, а молча пропущенная зона — только покрытие.
+  List<Map<String, dynamic>> get effectiveRules {
+    if (homeDomains.isEmpty) return rules;
+    final matchers = [
+      for (final zone in homeDomains)
+        if (idnAsciiLabel(zone.toLowerCase()) case final String ascii)
+          '.$ascii',
+    ];
+    if (matchers.isEmpty) return rules;
+    return [
+      ...rules,
+      {'type': 'field', 'domain': matchers, 'outboundTag': directTag},
+    ];
+  }
 
   /// Правила пресета плюс правила пользователя — в том порядке, который
   /// отдаётся ядру.
   ///
-  /// Пресет идёт первым: он описывает страну целиком, а правило пользователя —
-  /// уточнение, обычно более узкое. Ядро берёт первое совпадение, поэтому
-  /// порядок сверху вниз и есть приоритет.
-  List<Map<String, dynamic>> rulesWith(List<ManualRule> manual) => [
-    ...rules,
-    ...ManualRule.xrayRules(manual),
-  ];
+  /// Пресет идёт перед правилами «напрямую»: он описывает страну целиком, а
+  /// правило пользователя — уточнение, обычно более узкое. Ядро берёт первое
+  /// совпадение, поэтому порядок сверху вниз и есть приоритет.
+  ///
+  /// Правила «в туннель» стоят перед пресетом. Иначе исключение вида
+  /// `example.ru` в туннель перекрывалось бы зонным правилом `.ru`, и пользователь
+  /// не мог бы вернуть свой же адрес в туннель.
+  List<Map<String, dynamic>> rulesWith(List<ManualRule> manual) {
+    final tunnel = <Map<String, dynamic>>[];
+    final direct = <Map<String, dynamic>>[];
+    for (final rule in manual) {
+      if (!rule.enabled || rule.validate() != null) continue;
+      (rule.outbound == proxyTag ? tunnel : direct).add(rule.toXrayRule());
+    }
+    return [...tunnel, ...effectiveRules, ...direct];
+  }
 }
 
 /// «Россия напрямую»: адреса РФ и домены отечественных сервисов.
@@ -56,11 +117,17 @@ class RoutingPreset {
 /// доменов; в банковском перечне есть `sberbank.ru`, `vtb.ru`, `alfabank.ru`,
 /// `tbank.ru`, но нет `tinkoff.ru`, `sbol.ru`, `vtbrussia.ru`, `mossport.ru`).
 /// Чем пополнять пробелы и кто это обновляет — нерешённый вопрос Р-27, поэтому
-/// своего списка доменов здесь пока нет.
+/// своего списка доменов здесь нет: пробел закрывает правило по зонам
+/// (`homeDomains`) — оно берёт в стране всё, а не перечень ведущихся сервисов.
+///
+/// Адресное правило `geoip:ru` на домен не действует при `domainStrategy: AsIs`
+/// (замер 16.10.2026): домен ещё не разрешён, сравнивать ядру не с чем. Именно
+/// поэтому зоны пишутся отдельным доменным правилом, а не надеются на geoip.
 const RoutingPreset ruPreset = RoutingPreset(
   key: 'ru',
   label: 'Россия напрямую',
   language: 'ru',
+  homeDomains: ['ru', 'su', 'рф'],
   rules: [
     {
       'type': 'field',
@@ -88,10 +155,7 @@ const RoutingPreset ruPreset = RoutingPreset(
       // кто-то ведёт в этом репозитории: у чужого перечня есть период обновления
       // и своя ответственность за устаревание (см. вопрос Р-27).
       'type': 'field',
-      'domain': [
-        'geosite:category-bank-ru',
-        'geosite:category-gov-ru',
-      ],
+      'domain': ['geosite:category-bank-ru', 'geosite:category-gov-ru'],
       'outboundTag': directTag,
     },
     {

@@ -122,12 +122,6 @@ abstract class AppLocalizations {
   /// **'Настройки'**
   String get tooltipSettings;
 
-  /// No description provided for @tooltipMore.
-  ///
-  /// In ru, this message translates to:
-  /// **'Дополнительно'**
-  String get tooltipMore;
-
   /// No description provided for @tooltipLog.
   ///
   /// In ru, this message translates to:
@@ -290,12 +284,6 @@ abstract class AppLocalizations {
   /// **'https://провайдер.example/подписка'**
   String get addUrlHint;
 
-  /// No description provided for @settingsTitle.
-  ///
-  /// In ru, this message translates to:
-  /// **'Часть трафика напрямую'**
-  String get settingsTitle;
-
   /// No description provided for @probeTarget.
   ///
   /// In ru, this message translates to:
@@ -416,12 +404,6 @@ abstract class AppLocalizations {
   /// **'Удалить'**
   String get menuDelete;
 
-  /// No description provided for @profileKindFile.
-  ///
-  /// In ru, this message translates to:
-  /// **'Файл ядра'**
-  String get profileKindFile;
-
   /// No description provided for @profileCountOne.
   ///
   /// In ru, this message translates to:
@@ -494,6 +476,18 @@ abstract class AppLocalizations {
   /// **'Отключено'**
   String get statusOff;
 
+  /// No description provided for @trafficRate.
+  ///
+  /// In ru, this message translates to:
+  /// **'↑ {up}/с · ↓ {down}/с'**
+  String trafficRate(String up, String down);
+
+  /// No description provided for @trafficSession.
+  ///
+  /// In ru, this message translates to:
+  /// **'За сессию: ↑ {up} · ↓ {down}'**
+  String trafficSession(String up, String down);
+
   /// No description provided for @orbDisconnect.
   ///
   /// In ru, this message translates to:
@@ -565,6 +559,60 @@ abstract class AppLocalizations {
   /// In ru, this message translates to:
   /// **'Клиент свёрнут в трей: подключение продолжает работать.'**
   String get windowHiddenToTray;
+
+  /// No description provided for @closeWindowSection.
+  ///
+  /// In ru, this message translates to:
+  /// **'При закрытии окна'**
+  String get closeWindowSection;
+
+  /// No description provided for @closeWindowChoiceAsk.
+  ///
+  /// In ru, this message translates to:
+  /// **'Спрашивать'**
+  String get closeWindowChoiceAsk;
+
+  /// No description provided for @closeWindowChoiceTray.
+  ///
+  /// In ru, this message translates to:
+  /// **'Сворачивать в трей'**
+  String get closeWindowChoiceTray;
+
+  /// No description provided for @closeWindowChoiceQuit.
+  ///
+  /// In ru, this message translates to:
+  /// **'Выходить'**
+  String get closeWindowChoiceQuit;
+
+  /// No description provided for @closeWindowTitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Закрыть окно?'**
+  String get closeWindowTitle;
+
+  /// No description provided for @closeWindowBody.
+  ///
+  /// In ru, this message translates to:
+  /// **'Свернуть в трей — подключение продолжит работать, клиент останется в трее. Выход снимет туннель и закроет приложение.'**
+  String get closeWindowBody;
+
+  /// No description provided for @closeWindowTray.
+  ///
+  /// In ru, this message translates to:
+  /// **'Свернуть в трей'**
+  String get closeWindowTray;
+
+  /// No description provided for @closeWindowQuit.
+  ///
+  /// In ru, this message translates to:
+  /// **'Выйти'**
+  String get closeWindowQuit;
+
+  /// No description provided for @closeWindowRemember.
+  ///
+  /// In ru, this message translates to:
+  /// **'Запомнить выбор'**
+  String get closeWindowRemember;
 
   /// No description provided for @aboutTitle.
   ///
@@ -691,6 +739,360 @@ abstract class AppLocalizations {
   /// In ru, this message translates to:
   /// **'Браузер не открылся — скопируйте ссылку'**
   String get updateOpenFailed;
+
+  /// No description provided for @settingsScreenTitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Настройки'**
+  String get settingsScreenTitle;
+
+  /// No description provided for @settingsThemeSection.
+  ///
+  /// In ru, this message translates to:
+  /// **'Оформление'**
+  String get settingsThemeSection;
+
+  /// No description provided for @themeSystem.
+  ///
+  /// In ru, this message translates to:
+  /// **'Системная'**
+  String get themeSystem;
+
+  /// No description provided for @themeLight.
+  ///
+  /// In ru, this message translates to:
+  /// **'Светлая'**
+  String get themeLight;
+
+  /// No description provided for @themeDark.
+  ///
+  /// In ru, this message translates to:
+  /// **'Тёмная'**
+  String get themeDark;
+
+  /// No description provided for @settingsLaunchSection.
+  ///
+  /// In ru, this message translates to:
+  /// **'Запуск'**
+  String get settingsLaunchSection;
+
+  /// No description provided for @settingsAutoStart.
+  ///
+  /// In ru, this message translates to:
+  /// **'Автозапуск с системой'**
+  String get settingsAutoStart;
+
+  /// No description provided for @settingsAutoStartAndroid.
+  ///
+  /// In ru, this message translates to:
+  /// **'Клиент откроется сам после включения телефона'**
+  String get settingsAutoStartAndroid;
+
+  /// No description provided for @settingsAutoStartDesktop.
+  ///
+  /// In ru, this message translates to:
+  /// **'Клиент откроется сам после входа в систему'**
+  String get settingsAutoStartDesktop;
+
+  /// No description provided for @settingsAutoStartOn.
+  ///
+  /// In ru, this message translates to:
+  /// **'Клиент будет запускаться с системой'**
+  String get settingsAutoStartOn;
+
+  /// No description provided for @settingsAutoStartOff.
+  ///
+  /// In ru, this message translates to:
+  /// **'Автозапуск выключен'**
+  String get settingsAutoStartOff;
+
+  /// No description provided for @settingsAutoConnect.
+  ///
+  /// In ru, this message translates to:
+  /// **'Автоподключение при запуске'**
+  String get settingsAutoConnect;
+
+  /// No description provided for @settingsAutoConnectPending.
+  ///
+  /// In ru, this message translates to:
+  /// **'Станет доступно после первого успешного подключения'**
+  String get settingsAutoConnectPending;
+
+  /// No description provided for @settingsAutoConnectProfile.
+  ///
+  /// In ru, this message translates to:
+  /// **'Поднимаем то же подключение: {name}'**
+  String settingsAutoConnectProfile(String name);
+
+  /// No description provided for @settingsAutoConnectMissing.
+  ///
+  /// In ru, this message translates to:
+  /// **'Подключение больше не найдено'**
+  String get settingsAutoConnectMissing;
+
+  /// No description provided for @settingsProfilesSection.
+  ///
+  /// In ru, this message translates to:
+  /// **'Профили ({count})'**
+  String settingsProfilesSection(int count);
+
+  /// No description provided for @settingsProfilesEmpty.
+  ///
+  /// In ru, this message translates to:
+  /// **'Подключений пока нет — добавьте их на главном экране.'**
+  String get settingsProfilesEmpty;
+
+  /// No description provided for @profileKindLinks.
+  ///
+  /// In ru, this message translates to:
+  /// **'Ссылки'**
+  String get profileKindLinks;
+
+  /// No description provided for @profileKindSubscription.
+  ///
+  /// In ru, this message translates to:
+  /// **'Подписка'**
+  String get profileKindSubscription;
+
+  /// No description provided for @profileKindFile.
+  ///
+  /// In ru, this message translates to:
+  /// **'Файл config.json'**
+  String get profileKindFile;
+
+  /// No description provided for @settingsRoutingSection.
+  ///
+  /// In ru, this message translates to:
+  /// **'Куда идёт трафик'**
+  String get settingsRoutingSection;
+
+  /// No description provided for @settingsServiceSection.
+  ///
+  /// In ru, this message translates to:
+  /// **'Обслуживание'**
+  String get settingsServiceSection;
+
+  /// No description provided for @splitHomeDirect.
+  ///
+  /// In ru, this message translates to:
+  /// **'Сайты домашнего региона напрямую'**
+  String get splitHomeDirect;
+
+  /// No description provided for @splitHomeDirectZones.
+  ///
+  /// In ru, this message translates to:
+  /// **'Зоны: {zones}. Остальное — через подключение.'**
+  String splitHomeDirectZones(String zones);
+
+  /// No description provided for @splitHomeDirectUnknown.
+  ///
+  /// In ru, this message translates to:
+  /// **'Домашний регион по языку устройства не определён'**
+  String get splitHomeDirectUnknown;
+
+  /// No description provided for @splitExceptions.
+  ///
+  /// In ru, this message translates to:
+  /// **'Адреса-исключения'**
+  String get splitExceptions;
+
+  /// No description provided for @splitExceptionsCount.
+  ///
+  /// In ru, this message translates to:
+  /// **'напрямую: {direct}, в туннель: {tunnel}'**
+  String splitExceptionsCount(int direct, int tunnel);
+
+  /// No description provided for @splitExceptionsEmpty.
+  ///
+  /// In ru, this message translates to:
+  /// **'Списка пока нет'**
+  String get splitExceptionsEmpty;
+
+  /// No description provided for @splitScreenTitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Раздельное туннелирование'**
+  String get splitScreenTitle;
+
+  /// No description provided for @splitHowItWorks.
+  ///
+  /// In ru, this message translates to:
+  /// **'Адрес из списка идёт вопреки правилам домашнего региона: «напрямую» мимо туннеля или «в туннель» назло своей зоне. Ссылку можно вставить целиком — из неё возьмём только имя хоста.'**
+  String get splitHowItWorks;
+
+  /// No description provided for @splitPasteTitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Вставить пачкой'**
+  String get splitPasteTitle;
+
+  /// No description provided for @splitPasteHint.
+  ///
+  /// In ru, this message translates to:
+  /// **'По одному адресу на строку: https://example.com/path, example.org'**
+  String get splitPasteHint;
+
+  /// No description provided for @splitDirection.
+  ///
+  /// In ru, this message translates to:
+  /// **'Куда направить эти адреса'**
+  String get splitDirection;
+
+  /// No description provided for @splitToDirect.
+  ///
+  /// In ru, this message translates to:
+  /// **'напрямую'**
+  String get splitToDirect;
+
+  /// No description provided for @splitToTunnel.
+  ///
+  /// In ru, this message translates to:
+  /// **'в туннель'**
+  String get splitToTunnel;
+
+  /// No description provided for @splitAdded.
+  ///
+  /// In ru, this message translates to:
+  /// **'Добавлено {added}, повторов {duplicates}, пропущено {skipped}'**
+  String splitAdded(int added, int duplicates, int skipped);
+
+  /// No description provided for @splitNothingAdded.
+  ///
+  /// In ru, this message translates to:
+  /// **'Ни одного адреса не разобрано, пропущено {skipped}'**
+  String splitNothingAdded(int skipped);
+
+  /// No description provided for @splitHostRemoved.
+  ///
+  /// In ru, this message translates to:
+  /// **'Адрес убран из списка'**
+  String get splitHostRemoved;
+
+  /// No description provided for @splitHostMoved.
+  ///
+  /// In ru, this message translates to:
+  /// **'Направление изменено'**
+  String get splitHostMoved;
+
+  /// No description provided for @splitSaved.
+  ///
+  /// In ru, this message translates to:
+  /// **'Список сохранён'**
+  String get splitSaved;
+
+  /// No description provided for @splitApplied.
+  ///
+  /// In ru, this message translates to:
+  /// **'Список применён, подключение поднято заново'**
+  String get splitApplied;
+
+  /// No description provided for @splitDirectRuleTitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Исключения: напрямую'**
+  String get splitDirectRuleTitle;
+
+  /// No description provided for @splitTunnelRuleTitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Исключения: в туннель'**
+  String get splitTunnelRuleTitle;
+
+  /// No description provided for @trialConnectTitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Подключить {serviceName}'**
+  String trialConnectTitle(String serviceName);
+
+  /// No description provided for @trialConnectSubtitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Пробный ключ бесплатно'**
+  String get trialConnectSubtitle;
+
+  /// No description provided for @registrationLoginLabel.
+  ///
+  /// In ru, this message translates to:
+  /// **'Telegram login'**
+  String get registrationLoginLabel;
+
+  /// No description provided for @registrationLoginHint.
+  ///
+  /// In ru, this message translates to:
+  /// **'@username'**
+  String get registrationLoginHint;
+
+  /// No description provided for @registrationTerms.
+  ///
+  /// In ru, this message translates to:
+  /// **'Согласен с условиями программы тестирования'**
+  String get registrationTerms;
+
+  /// No description provided for @registrationSubmit.
+  ///
+  /// In ru, this message translates to:
+  /// **'Подключить'**
+  String get registrationSubmit;
+
+  /// No description provided for @registrationInfo.
+  ///
+  /// In ru, this message translates to:
+  /// **'Это программа тестирования. Ключи выдаются бесплатно до конца года. Служба поддержки может проводить опросы для улучшения сервиса.'**
+  String get registrationInfo;
+
+  /// No description provided for @registrationNeedConsent.
+  ///
+  /// In ru, this message translates to:
+  /// **'Необходимо согласиться с условиями программы'**
+  String get registrationNeedConsent;
+
+  /// No description provided for @registrationBadLogin.
+  ///
+  /// In ru, this message translates to:
+  /// **'Введите Telegram login: @username, от 5 до 32 символов'**
+  String get registrationBadLogin;
+
+  /// No description provided for @registrationSuccess.
+  ///
+  /// In ru, this message translates to:
+  /// **'Подключено! Ключ добавлен.'**
+  String get registrationSuccess;
+
+  /// No description provided for @registrationFailed.
+  ///
+  /// In ru, this message translates to:
+  /// **'Не удалось подключиться: {reason}'**
+  String registrationFailed(String reason);
+
+  /// No description provided for @expiredTitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Ключ истёк'**
+  String get expiredTitle;
+
+  /// No description provided for @expiredBody.
+  ///
+  /// In ru, this message translates to:
+  /// **'Ваш временный ключ закончился.'**
+  String get expiredBody;
+
+  /// No description provided for @expiredSupport.
+  ///
+  /// In ru, this message translates to:
+  /// **'Для продления обратитесь в службу поддержки'**
+  String get expiredSupport;
+
+  /// No description provided for @expiredOpenSupport.
+  ///
+  /// In ru, this message translates to:
+  /// **'Открыть поддержку'**
+  String get expiredOpenSupport;
+
+  /// No description provided for @expiredProgramNote.
+  ///
+  /// In ru, this message translates to:
+  /// **'Программа тестирования действительна до 31.10.2026'**
+  String get expiredProgramNote;
 
   /// No description provided for @tileTitle.
   ///

@@ -4,7 +4,6 @@
   "tooltipRefreshSubscription": "Обновить подписку",
   "tooltipAddConnection": "Добавить подключение",
   "tooltipSettings": "Настройки",
-  "tooltipMore": "Дополнительно",
   "tooltipLog": "Журнал",
   "tooltipSupport": "Поддержка",
   "tooltipActions": "Действия",
@@ -39,7 +38,6 @@
   "addFileSubtitle": "Для опытных: полный конфиг ядра",
   "addLinkHint": "vless://… или несколько строк, или подписка в base64",
   "addUrlHint": "https://провайдер.example/подписка",
-  "settingsTitle": "Часть трафика напрямую",
   "probeTarget": "Точка проб",
   "probeTargetSubtitle": "Адрес, до которого клиент меряет задержку узлов",
   "probeApplied": "Точка проб сохранена",
@@ -81,7 +79,6 @@
   "profileUntitled": "Без названия",
   "menuRename": "Переименовать",
   "menuDelete": "Удалить",
-  "profileKindFile": "Файл ядра",
   "profileCountOne": "Один профиль",
   "profileCountMany": "{count} профилей",
   "@profileCountMany": {
@@ -122,6 +119,28 @@
   "statusFailed": "Сбой",
   "statusNoLink": "Нет связи",
   "statusOff": "Отключено",
+  "trafficRate": "↑ {up}/с · ↓ {down}/с",
+  "@trafficRate": {
+    "placeholders": {
+      "up": {
+        "type": "String"
+      },
+      "down": {
+        "type": "String"
+      }
+    }
+  },
+  "trafficSession": "За сессию: ↑ {up} · ↓ {down}",
+  "@trafficSession": {
+    "placeholders": {
+      "up": {
+        "type": "String"
+      },
+      "down": {
+        "type": "String"
+      }
+    }
+  },
   "orbDisconnect": "Отключить",
   "orbConnect": "Подключить",
   "orbRetry": "Подключить снова",
@@ -134,6 +153,15 @@
   "alreadyRunningBody": "Приложение открыто в другом окне. Второе окно не поднимается: два экземпляра спорят из-за системного прокси, и подключение рвётся.",
   "alreadyRunningClose": "Закрыть это окно",
   "windowHiddenToTray": "Клиент свёрнут в трей: подключение продолжает работать.",
+  "closeWindowSection": "При закрытии окна",
+  "closeWindowChoiceAsk": "Спрашивать",
+  "closeWindowChoiceTray": "Сворачивать в трей",
+  "closeWindowChoiceQuit": "Выходить",
+  "closeWindowTitle": "Закрыть окно?",
+  "closeWindowBody": "Свернуть в трей — подключение продолжит работать, клиент останется в трее. Выход снимет туннель и закроет приложение.",
+  "closeWindowTray": "Свернуть в трей",
+  "closeWindowQuit": "Выйти",
+  "closeWindowRemember": "Запомнить выбор",
   "aboutTitle": "О программе",
   "aboutVersion": "Версия {version}",
   "@aboutVersion": {
@@ -169,6 +197,130 @@
   "updateCopied": "Ссылка скопирована",
   "updateNoLink": "Ссылка на эту платформу в манифесте не указана",
   "updateOpenFailed": "Браузер не открылся — скопируйте ссылку",
+  "settingsScreenTitle": "Настройки",
+  "settingsThemeSection": "Оформление",
+  "themeSystem": "Системная",
+  "themeLight": "Светлая",
+  "themeDark": "Тёмная",
+  "settingsLaunchSection": "Запуск",
+  "settingsAutoStart": "Автозапуск с системой",
+  "settingsAutoStartAndroid": "Клиент откроется сам после включения телефона",
+  "settingsAutoStartDesktop": "Клиент откроется сам после входа в систему",
+  "settingsAutoStartOn": "Клиент будет запускаться с системой",
+  "settingsAutoStartOff": "Автозапуск выключен",
+  "settingsAutoConnect": "Автоподключение при запуске",
+  "settingsAutoConnectPending": "Станет доступно после первого успешного подключения",
+  "settingsAutoConnectProfile": "Поднимаем то же подключение: {name}",
+  "@settingsAutoConnectProfile": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsAutoConnectMissing": "Подключение больше не найдено",
+  "settingsProfilesSection": "Профили ({count})",
+  "@settingsProfilesSection": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "settingsProfilesEmpty": "Подключений пока нет — добавьте их на главном экране.",
+  "profileKindLinks": "Ссылки",
+  "profileKindSubscription": "Подписка",
+  "profileKindFile": "Файл config.json",
+  "settingsRoutingSection": "Куда идёт трафик",
+  "settingsServiceSection": "Обслуживание",
+  "splitHomeDirect": "Сайты домашнего региона напрямую",
+  "splitHomeDirectZones": "Зоны: {zones}. Остальное — через подключение.",
+  "@splitHomeDirectZones": {
+    "placeholders": {
+      "zones": {
+        "type": "String"
+      }
+    }
+  },
+  "splitHomeDirectUnknown": "Домашний регион по языку устройства не определён",
+  "splitExceptions": "Адреса-исключения",
+  "splitExceptionsCount": "напрямую: {direct}, в туннель: {tunnel}",
+  "@splitExceptionsCount": {
+    "placeholders": {
+      "direct": {
+        "type": "int"
+      },
+      "tunnel": {
+        "type": "int"
+      }
+    }
+  },
+  "splitExceptionsEmpty": "Списка пока нет",
+  "splitScreenTitle": "Раздельное туннелирование",
+  "splitHowItWorks": "Адрес из списка идёт вопреки правилам домашнего региона: «напрямую» мимо туннеля или «в туннель» назло своей зоне. Ссылку можно вставить целиком — из неё возьмём только имя хоста.",
+  "splitPasteTitle": "Вставить пачкой",
+  "splitPasteHint": "По одному адресу на строку: https://example.com/path, example.org",
+  "splitDirection": "Куда направить эти адреса",
+  "splitToDirect": "напрямую",
+  "splitToTunnel": "в туннель",
+  "splitAdded": "Добавлено {added}, повторов {duplicates}, пропущено {skipped}",
+  "@splitAdded": {
+    "placeholders": {
+      "added": {
+        "type": "int"
+      },
+      "duplicates": {
+        "type": "int"
+      },
+      "skipped": {
+        "type": "int"
+      }
+    }
+  },
+  "splitNothingAdded": "Ни одного адреса не разобрано, пропущено {skipped}",
+  "@splitNothingAdded": {
+    "placeholders": {
+      "skipped": {
+        "type": "int"
+      }
+    }
+  },
+  "splitHostRemoved": "Адрес убран из списка",
+  "splitHostMoved": "Направление изменено",
+  "splitSaved": "Список сохранён",
+  "splitApplied": "Список применён, подключение поднято заново",
+  "splitDirectRuleTitle": "Исключения: напрямую",
+  "splitTunnelRuleTitle": "Исключения: в туннель",
+  "trialConnectTitle": "Подключить {serviceName}",
+  "@trialConnectTitle": {
+    "placeholders": {
+      "serviceName": {
+        "type": "String"
+      }
+    }
+  },
+  "trialConnectSubtitle": "Пробный ключ бесплатно",
+  "registrationLoginLabel": "Telegram login",
+  "registrationLoginHint": "@username",
+  "registrationTerms": "Согласен с условиями программы тестирования",
+  "registrationSubmit": "Подключить",
+  "registrationInfo": "Это программа тестирования. Ключи выдаются бесплатно до конца года. Служба поддержки может проводить опросы для улучшения сервиса.",
+  "registrationNeedConsent": "Необходимо согласиться с условиями программы",
+  "registrationBadLogin": "Введите Telegram login: @username, от 5 до 32 символов",
+  "registrationSuccess": "Подключено! Ключ добавлен.",
+  "registrationFailed": "Не удалось подключиться: {reason}",
+  "@registrationFailed": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "expiredTitle": "Ключ истёк",
+  "expiredBody": "Ваш временный ключ закончился.",
+  "expiredSupport": "Для продления обратитесь в службу поддержки",
+  "expiredOpenSupport": "Открыть поддержку",
+  "expiredProgramNote": "Программа тестирования действительна до 31.10.2026",
   "tileTitle": "Плитка в шторке",
   "tileSubtitle": "Включать и выключать туннель без открытия приложения",
   "tileFallback": "Откройте шторку, нажмите редактировать и перетащите плитку «Туннель» на панель быстрых настроек"

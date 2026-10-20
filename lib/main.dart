@@ -7,8 +7,11 @@ import 'package:flutter/services.dart' show SystemNavigator;
 import 'package:window_manager/window_manager.dart';
 
 import 'app_state.dart';
+import 'close_prompt.dart';
 import 'home_screen.dart';
 import 'l10n/app_localizations.dart';
+import 'settings_store.dart';
+import 'traffic.dart';
 import 'tray_controller.dart';
 import 'windows_guard.dart';
 
@@ -74,11 +77,16 @@ class ClientVpnApp extends StatefulWidget {
 }
 
 class _ClientVpnAppState extends State<ClientVpnApp> with WindowListener {
+  /// Навигатор нужен запросу закрытия: событие приходит от операционной
+  /// системы, и своего контекста у него нет.
+  final GlobalKey<NavigatorState> _navigator = GlobalKey<NavigatorState>();
+
   AppTray? _tray;
   AppLocalizations? _l10n;
   bool _trayAttempted = false;
   bool _trayMounted = false;
   bool _quitting = false;
+  bool _asking = false;
 
   @override
   void initState() {
@@ -111,14 +119,50 @@ class _ClientVpnAppState extends State<ClientVpnApp> with WindowListener {
 
   @override
   void onWindowClose() async {
-    if (_quitting) return;
-    if (_trayMounted) {
-      // Закрытие окна с треем — это сворачивание, а не разрыв: подключение
-      // продолжает работать, выход остаётся пунктом меню трея.
-      await windowManager.hide();
-      return;
+    // _asking держит повторные события: крестик на строке названия нажимается
+    // и тогда, когда поверх окна уже висит запрос.
+    if (_quitting || _asking) return;
+    switch (resolveClose(widget.state.closeAction, trayMounted: _trayMounted)) {
+      case ResolvedClose.hide:
+        await _hideWindow();
+      case ResolvedClose.quit:
+        await _shutdown();
+      case ResolvedClose.ask:
+        await _askBeforeClose();
     }
-    await _shutdown();
+  }
+
+  /// Запрос при закрытии. Отмена оставляет окно открытым: крестик жмут по
+  /// привычке, а разрыв подключения одним кликом не отыгрывается.
+  Future<void> _askBeforeClose() async {
+    final context = _navigator.currentContext;
+    if (context == null) return;
+    _asking = true;
+    final choice = await showClosePrompt(context);
+    _asking = false;
+    if (choice == null) return;
+    if (choice.remember) await widget.state.setCloseAction(choice.action);
+    if (choice.action == CloseAction.tray) {
+      await _hideWindow();
+    } else {
+      await _shutdown();
+    }
+  }
+
+  /// Сворачивание, а не разрыв: подключение продолжает работать, а выход
+  /// остаётся пунктом меню трея. Если трей ещё не смонтирован (race condition
+  /// с закрытием окна до завершения `_ensureTray`), монтируем сейчас — иначе
+  /// окно спрячется без возможности вернуться.
+  Future<void> _hideWindow() async {
+    if (!_trayMounted && _tray != null && _l10n != null) {
+      final mounted = await _tray!.mount(
+        tooltip: _tooltipText(_l10n!),
+        showLabel: _l10n!.trayShowWindow,
+        quitLabel: _l10n!.trayQuit,
+      );
+      if (mounted) setState(() => _trayMounted = true);
+    }
+    await windowManager.hide();
   }
 
   /// Полный выход: снять туннель, убрать трей, отдать мьютекс, уничтожить окно.
@@ -142,7 +186,7 @@ class _ClientVpnAppState extends State<ClientVpnApp> with WindowListener {
     unawaited(
       tray
           .mount(
-            tooltip: '${l10n.appTitle} — ${_statusText(l10n)}',
+            tooltip: _tooltipText(l10n),
             showLabel: l10n.trayShowWindow,
             quitLabel: l10n.trayQuit,
           )
@@ -160,7 +204,19 @@ class _ClientVpnAppState extends State<ClientVpnApp> with WindowListener {
   void _updateTrayTooltip() {
     final l10n = _l10n;
     if (l10n == null) return;
-    unawaited(_tray?.setTooltip('${l10n.appTitle} — ${_statusText(l10n)}'));
+    unawaited(_tray?.setTooltip(_tooltipText(l10n)));
+  }
+
+  /// Подсказка трея одной строкой: `szTip` в NOTIFYICONDATA переводов строк
+  /// не показывает, поэтому статус, скорость и итог сессии разделяются «·».
+  /// `setTitle` на Windows не работает и трей роняет — только `setToolTip`.
+  String _tooltipText(AppLocalizations l10n) {
+    final base = '${l10n.appTitle} — ${_statusText(l10n)}';
+    final traffic = widget.state.traffic;
+    if (traffic == null || !widget.state.isConnected) return base;
+    return '$base · '
+        '${l10n.trafficRate(formatBytes(traffic.upSpeed), formatBytes(traffic.downSpeed))} · '
+        '${l10n.trafficSession(formatBytes(traffic.totalUp), formatBytes(traffic.totalDown))}';
   }
 
   String _statusText(AppLocalizations l10n) => switch (widget.state.state) {
@@ -176,6 +232,7 @@ class _ClientVpnAppState extends State<ClientVpnApp> with WindowListener {
     return DynamicColorBuilder(
       builder: (lightDynamic, darkDynamic) => MaterialApp(
         title: 'КлиентВПН',
+        navigatorKey: _navigator,
         debugShowCheckedModeBanner: false,
         // Язык берётся с устройства: русская и около-русская локаль дают русский,
         // англоязычная — английский, прочая откатывается на русский как первый.

@@ -8,6 +8,7 @@ import 'package:client_vpn/failover.dart';
 import 'package:client_vpn/home_screen.dart';
 import 'package:client_vpn/main.dart';
 import 'package:client_vpn/profile_store.dart';
+import 'package:client_vpn/services/service_config.dart';
 import 'package:client_vpn/settings_store.dart';
 import 'package:client_vpn/vpn_config.dart';
 import 'package:client_vpn/vpn_core.dart';
@@ -17,13 +18,15 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-const linkOne = 'vless://2f6bd5a1-1e73-4b1a-9d3c-000000000001@example.org:443'
+const linkOne =
+    'vless://2f6bd5a1-1e73-4b1a-9d3c-000000000001@example.org:443'
     '?encryption=none&security=reality'
     '&pbk=SaMdKeySaMdKeySaMdKeySaMdKeySaMd1234'
     '&sid=ab12cd34&fp=chrome&type=tcp&sni=example.org'
     '&flow=xtls-rprx-vision#%D0%A3%D0%B7%D0%B5%D0%BB%201';
 
-const linkTwo = 'vless://2f6bd5a1-1e73-4b1a-9d3c-000000000001@example.org:8443'
+const linkTwo =
+    'vless://2f6bd5a1-1e73-4b1a-9d3c-000000000001@example.org:8443'
     '?encryption=none&security=reality'
     '&pbk=SaMdKeySaMdKeySaMdKeySaMdKeySaMd1234'
     '&sid=ab12cd34&fp=chrome&type=tcp&sni=example.org'
@@ -105,7 +108,11 @@ class _NullVault implements TokenVault {
   Future<void> erase(String key) async {}
 }
 
-Future<AppState> makeState({FakeCore? core, Autostart? autostart}) async {
+Future<AppState> makeState({
+  FakeCore? core,
+  Autostart? autostart,
+  ServiceConfig? serviceConfig,
+}) async {
   SharedPreferences.setMockInitialValues({});
   return AppState(
     await ProfileStore.open(),
@@ -114,6 +121,7 @@ Future<AppState> makeState({FakeCore? core, Autostart? autostart}) async {
     autostart: autostart ?? FakeAutostart(),
     // Запись служебного конфига проверена отдельно в temp_config_test.
     configWriter: (config) async => config,
+    serviceConfig: serviceConfig ?? const ServiceConfig(),
   );
 }
 
@@ -156,8 +164,9 @@ void main() {
       expect(find.text('Отключено'), findsOneWidget);
     });
 
-    testWidgets('английская локаль устройства даёт английский интерфейс',
-        (tester) async {
+    testWidgets('английская локаль устройства даёт английский интерфейс', (
+      tester,
+    ) async {
       final state = await makeState();
       addTearDown(state.dispose);
       tester.platformDispatcher.localesTestValue = const [Locale('en')];
@@ -184,51 +193,69 @@ void main() {
       expect(gear, findsOneWidget);
       expect(tester.getCenter(gear).dx, lessThan(60));
 
+      // Редкие действия — слева, частые справа, по две кнопки с каждой стороны.
+      expect(tester.getCenter(find.byTooltip('Журнал')).dx, lessThan(110));
+      expect(
+        tester.getCenter(find.byTooltip('Добавить подключение')).dx,
+        greaterThan(400),
+      );
+      expect(
+        tester.getCenter(find.byTooltip('Поддержка')).dx,
+        greaterThan(400),
+      );
+
       await tester.tap(gear);
       await tester.pumpAndSettle();
 
       expect(find.text('Оформление'), findsOneWidget);
       expect(find.text('Автоподключение при запуске'), findsOneWidget);
+
+      // Второй настроечной кнопки на первом экране нет: её пункты переехали
+      // под шестерёнку, и один и тот же выбор в двух местах не показывается.
+      expect(find.byTooltip('Дополнительно'), findsNothing);
+      expect(find.byIcon(Icons.tune), findsNothing);
     });
 
-    testWidgets('автоподключение при запуске поднимает последний успешный профиль',
-        (tester) async {
-      final first = await makeState();
-      addTearDown(first.dispose);
-      await first.addFromText(linkOne);
-      await first.setAutoConnect(true);
-      await first.connect();
-      expect(first.isConnected, isTrue);
+    testWidgets(
+      'автоподключение при запуске поднимает последний успешный профиль',
+      (tester) async {
+        final first = await makeState();
+        addTearDown(first.dispose);
+        await first.addFromText(linkOne);
+        await first.setAutoConnect(true);
+        await first.connect();
+        expect(first.isConnected, isTrue);
 
-      // Перезапуск приложения: то же хранилище, новое ядро.
-      final core = FakeCore();
-      final restarted = AppState(
-        await ProfileStore.open(),
-        core,
-        settings: await SettingsStore.open(),
-        configWriter: (config) async => config,
-      );
-      addTearDown(restarted.dispose);
+        // Перезапуск приложения: то же хранилище, новое ядро.
+        final core = FakeCore();
+        final restarted = AppState(
+          await ProfileStore.open(),
+          core,
+          settings: await SettingsStore.open(),
+          configWriter: (config) async => config,
+        );
+        addTearDown(restarted.dispose);
 
-      await restarted.autoConnectOnLaunch();
+        await restarted.autoConnectOnLaunch();
 
-      expect(restarted.autoConnect, isTrue);
-      expect(core.startCalls, 1);
-      expect(restarted.activeProfile?.id, first.settings.lastProfileId);
-    });
+        expect(restarted.autoConnect, isTrue);
+        expect(core.startCalls, 1);
+        expect(restarted.activeProfile?.id, first.settings.lastProfileId);
+      },
+    );
 
-    testWidgets('кнопка поддержки видна и без добавленного подключения',
-        (tester) async {
+    testWidgets('кнопка поддержки видна и без добавленного подключения', (
+      tester,
+    ) async {
       SharedPreferences.setMockInitialValues({});
       final state = AppState(
         await ProfileStore.open(),
         FakeCore(),
         settings: await SettingsStore.open(),
         configWriter: (config) async => config,
-        chat: ChatService(ChatStore(
-          await SharedPreferences.getInstance(),
-          _NullVault(),
-        )),
+        chat: ChatService(
+          ChatStore(await SharedPreferences.getInstance(), _NullVault()),
+        ),
       );
       addTearDown(state.dispose);
 
@@ -263,8 +290,9 @@ void main() {
       expect(state.profiles.single.kind, ProfileKind.links);
     });
 
-    testWidgets('плюс в шапке добавляет подключение к существующим',
-        (tester) async {
+    testWidgets('плюс в шапке добавляет подключение к существующим', (
+      tester,
+    ) async {
       final state = await makeState();
       addTearDown(state.dispose);
       await state.addFromText(linkOne);
@@ -302,8 +330,9 @@ void main() {
       expect(find.byType(FloatingActionButton), findsNothing);
       expect(
         find.byWidgetPredicate((widget) {
-          final decoration =
-              widget is AnimatedContainer ? widget.decoration : null;
+          final decoration = widget is AnimatedContainer
+              ? widget.decoration
+              : null;
           return decoration is BoxDecoration &&
               decoration.shape == BoxShape.circle;
         }),
@@ -333,8 +362,9 @@ void main() {
 
     testWidgets('отказ ядра показывает причину и действие', (tester) async {
       final core = FakeCore()
-        ..validateError =
-            Exception('Валидация не пройдена (код 1): битый конфиг');
+        ..validateError = Exception(
+          'Валидация не пройдена (код 1): битый конфиг',
+        );
       final state = await makeState(core: core);
       addTearDown(state.dispose);
       await state.addFromText(linkOne);
@@ -360,8 +390,9 @@ void main() {
       await state.disconnect();
     });
 
-    testWidgets('обрыв со стороны ядра — это сбой, а не отключение',
-        (tester) async {
+    testWidgets('обрыв со стороны ядра — это сбой, а не отключение', (
+      tester,
+    ) async {
       final core = FakeCore();
       final state = await makeState(core: core);
       addTearDown(state.dispose);
@@ -377,12 +408,16 @@ void main() {
 
       expect(find.text('Сбой'), findsOneWidget);
       expect(find.text('Соединение прервано'), findsOneWidget);
-      expect(find.text('Подключитесь снова или обновите подписку'), findsOneWidget);
+      expect(
+        find.text('Подключитесь снова или обновите подписку'),
+        findsOneWidget,
+      );
       await state.disconnect();
     });
 
-    testWidgets('журнал живёт на отдельном экране и маскируется',
-        (tester) async {
+    testWidgets('журнал живёт на отдельном экране и маскируется', (
+      tester,
+    ) async {
       final core = FakeCore();
       final state = await makeState(core: core);
       addTearDown(state.dispose);
@@ -461,8 +496,9 @@ void main() {
       expect(core.lastConfig?.json, isNot(contains('"port":443')));
     });
 
-    testWidgets('смена страны на поднятом туннеле спрашивает разрешение',
-        (tester) async {
+    testWidgets('смена страны на поднятом туннеле спрашивает разрешение', (
+      tester,
+    ) async {
       final core = FakeCore();
       final state = await makeState(core: core);
       addTearDown(state.dispose);
@@ -500,8 +536,9 @@ void main() {
       expect(find.text('Страна выхода'), findsNothing);
     });
 
-    testWidgets('Windows не показывает значок флага, название остаётся',
-        (tester) async {
+    testWidgets('Windows не показывает значок флага, название остаётся', (
+      tester,
+    ) async {
       final state = await makeState();
       addTearDown(state.dispose);
       await state.addFromText(twoRegionLinks);
@@ -551,8 +588,9 @@ void main() {
       );
     });
 
-    testWidgets('акцентный цвет системы перекрашивает интерфейс',
-        (tester) async {
+    testWidgets('акцентный цвет системы перекрашивает интерфейс', (
+      tester,
+    ) async {
       mockSystemAccent(tester, 0xFF6750A4);
       final state = await makeState();
       addTearDown(state.dispose);
@@ -570,8 +608,9 @@ void main() {
       );
     });
 
-    testWidgets('переключение туннеля подтверждается осязанием',
-        (tester) async {
+    testWidgets('переключение туннеля подтверждается осязанием', (
+      tester,
+    ) async {
       final state = await makeState();
       addTearDown(state.dispose);
       await state.addFromText(linkOne);
@@ -579,9 +618,9 @@ void main() {
       final calls = <MethodCall>[];
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(SystemChannels.platform, (call) async {
-        calls.add(call);
-        return null;
-      });
+            calls.add(call);
+            return null;
+          });
 
       await pumpApp(tester, state);
       await tester.pumpAndSettle();
@@ -609,8 +648,7 @@ void main() {
       );
     }
 
-    testWidgets('настроенная точка проб уходит в конфиг ядра',
-        (tester) async {
+    testWidgets('настроенная точка проб уходит в конфиг ядра', (tester) async {
       final core = FakeCore();
       final state = await stateWithProbeStore(core);
       addTearDown(state.dispose);
@@ -619,17 +657,9 @@ void main() {
       await pumpApp(tester, state);
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byTooltip('Дополнительно'));
-      await tester.pumpAndSettle();
-      expect(find.text('Точка проб'), findsOneWidget);
-
-      await tester.tap(find.text('Точка проб'));
-      await tester.pumpAndSettle();
-      await tester.enterText(find.byType(TextField), 'https://example.test/ping');
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Сохранить'));
-      await tester.pumpAndSettle();
-
+      // Значение точки проб правится на экране настроек под шестерёнкой, а
+      // здесь проверяется, что оно доходит до конфига ядра.
+      await state.setProbeEndpoint('https://example.test/ping');
       expect(state.probeEndpoint, 'https://example.test/ping');
 
       await state.connect();
@@ -640,28 +670,98 @@ void main() {
       expect(json, contains('"strategy":{"type":"leastPing"'));
       expect(json, contains('"tolerance":$regionToleranceMs'));
     });
+  });
 
-    testWidgets('плохой адрес не сохраняется и объясняет причину',
-        (tester) async {
-      final state = await stateWithProbeStore(FakeCore());
+  group('подключение пробного ключа в меню «+»', () {
+    const trialConfig = ServiceConfig(
+      serviceName: 'Example',
+      controlPoint: 'https://control.example.com/',
+      trialEnabled: true,
+    );
+
+    testWidgets('пункт первый, с молнией и именем из конфига', (tester) async {
+      final state = await makeState(serviceConfig: trialConfig);
       addTearDown(state.dispose);
-      await state.addFromText(linkOne);
 
       await pumpApp(tester, state);
       await tester.pumpAndSettle();
-
-      await tester.tap(find.byTooltip('Дополнительно'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Точка проб'));
-      await tester.pumpAndSettle();
-      await tester.enterText(find.byType(TextField), 'example.test');
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Сохранить'));
+      await tester.tap(find.byTooltip('Добавить подключение'));
       await tester.pumpAndSettle();
 
-      expect(state.probeEndpoint, defaultProbeEndpoint);
-      expect(find.text('Адрес должен начинаться с http:// или https://'),
-          findsOneWidget);
+      final trial = find.text('Подключить Example');
+      expect(trial, findsOneWidget);
+      expect(find.byIcon(Icons.bolt_rounded), findsOneWidget);
+      // Пробный ключ — первый пункт, выше импорта ссылки.
+      expect(
+        tester.getTopLeft(trial).dy,
+        lessThan(tester.getTopLeft(find.text('Ссылка или подписка')).dy),
+      );
+    });
+
+    testWidgets('имя берётся из конфига, а не зашито в код', (tester) async {
+      final state = await makeState(serviceConfig: trialConfig);
+      addTearDown(state.dispose);
+
+      await pumpApp(tester, state);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Добавить подключение'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Подключить Example'), findsOneWidget);
+      expect(find.text('Подключить сервис'), findsNothing);
+    });
+
+    testWidgets('без бренда в конфиге пункт читается «Подключить сервис»', (
+      tester,
+    ) async {
+      final state = await makeState(
+        serviceConfig: const ServiceConfig(trialEnabled: true),
+      );
+      addTearDown(state.dispose);
+
+      await pumpApp(tester, state);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Добавить подключение'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Подключить сервис'), findsOneWidget);
+    });
+
+    testWidgets(
+      'открытый клиент без конфига: пункт виден с нейтральной меткой',
+      (tester) async {
+        final state = await makeState();
+        addTearDown(state.dispose);
+
+        await pumpApp(tester, state);
+        await tester.pumpAndSettle();
+        await tester.tap(find.byTooltip('Добавить подключение'));
+        await tester.pumpAndSettle();
+
+        // Кнопка видна всегда (решение владельца 20.10), без конфига — fallback.
+        expect(find.byIcon(Icons.bolt_rounded), findsOneWidget);
+        expect(find.text('Подключить сервис'), findsOneWidget);
+        // Универсальные пункты на месте.
+        expect(find.text('Ссылка или подписка'), findsOneWidget);
+      },
+    );
+
+    testWidgets('тап по пункту открывает экран подключения', (tester) async {
+      final state = await makeState(serviceConfig: trialConfig);
+      addTearDown(state.dispose);
+
+      await pumpApp(tester, state);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Добавить подключение'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Подключить Example'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Согласен с условиями программы тестирования'),
+        findsOneWidget,
+      );
+      expect(find.text('Подключить'), findsOneWidget);
     });
   });
 }

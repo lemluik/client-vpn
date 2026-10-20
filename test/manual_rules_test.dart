@@ -17,7 +17,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-const link = 'vless://2f6bd5a1-1e73-4b1a-9d3c-000000000001@example.org:443'
+const link =
+    'vless://2f6bd5a1-1e73-4b1a-9d3c-000000000001@example.org:443'
     '?security=reality&sni=www.example.org&fp=chrome'
     '&pbk=SaMdKeySaMdKeySaMdKeySaMdKeySaMdKeySaMd1234&sid=a1b2c3d4#Один';
 
@@ -100,10 +101,7 @@ void main() {
     });
 
     test('направление «через подключение» — тег прокси', () {
-      expect(
-        rule(outbound: proxyTag).toXrayRule()['outboundTag'],
-        proxyTag,
-      );
+      expect(rule(outbound: proxyTag).toXrayRule()['outboundTag'], proxyTag);
     });
 
     test('выключенное и невалидное правило в конфиг не идёт', () {
@@ -118,20 +116,17 @@ void main() {
     });
 
     test('девять условий — ровно те, что принимает ядро', () {
-      expect(
-        RuleField.values.map((field) => field.key).toList(),
-        [
-          'domain',
-          'ip',
-          'port',
-          'sourcePort',
-          'network',
-          'protocol',
-          'source',
-          'inboundTag',
-          'user',
-        ],
-      );
+      expect(RuleField.values.map((field) => field.key).toList(), [
+        'domain',
+        'ip',
+        'port',
+        'sourcePort',
+        'network',
+        'protocol',
+        'source',
+        'inboundTag',
+        'user',
+      ]);
     });
   });
 
@@ -146,27 +141,51 @@ void main() {
 
     test('порт: число или диапазон, иначе ошибка', () {
       expect(
-        rule(conditions: const {RuleField.port: ['443']}).validate(),
+        rule(
+          conditions: const {
+            RuleField.port: ['443'],
+          },
+        ).validate(),
         isNull,
       );
       expect(
-        rule(conditions: const {RuleField.port: ['8000-9000']}).validate(),
+        rule(
+          conditions: const {
+            RuleField.port: ['8000-9000'],
+          },
+        ).validate(),
         isNull,
       );
       expect(
-        rule(conditions: const {RuleField.port: ['0']}).validate(),
+        rule(
+          conditions: const {
+            RuleField.port: ['0'],
+          },
+        ).validate(),
         'ruleBadPort',
       );
       expect(
-        rule(conditions: const {RuleField.port: ['70000']}).validate(),
+        rule(
+          conditions: const {
+            RuleField.port: ['70000'],
+          },
+        ).validate(),
         'ruleBadPort',
       );
       expect(
-        rule(conditions: const {RuleField.port: ['9000-8000']}).validate(),
+        rule(
+          conditions: const {
+            RuleField.port: ['9000-8000'],
+          },
+        ).validate(),
         'ruleBadPort',
       );
       expect(
-        rule(conditions: const {RuleField.port: ['http']}).validate(),
+        rule(
+          conditions: const {
+            RuleField.port: ['http'],
+          },
+        ).validate(),
         'ruleBadPort',
       );
     });
@@ -195,60 +214,105 @@ void main() {
       expect(RuleStore(prefs).load(), isEmpty);
     });
 
-    test('неизвестное условие выбрасывается, а не переезжает в домены', () async {
-      SharedPreferences.setMockInitialValues({
-        'routing.rules.v1': jsonEncode([
-          {
-            'id': 'a',
-            'title': 'Хром',
-            'outbound': directTag,
-            'conditions': {
-              'processName': ['chrome.exe'],
-              'domain': ['example.com'],
+    test(
+      'неизвестное условие выбрасывается, а не переезжает в домены',
+      () async {
+        SharedPreferences.setMockInitialValues({
+          'routing.rules.v1': jsonEncode([
+            {
+              'id': 'a',
+              'title': 'Хром',
+              'outbound': directTag,
+              'conditions': {
+                'processName': ['chrome.exe'],
+                'domain': ['example.com'],
+              },
             },
-          },
-        ]),
-      });
-      final prefs = await SharedPreferences.getInstance();
+          ]),
+        });
+        final prefs = await SharedPreferences.getInstance();
 
-      final read = RuleStore(prefs).load();
+        final read = RuleStore(prefs).load();
 
-      expect(read.single.conditions.keys, [RuleField.domain]);
-    });
+        expect(read.single.conditions.keys, [RuleField.domain]);
+      },
+    );
 
-    test('направление не из наших двух тегов — правило отбрасывается', () async {
-      SharedPreferences.setMockInitialValues({
-        'routing.rules.v1': jsonEncode([
-          {
-            'id': 'a',
-            'title': 'Чужой путь',
-            'outbound': 'some-other-outbound',
-            'conditions': {'domain': ['example.com']},
-          },
-        ]),
-      });
-      final prefs = await SharedPreferences.getInstance();
+    test(
+      'направление не из наших двух тегов — правило отбрасывается',
+      () async {
+        SharedPreferences.setMockInitialValues({
+          'routing.rules.v1': jsonEncode([
+            {
+              'id': 'a',
+              'title': 'Чужой путь',
+              'outbound': 'some-other-outbound',
+              'conditions': {
+                'domain': ['example.com'],
+              },
+            },
+          ]),
+        });
+        final prefs = await SharedPreferences.getInstance();
 
-      expect(RuleStore(prefs).load(), isEmpty);
-    });
+        expect(RuleStore(prefs).load(), isEmpty);
+      },
+    );
   });
 
   group('порядок применения', () {
-    test('пресет идёт перед правилами пользователя, те — перед завершающим',
-        () {
-      final rules = ruPreset.rulesWith([rule(id: 'a'), rule(id: 'b')]);
+    test('«в туннель» идёт перед пресетом, «напрямую» — после него', () {
+      // Иначе зонное правило `.ru` перекрывало бы исключение пользователя
+      // «в туннель», и вернуть свой адрес в туннель было бы нельзя.
+      final rules = ruPreset.rulesWith([
+        rule(id: 'a'),
+        rule(id: 'b', outbound: proxyTag),
+      ]);
 
-      expect(rules, hasLength(ruPreset.rules.length + 2));
-      expect(rules[ruPreset.rules.length]['domain'], ['sberbank.ru']);
+      expect(rules, hasLength(ruPreset.effectiveRules.length + 2));
+      expect(rules.first['outboundTag'], proxyTag);
+      // Зонное правило пресета стоит раньше правила «напрямую», поэтому
+      // обратный адрес пользователь выбирает именно последним совпадением.
+      expect(
+        (rules[ruPreset.effectiveRules.length]['domain'] as List).contains(
+          '.ru',
+        ),
+        isTrue,
+      );
+      expect(rules.last['domain'], ['sberbank.ru']);
+      expect(rules.last['outboundTag'], directTag);
+    });
+
+    test('пресет отдаёт ядру свои правила плюс зонное', () {
+      final rules = ruPreset.effectiveRules;
+
+      expect(rules, hasLength(ruPreset.rules.length + 1));
+      expect((rules.last['domain'] as List).cast<String>(), [
+        '.ru',
+        '.su',
+        '.xn--p1ai',
+      ]);
+      expect(rules.last['outboundTag'], directTag);
+    });
+
+    test('выключенное и невалидное правило в конфиг ядра не уходит', () {
+      final rules = ruPreset.rulesWith([
+        rule(id: 'a', enabled: false),
+        rule(id: 'b', conditions: const {}),
+      ]);
+
+      expect(rules, hasLength(ruPreset.effectiveRules.length));
     });
 
     test('собранный конфиг вставляет правила перед завершающим', () {
-      final json = jsonDecode(
-        buildConfigFromLinks(
-          parseLinks(link).links,
-          rules: ruPreset.rulesWith([rule(id: 'a')]),
-        ),
-      ) as Map<String, dynamic>;
+      final json =
+          jsonDecode(
+                buildConfigFromLinks(
+                  parseLinks(link).links,
+                  rules: ruPreset.rulesWith([rule(id: 'a')]),
+                ),
+              )
+              as Map<String, dynamic>;
       final rules = (json['routing'] as Map)['rules'] as List;
 
       expect(rules.last['outboundTag'], proxyTag);
@@ -349,7 +413,9 @@ void main() {
       await state.setDirectApps(['ru.dkbank']);
       await state.connect();
 
-      expect(sent, [['ru.dkbank']]);
+      expect(sent, [
+        ['ru.dkbank'],
+      ]);
       expect(state.directApps, ['ru.dkbank']);
     });
 
@@ -368,17 +434,16 @@ void main() {
         core,
         settings: await SettingsStore.open(),
         configWriter: (config) async => config,
-        ruleStore: RuleStore(
-          await SharedPreferences.getInstance(),
-        ),
+        ruleStore: RuleStore(await SharedPreferences.getInstance()),
       );
       addTearDown(state.dispose);
 
       await state.setManualRules([rule(id: 'a')]);
       await state.connect();
 
-      final rules = ((jsonDecode(core.lastConfig!) as Map)['routing']
-              as Map)['rules'] as List;
+      final rules =
+          ((jsonDecode(core.lastConfig!) as Map)['routing'] as Map)['rules']
+              as List;
       final direct = [
         for (final item in rules)
           if ((item as Map)['outboundTag'] == directTag) item,
@@ -407,8 +472,9 @@ void main() {
       return state;
     }
 
-    testWidgets('новое правило из формы появляется в списке и в памяти',
-        (tester) async {
+    testWidgets('новое правило из формы появляется в списке и в памяти', (
+      tester,
+    ) async {
       final state = await screen(tester);
 
       await tester.tap(find.byIcon(Icons.add));
@@ -433,8 +499,9 @@ void main() {
       );
     });
 
-    testWidgets('правило без условия остаётся в форме с объяснением',
-        (tester) async {
+    testWidgets('правило без условия остаётся в форме с объяснением', (
+      tester,
+    ) async {
       await screen(tester);
 
       await tester.tap(find.byIcon(Icons.add));
@@ -444,8 +511,10 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-        find.text('Ядро не принимает правило без условия: заполните хотя бы '
-            'одно поле'),
+        find.text(
+          'Ядро не принимает правило без условия: заполните хотя бы '
+          'одно поле',
+        ),
         findsOneWidget,
       );
       // Форма не закрылась: пользователь дочитывает причину и правит.

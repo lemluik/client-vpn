@@ -21,9 +21,6 @@ class AppLocalizationsRu extends AppLocalizations {
   String get tooltipSettings => 'Настройки';
 
   @override
-  String get tooltipMore => 'Дополнительно';
-
-  @override
   String get tooltipLog => 'Журнал';
 
   @override
@@ -112,9 +109,6 @@ class AppLocalizationsRu extends AppLocalizations {
   String get addUrlHint => 'https://провайдер.example/подписка';
 
   @override
-  String get settingsTitle => 'Часть трафика напрямую';
-
-  @override
   String get probeTarget => 'Точка проб';
 
   @override
@@ -183,9 +177,6 @@ class AppLocalizationsRu extends AppLocalizations {
   String get menuDelete => 'Удалить';
 
   @override
-  String get profileKindFile => 'Файл ядра';
-
-  @override
   String get profileCountOne => 'Один профиль';
 
   @override
@@ -230,6 +221,16 @@ class AppLocalizationsRu extends AppLocalizations {
   String get statusOff => 'Отключено';
 
   @override
+  String trafficRate(String up, String down) {
+    return '↑ $up/с · ↓ $down/с';
+  }
+
+  @override
+  String trafficSession(String up, String down) {
+    return 'За сессию: ↑ $up · ↓ $down';
+  }
+
+  @override
   String get orbDisconnect => 'Отключить';
 
   @override
@@ -267,6 +268,34 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get windowHiddenToTray =>
       'Клиент свёрнут в трей: подключение продолжает работать.';
+
+  @override
+  String get closeWindowSection => 'При закрытии окна';
+
+  @override
+  String get closeWindowChoiceAsk => 'Спрашивать';
+
+  @override
+  String get closeWindowChoiceTray => 'Сворачивать в трей';
+
+  @override
+  String get closeWindowChoiceQuit => 'Выходить';
+
+  @override
+  String get closeWindowTitle => 'Закрыть окно?';
+
+  @override
+  String get closeWindowBody =>
+      'Свернуть в трей — подключение продолжит работать, клиент останется в трее. Выход снимет туннель и закроет приложение.';
+
+  @override
+  String get closeWindowTray => 'Свернуть в трей';
+
+  @override
+  String get closeWindowQuit => 'Выйти';
+
+  @override
+  String get closeWindowRemember => 'Запомнить выбор';
 
   @override
   String get aboutTitle => 'О программе';
@@ -337,6 +366,210 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get updateOpenFailed => 'Браузер не открылся — скопируйте ссылку';
+
+  @override
+  String get settingsScreenTitle => 'Настройки';
+
+  @override
+  String get settingsThemeSection => 'Оформление';
+
+  @override
+  String get themeSystem => 'Системная';
+
+  @override
+  String get themeLight => 'Светлая';
+
+  @override
+  String get themeDark => 'Тёмная';
+
+  @override
+  String get settingsLaunchSection => 'Запуск';
+
+  @override
+  String get settingsAutoStart => 'Автозапуск с системой';
+
+  @override
+  String get settingsAutoStartAndroid =>
+      'Клиент откроется сам после включения телефона';
+
+  @override
+  String get settingsAutoStartDesktop =>
+      'Клиент откроется сам после входа в систему';
+
+  @override
+  String get settingsAutoStartOn => 'Клиент будет запускаться с системой';
+
+  @override
+  String get settingsAutoStartOff => 'Автозапуск выключен';
+
+  @override
+  String get settingsAutoConnect => 'Автоподключение при запуске';
+
+  @override
+  String get settingsAutoConnectPending =>
+      'Станет доступно после первого успешного подключения';
+
+  @override
+  String settingsAutoConnectProfile(String name) {
+    return 'Поднимаем то же подключение: $name';
+  }
+
+  @override
+  String get settingsAutoConnectMissing => 'Подключение больше не найдено';
+
+  @override
+  String settingsProfilesSection(int count) {
+    return 'Профили ($count)';
+  }
+
+  @override
+  String get settingsProfilesEmpty =>
+      'Подключений пока нет — добавьте их на главном экране.';
+
+  @override
+  String get profileKindLinks => 'Ссылки';
+
+  @override
+  String get profileKindSubscription => 'Подписка';
+
+  @override
+  String get profileKindFile => 'Файл config.json';
+
+  @override
+  String get settingsRoutingSection => 'Куда идёт трафик';
+
+  @override
+  String get settingsServiceSection => 'Обслуживание';
+
+  @override
+  String get splitHomeDirect => 'Сайты домашнего региона напрямую';
+
+  @override
+  String splitHomeDirectZones(String zones) {
+    return 'Зоны: $zones. Остальное — через подключение.';
+  }
+
+  @override
+  String get splitHomeDirectUnknown =>
+      'Домашний регион по языку устройства не определён';
+
+  @override
+  String get splitExceptions => 'Адреса-исключения';
+
+  @override
+  String splitExceptionsCount(int direct, int tunnel) {
+    return 'напрямую: $direct, в туннель: $tunnel';
+  }
+
+  @override
+  String get splitExceptionsEmpty => 'Списка пока нет';
+
+  @override
+  String get splitScreenTitle => 'Раздельное туннелирование';
+
+  @override
+  String get splitHowItWorks =>
+      'Адрес из списка идёт вопреки правилам домашнего региона: «напрямую» мимо туннеля или «в туннель» назло своей зоне. Ссылку можно вставить целиком — из неё возьмём только имя хоста.';
+
+  @override
+  String get splitPasteTitle => 'Вставить пачкой';
+
+  @override
+  String get splitPasteHint =>
+      'По одному адресу на строку: https://example.com/path, example.org';
+
+  @override
+  String get splitDirection => 'Куда направить эти адреса';
+
+  @override
+  String get splitToDirect => 'напрямую';
+
+  @override
+  String get splitToTunnel => 'в туннель';
+
+  @override
+  String splitAdded(int added, int duplicates, int skipped) {
+    return 'Добавлено $added, повторов $duplicates, пропущено $skipped';
+  }
+
+  @override
+  String splitNothingAdded(int skipped) {
+    return 'Ни одного адреса не разобрано, пропущено $skipped';
+  }
+
+  @override
+  String get splitHostRemoved => 'Адрес убран из списка';
+
+  @override
+  String get splitHostMoved => 'Направление изменено';
+
+  @override
+  String get splitSaved => 'Список сохранён';
+
+  @override
+  String get splitApplied => 'Список применён, подключение поднято заново';
+
+  @override
+  String get splitDirectRuleTitle => 'Исключения: напрямую';
+
+  @override
+  String get splitTunnelRuleTitle => 'Исключения: в туннель';
+
+  @override
+  String trialConnectTitle(String serviceName) {
+    return 'Подключить $serviceName';
+  }
+
+  @override
+  String get trialConnectSubtitle => 'Пробный ключ бесплатно';
+
+  @override
+  String get registrationLoginLabel => 'Telegram login';
+
+  @override
+  String get registrationLoginHint => '@username';
+
+  @override
+  String get registrationTerms => 'Согласен с условиями программы тестирования';
+
+  @override
+  String get registrationSubmit => 'Подключить';
+
+  @override
+  String get registrationInfo =>
+      'Это программа тестирования. Ключи выдаются бесплатно до конца года. Служба поддержки может проводить опросы для улучшения сервиса.';
+
+  @override
+  String get registrationNeedConsent =>
+      'Необходимо согласиться с условиями программы';
+
+  @override
+  String get registrationBadLogin =>
+      'Введите Telegram login: @username, от 5 до 32 символов';
+
+  @override
+  String get registrationSuccess => 'Подключено! Ключ добавлен.';
+
+  @override
+  String registrationFailed(String reason) {
+    return 'Не удалось подключиться: $reason';
+  }
+
+  @override
+  String get expiredTitle => 'Ключ истёк';
+
+  @override
+  String get expiredBody => 'Ваш временный ключ закончился.';
+
+  @override
+  String get expiredSupport => 'Для продления обратитесь в службу поддержки';
+
+  @override
+  String get expiredOpenSupport => 'Открыть поддержку';
+
+  @override
+  String get expiredProgramNote =>
+      'Программа тестирования действительна до 31.10.2026';
 
   @override
   String get tileTitle => 'Плитка в шторке';

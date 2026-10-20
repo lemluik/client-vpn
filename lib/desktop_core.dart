@@ -6,8 +6,10 @@ import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
 
 import 'app_proxy.dart';
+import 'core_stats.dart';
 import 'proxy_config.dart';
 import 'system_proxy.dart';
+import 'temp_config.dart';
 import 'vpn_config.dart';
 import 'vpn_core.dart';
 import 'windows_guard.dart';
@@ -40,6 +42,14 @@ class DesktopCore implements VpnCore {
       StreamController<CoreStatus>.broadcast();
 
   ProxyEndpoint? _proxy;
+
+  /// Путь производного конфига с API статистики: файл пользователя не
+  /// меняется, ядро читает копию из рабочей папки.
+  String? _derivedPath;
+
+  /// Носитель API-порта между [validate] и [start]: порт выбирается один раз,
+  /// иначе проверка и запуск разошлись бы по разным конфигам.
+  int? _apiPort;
 
   @override
   Stream<String> get logs => _logController.stream;
@@ -104,9 +114,17 @@ class DesktopCore implements VpnCore {
     }
 
     final xrayPath = await _findXrayExecutable();
+
+    // Ядро запускается не файлом пользователя, а копией с API статистики:
+    // журнал доступа Xray байтов не содержит, трафик виден только в счётчиках
+    // StatsService. Копия проверяется тем же `run -test`, что пойдёт в работу.
+    _apiPort = await _pickFreePort();
+    final derivedPath = await _writeDerivedConfig(config.json, _apiPort!);
+    _derivedPath = derivedPath;
+
     final result = await Process.run(
       xrayPath,
-      ['run', '-test', '-config', path],
+      ['run', '-test', '-config', derivedPath],
       workingDirectory: p.dirname(xrayPath),
       environment: _coreEnvironment(xrayPath),
     );
@@ -130,6 +148,25 @@ class DesktopCore implements VpnCore {
     _proxy = proxy;
   }
 
+  /// Свободный порт для API статистики. Занимаем и сразу отпускаем: между
+  /// проверкой и стартом ядра порт теоретически может уйти другому, но на
+  /// практике окно миллисекундное, а коллизия кончается лишь отсутствием
+  /// счётчиков трафика.
+  Future<int> _pickFreePort() async {
+    final socket = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+    final port = socket.port;
+    await socket.close();
+    return port;
+  }
+
+  Future<String> _writeDerivedConfig(String userJson, int apiPort) async {
+    final directory = workingDirectory();
+    await directory.create(recursive: true);
+    final file = File(p.join(directory.path, 'config-stats.json'));
+    await file.writeAsString(CoreStats.injectStatsApi(userJson, apiPort));
+    return file.path;
+  }
+
   /// Правила `geoip:`/`geosite:` не работают без geo-баз: ядро сообщает об этом
   /// по-английски и без указания, где взять файлы.
   static String _geoHint(String output) =>
@@ -146,7 +183,7 @@ class DesktopCore implements VpnCore {
     if (proxy == null) {
       throw Exception('Конфиг не проверен');
     }
-    final path = config.path!;
+    final path = _derivedPath ?? config.path!;
 
     await _awaitFreePort(proxy.port);
 
@@ -221,6 +258,8 @@ class DesktopCore implements VpnCore {
         });
 
     _attachToJob(_process!.pid);
+    final apiPort = _apiPort;
+    if (apiPort != null) CoreStats.apiPort = apiPort;
     AppProxy.attach(_proxy);
     _logController.add(
       AppProxy.reachesCore
@@ -232,6 +271,7 @@ class DesktopCore implements VpnCore {
       _process!.exitCode.then((code) async {
         _logController.add('Xray остановлен (код: $code)');
         _process = null;
+        CoreStats.apiPort = null;
         _closeJob();
         AppProxy.attach(null);
         final intentional = _intentionalStop;

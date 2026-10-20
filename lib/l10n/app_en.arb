@@ -4,7 +4,6 @@
   "tooltipRefreshSubscription": "Refresh subscription",
   "tooltipAddConnection": "Add connection",
   "tooltipSettings": "Settings",
-  "tooltipMore": "More",
   "tooltipLog": "Log",
   "tooltipSupport": "Support",
   "tooltipActions": "Actions",
@@ -32,7 +31,6 @@
   "addFileSubtitle": "For experts: a full kernel config",
   "addLinkHint": "vless://… or several lines, or a base64 subscription",
   "addUrlHint": "https://provider.example/subscription",
-  "settingsTitle": "Part of the traffic directly",
   "probeTarget": "Probe target",
   "probeTargetSubtitle": "Address the client measures node latency against",
   "probeApplied": "Probe target saved",
@@ -60,7 +58,6 @@
   "profileUntitled": "Untitled",
   "menuRename": "Rename",
   "menuDelete": "Delete",
-  "profileKindFile": "Kernel file",
   "profileCountOne": "One profile",
   "profileCountMany": "{count} profiles",
   "regionProfileCount": "Profiles: {count}",
@@ -73,6 +70,8 @@
   "statusFailed": "Failure",
   "statusNoLink": "No connection",
   "statusOff": "Off",
+  "trafficRate": "↑ {up}/s · ↓ {down}/s",
+  "trafficSession": "Session: ↑ {up} · ↓ {down}",
   "orbDisconnect": "Disconnect",
   "orbConnect": "Connect",
   "orbRetry": "Connect again",
@@ -85,6 +84,15 @@
   "alreadyRunningBody": "The app is open in another window. A second window does not start: two instances would fight over the system proxy and break the connection.",
   "alreadyRunningClose": "Close this window",
   "windowHiddenToTray": "The client is in the tray: the connection stays up.",
+  "closeWindowSection": "On window close",
+  "closeWindowChoiceAsk": "Ask every time",
+  "closeWindowChoiceTray": "Minimize to tray",
+  "closeWindowChoiceQuit": "Quit",
+  "closeWindowTitle": "Close the window?",
+  "closeWindowBody": "Minimizing keeps the connection up and leaves the client in the tray. Quitting drops the tunnel and closes the app.",
+  "closeWindowTray": "Minimize to tray",
+  "closeWindowQuit": "Quit",
+  "closeWindowRemember": "Remember my choice",
   "aboutTitle": "About",
   "aboutVersion": "Version {version}",
   "@aboutVersion": {
@@ -120,6 +128,116 @@
   "updateCopied": "Link copied",
   "updateNoLink": "The manifest has no link for this platform",
   "updateOpenFailed": "The browser did not open — copy the link instead",
+  "settingsScreenTitle": "Settings",
+  "settingsThemeSection": "Appearance",
+  "themeSystem": "System",
+  "themeLight": "Light",
+  "themeDark": "Dark",
+  "settingsLaunchSection": "Startup",
+  "settingsAutoStart": "Start with the system",
+  "settingsAutoStartAndroid": "The app opens by itself after the phone boots",
+  "settingsAutoStartDesktop": "The app opens by itself after you sign in",
+  "settingsAutoStartOn": "The app will start with the system",
+  "settingsAutoStartOff": "Auto-start is off",
+  "settingsAutoConnect": "Auto-connect on launch",
+  "settingsAutoConnectPending": "Becomes available after the first successful connection",
+  "settingsAutoConnectProfile": "Bringing up the same connection: {name}",
+  "@settingsAutoConnectProfile": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsAutoConnectMissing": "The connection is no longer there",
+  "settingsProfilesSection": "Connections ({count})",
+  "@settingsProfilesSection": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "settingsProfilesEmpty": "No connections yet — add them on the main screen.",
+  "profileKindLinks": "Links",
+  "profileKindSubscription": "Subscription",
+  "profileKindFile": "config.json file",
+  "settingsRoutingSection": "Where traffic goes",
+  "settingsServiceSection": "Maintenance",
+  "splitHomeDirect": "Home-region sites go direct",
+  "splitHomeDirectZones": "Zones: {zones}. Everything else goes through the connection.",
+  "@splitHomeDirectZones": {
+    "placeholders": {
+      "zones": {
+        "type": "String"
+      }
+    }
+  },
+  "splitHomeDirectUnknown": "The device language does not define a home region",
+  "splitExceptions": "Address exceptions",
+  "splitExceptionsCount": "direct: {direct}, into the tunnel: {tunnel}",
+  "@splitExceptionsCount": {
+    "placeholders": {
+      "direct": {
+        "type": "int"
+      },
+      "tunnel": {
+        "type": "int"
+      }
+    }
+  },
+  "splitExceptionsEmpty": "No list yet",
+  "splitScreenTitle": "Split tunneling",
+  "splitHowItWorks": "An address from this list overrides the home-region rules: direct bypasses the tunnel, into-the-tunnel pulls its own zone address back. A full link is fine too — only the host name is taken from it.",
+  "splitPasteTitle": "Paste a batch",
+  "splitPasteHint": "One address per line: https://example.com/path, example.org",
+  "splitDirection": "Where these addresses go",
+  "splitToDirect": "direct",
+  "splitToTunnel": "into the tunnel",
+  "splitAdded": "Added {added}, duplicates {duplicates}, skipped {skipped}",
+  "@splitAdded": {
+    "placeholders": {
+      "added": {
+        "type": "int"
+      },
+      "duplicates": {
+        "type": "int"
+      },
+      "skipped": {
+        "type": "int"
+      }
+    }
+  },
+  "splitNothingAdded": "Not a single address parsed, skipped {skipped}",
+  "@splitNothingAdded": {
+    "placeholders": {
+      "skipped": {
+        "type": "int"
+      }
+    }
+  },
+  "splitHostRemoved": "The address is out of the list",
+  "splitHostMoved": "The direction changed",
+  "splitSaved": "The list is saved",
+  "splitApplied": "The list is applied, the connection is back up",
+  "splitDirectRuleTitle": "Exceptions: direct",
+  "splitTunnelRuleTitle": "Exceptions: into the tunnel",
+  "trialConnectTitle": "Connect {serviceName}",
+  "trialConnectSubtitle": "Free trial key",
+  "registrationLoginLabel": "Telegram login",
+  "registrationLoginHint": "@username",
+  "registrationTerms": "I agree to the testing program terms",
+  "registrationSubmit": "Connect",
+  "registrationInfo": "This is a testing program. Keys are issued free of charge until the end of the year. The support team may run surveys to improve the service.",
+  "registrationNeedConsent": "You must agree to the program terms",
+  "registrationBadLogin": "Enter a Telegram login: @username, 5 to 32 characters",
+  "registrationSuccess": "Connected! The key is added.",
+  "registrationFailed": "Could not connect: {reason}",
+  "expiredTitle": "Key expired",
+  "expiredBody": "Your temporary key has expired.",
+  "expiredSupport": "To renew it, contact the support team",
+  "expiredOpenSupport": "Open support",
+  "expiredProgramNote": "The testing program is valid until 31.10.2026",
   "tileTitle": "Quick settings tile",
   "tileSubtitle": "Start and stop the tunnel without opening the app",
   "tileFallback": "Open the shade, tap edit and drag the Tunnel tile onto the quick settings panel"
