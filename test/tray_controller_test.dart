@@ -1,18 +1,19 @@
+import 'dart:io';
+
 import 'package:client_vpn/tray_controller.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// Подмена всего нативного слоя трея.
+/// A replacement for the whole native tray layer.
 ///
-/// Нужна именно подмена слоя, а не канала: с 0.7.0 `tray_manager` говорит с
-/// системой через FFI, платформенного канала больше нет, и прошлый дефект
-/// (`setTitle` ронял трей на полу-подъёме) тесты проглядели именно потому,
-/// что перехватывать было нечего. Здесь записывается каждый вызов, а отказ
-/// включается по имени.
+/// The layer is replaced, not a channel: since 0.7.0 `tray_manager` talks to
+/// the system over FFI, there is no platform channel any more, and the previous
+/// defect (`setTitle` crashed a half-mounted tray) slipped past the tests
+/// precisely because there was nothing to intercept. Every call is recorded
+/// here, and a failure is switched on by name.
 class FakeTrayPort implements TrayPort {
   FakeTrayPort({this.failOn});
 
-  /// Вызов, который должен бросить исключение: `mount`, `icon`, `tooltip`
-  /// или `menu`.
+  /// The call that must throw: `mount`, `icon`, `tooltip` or `menu`.
   final String? failOn;
 
   final List<String> calls = [];
@@ -65,7 +66,7 @@ class FakeTrayPort implements TrayPort {
   }
 }
 
-/// Порт, который поднимается, но отказывает на подсказке состояния.
+/// A port that mounts but fails on the state tooltip.
 class _BrokenTooltipPort implements TrayPort {
   bool threw = false;
 
@@ -97,7 +98,7 @@ AppTray _tray(
   port: port,
 );
 
-/// Поднимает трей теми же словами, что и `main.dart`.
+/// Mounts the tray with the same labels as `main.dart`.
 Future<bool> _mountOn(
   AppTray tray, {
   String tooltip = 'КлиентВПН — отключено',
@@ -129,7 +130,13 @@ void main() {
         'setContextMenu',
         'addListener',
       ]);
-      expect(port.iconPath, endsWith('client_vpn_tray.ico'));
+      // macOS gets the monochrome template PNG, other platforms the .ico.
+      expect(
+        port.iconPath,
+        endsWith(
+          Platform.isMacOS ? 'client_vpn_tray.png' : 'client_vpn_tray.ico',
+        ),
+      );
       expect(port.tooltip, 'КлиентВПН — отключено');
     });
 
@@ -147,8 +154,8 @@ void main() {
     test(
       'сбой подсказки при подъёме не оставляет трей наполовину поднятым',
       () async {
-        // Так и было в живой сборке 16.10: отказ нативного вызова оставлял
-        // иконку без меню, и закрытие окна молча выходило из приложения.
+        // This happened in the live build on 16.10: a failed native call left
+        // the icon without a menu, and closing the window silently quit the app.
         final port = FakeTrayPort(failOn: 'tooltip');
 
         expect(await _mount(port), isFalse);
@@ -187,8 +194,8 @@ void main() {
 
   group('подсказка состояния', () {
     test('состояние уходит в setTooltip, а не в setTitle', () async {
-      // Windows знает только `setToolTip`: `setTitle` — текст для macOS,
-      // и состояние на нём висеть не может.
+      // Windows only knows `setToolTip`: `setTitle` is text for macOS, and the
+      // state cannot live there.
       final port = FakeTrayPort();
       final tray = _tray(port);
       expect(await _mountOn(tray), isTrue);

@@ -44,9 +44,10 @@ class ReleaseInfo {
   final String notes;
   final Map<String, String> links;
 
-  /// Адрес под текущую платформу: ищем по ключу (`windows`, `android`),
-  /// потом по имени файла, потом первую ссылку.
-  String? downloadUrlFor(String platform) {
+  /// Адрес под текущую платформу: ищем по ключу (`windows`, `android`,
+  /// `macos`), потом по имени файла, потом первую ссылку. [anyAsLast] = false
+  /// убирает последний шаг: сборке macOS чужой установщик не нужен.
+  String? downloadUrlFor(String platform, {bool anyAsLast = true}) {
     final direct = links[platform];
     if (direct != null && direct.isNotEmpty) return direct;
     for (final entry in links.entries) {
@@ -54,6 +55,7 @@ class ReleaseInfo {
         return entry.value;
       }
     }
+    if (!anyAsLast) return null;
     return links.isEmpty ? null : links.values.first;
   }
 }

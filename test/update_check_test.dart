@@ -86,6 +86,23 @@ void main() {
     expect(single?.downloadUrlFor('windows'), 'https://example.test/b');
   });
 
+  test('macOS не получает установщик другой платформы', () {
+    final release = parseRelease({
+      'version': '0.9.0',
+      'files': {'windows': 'https://example.test/a.zip'},
+    });
+    expect(release?.downloadUrlFor('macos', anyAsLast: false), isNull);
+
+    final withMac = parseRelease({
+      'version': '0.9.0',
+      'files': {
+        'windows': 'https://example.test/a.zip',
+        'macos': 'https://example.test/m.dmg',
+      },
+    });
+    expect(withMac?.downloadUrlFor('macos', anyAsLast: false), 'https://example.test/m.dmg');
+  });
+
   test('манифест без версии не разбирается', () {
     expect(parseRelease(null), isNull);
     expect(parseRelease([]), isNull);

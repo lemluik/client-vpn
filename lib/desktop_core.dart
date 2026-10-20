@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 
 import 'app_proxy.dart';
 import 'core_stats.dart';
+import 'mac_core_guard.dart';
 import 'proxy_config.dart';
 import 'system_proxy.dart';
 import 'temp_config.dart';
@@ -22,14 +23,35 @@ class DesktopCore implements VpnCore {
 
   /// SHA2-256 официального xray.exe из Xray-windows-64.zip v26.3.27.
   /// Сверяется перед каждым запуском: подменённый бинарник выполнен не будет.
-  static const _expectedSha256 =
+  static const _expectedSha256Windows =
       '15c2d007954ac53ba69b80ec91242786b3c0b71d52649165b4ca1d5cc96ef8f1';
+
+  /// SHA2-256 универсального xray для macOS: `lipo` из официальных
+  /// Xray-macos-64.zip и Xray-macos-arm64-v8a.zip v26.3.27 (сборка
+  /// детерминирована, см. scripts/download_xray_macos.sh).
+  static const _expectedSha256Macos =
+      '0a97edc89d6ba2c0080958e915373be2c46e8b4900a685b8182ea2c28c536f6d';
+
+  static String get _expectedSha256 =>
+      Platform.isMacOS ? _expectedSha256Macos : _expectedSha256Windows;
+
+  static String get _binaryName => Platform.isMacOS ? 'xray' : 'xray.exe';
+
+  static String get _downloadHint => Platform.isMacOS
+      ? 'bash scripts/download_xray_macos.sh'
+      : 'bash scripts/download_xray.sh';
+
+  /// Каталог geo-баз для найденного бинарника.
+  final Map<String, String> _assetDirs = {};
 
   Process? _process;
 
   /// Job Object с флагом kill-on-close: ядро умирает вместе с приложением,
   /// даже если приложение убито извне.
   CoreKillJob? _job;
+
+  /// macOS: сторож и метка ядра вместо Job Object.
+  final MacCoreGuard _macGuard = MacCoreGuard();
 
   /// true, когда ядро завершается по нашей команде — тогда настройки
   /// пользователя возвращаются. Любой другой выход считается аварией, и
@@ -68,42 +90,63 @@ class DesktopCore implements VpnCore {
   }
 
   Future<String> _findXrayExecutable() async {
-    final exeDir = p.dirname(Platform.resolvedExecutable);
-
-    for (final candidate in [
-      File(p.join(exeDir, 'xray', 'xray.exe')),
-      File(p.join(exeDir, 'xray.exe')),
-      File('assets/xray/xray.exe'),
-    ]) {
+    for (final (binary, assets) in xrayCandidates(
+      Platform.resolvedExecutable,
+      macos: Platform.isMacOS,
+    )) {
+      final candidate = File(binary);
       if (await candidate.exists()) {
         await _verifyChecksum(candidate);
-        return candidate.absolute.path;
+        final path = candidate.absolute.path;
+        _assetDirs[path] = assets;
+        return path;
       }
     }
 
-    throw Exception(
-      'xray.exe не найден. Скачайте его: bash scripts/download_xray.sh',
-    );
+    throw Exception('$_binaryName не найден. Скачайте его: $_downloadHint');
+  }
+
+  /// Где искать ядро: пары «бинарник — каталог geo-баз» в порядке приоритета.
+  /// Сначала собранное приложение, затем папка разработчика.
+  static List<(String, String)> xrayCandidates(
+    String resolvedExecutable, {
+    required bool macos,
+  }) {
+    final exeDir = p.dirname(resolvedExecutable);
+    if (macos) {
+      // Contents/Resources/xray: ядро там запечатано подписью бандла как
+      // ресурс и остаётся побайтно официальным (срез x86_64 без подписи,
+      // поэтому в Contents/MacOS бандл не подписывается).
+      final bundled = p.join(p.dirname(exeDir), 'Resources', 'xray');
+      final dev = p.join('macos', 'xray');
+      return [(p.join(bundled, 'xray'), bundled), (p.join(dev, 'xray'), dev)];
+    }
+    final dev = p.join('assets', 'xray');
+    return [
+      (p.join(exeDir, 'xray', 'xray.exe'), p.join(exeDir, 'xray')),
+      (p.join(exeDir, 'xray.exe'), exeDir),
+      (p.join(dev, 'xray.exe'), dev),
+    ];
   }
 
   Future<void> _verifyChecksum(File file) async {
     final actual = '${await sha256.bind(file.openRead()).first}';
     if (actual != _expectedSha256) {
       throw Exception(
-        'Проверка целостности xray.exe не пройдена.\n'
+        'Проверка целостности $_binaryName не пройдена.\n'
         'Ожидался SHA2-256 $_expectedSha256\n'
         'Получен  SHA2-256 $actual\n'
         'Файл повреждён или подменён — запуск отменён. '
-        'Перекачайте бинарник: bash scripts/download_xray.sh',
+        'Перекачайте бинарник: $_downloadHint',
       );
     }
   }
 
-  /// Каталог geo-баз: `geoip.dat`/`geosite.dat` лежат рядом с бинарником.
-  /// Передаётся ядру явно, потому что поиск по рабочему каталогу не работает,
-  /// когда конфиг читается из временной папки профиля.
-  static Map<String, String> _coreEnvironment(String xrayPath) => {
-    'XRAY_LOCATION_ASSET': p.dirname(xrayPath),
+  /// Каталог geo-баз: `geoip.dat`/`geosite.dat`. Передаётся ядру явно,
+  /// потому что поиск по рабочему каталогу не работает, когда конфиг читается
+  /// из временной папки профиля.
+  Map<String, String> _coreEnvironment(String xrayPath) => {
+    'XRAY_LOCATION_ASSET': _assetDirs[xrayPath] ?? p.dirname(xrayPath),
   };
 
   @override
@@ -171,7 +214,7 @@ class DesktopCore implements VpnCore {
   /// по-английски и без указания, где взять файлы.
   static String _geoHint(String output) =>
       output.contains('geosite.dat') || output.contains('geoip.dat')
-      ? '\nGeo-базы не установлены — выполните: bash scripts/download_xray.sh'
+      ? '\nGeo-базы не установлены — выполните: $_downloadHint'
       : '';
 
   @override
@@ -258,6 +301,9 @@ class DesktopCore implements VpnCore {
         });
 
     _attachToJob(_process!.pid);
+    if (Platform.isMacOS) {
+      _logController.add(await _macGuard.attach(_process!.pid, xrayPath));
+    }
     final apiPort = _apiPort;
     if (apiPort != null) CoreStats.apiPort = apiPort;
     AppProxy.attach(_proxy);
@@ -273,6 +319,7 @@ class DesktopCore implements VpnCore {
         _process = null;
         CoreStats.apiPort = null;
         _closeJob();
+        if (Platform.isMacOS) await _macGuard.detach();
         AppProxy.attach(null);
         final intentional = _intentionalStop;
         _intentionalStop = false;
@@ -353,6 +400,7 @@ class DesktopCore implements VpnCore {
 
     _process = null;
     _closeJob();
+    if (Platform.isMacOS) await _macGuard.detach();
     AppProxy.attach(null);
     await SystemProxy.disable();
     _statusController.add(const CoreStatus(false));
@@ -360,7 +408,15 @@ class DesktopCore implements VpnCore {
   }
 
   @override
-  Future<void> recoverAfterCrash() => SystemProxy.cleanupAfterCrash();
+  Future<void> recoverAfterCrash() async {
+    if (Platform.isMacOS) {
+      final orphan = await _macGuard.killOrphan();
+      if (orphan != null) {
+        _logController.add('Снято ядро прошлого запуска (PID: $orphan)');
+      }
+    }
+    await SystemProxy.cleanupAfterCrash();
+  }
 
   /// Плитки шторки на десктопе нет: метка свежести и команда из
   /// оболочки здесь всегда неактуальны.

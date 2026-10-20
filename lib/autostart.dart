@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 
 /// Запуск клиента вместе с системой. Флаг принадлежит системе, а не нам:
 /// на Windows это значение в ключе реестра Run, на Android — разрешение,
-/// которое читает загрузочный приёмник. Поэтому состояние перечитывается,
+/// которое читает загрузочный приёмник, на macOS — «Объекты входа». Поэтому состояние перечитывается,
 /// а не держится в настройках: правку извне клиент должен показывать как есть.
 abstract class Autostart {
   const Autostart();
@@ -19,6 +19,7 @@ abstract class Autostart {
   static Autostart platform() {
     if (Platform.isWindows) return WindowsAutostart();
     if (Platform.isAndroid) return const AndroidAutostart();
+    if (Platform.isMacOS) return const MacAutostart();
     return const UnsupportedAutostart();
   }
 }
@@ -89,6 +90,25 @@ class WindowsAutostart extends Autostart {
 /// пользователь отказался от автозапуска.
 class AndroidAutostart extends Autostart {
   const AndroidAutostart();
+
+  static const channel = MethodChannel('client_vpn/app');
+
+  @override
+  bool get supported => true;
+
+  @override
+  Future<bool> isOn() async =>
+      await channel.invokeMethod<bool>('isAutoStart') ?? false;
+
+  @override
+  Future<void> set(bool value) =>
+      channel.invokeMethod<void>('setAutoStart', value);
+}
+
+/// macOS: «Объекты входа» через SMAppService (macOS 13+). Канал тот же, что
+/// у Android, обработчик — в AppDelegate.swift.
+class MacAutostart extends Autostart {
+  const MacAutostart();
 
   static const channel = MethodChannel('client_vpn/app');
 

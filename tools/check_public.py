@@ -38,6 +38,11 @@ ALLOWED_IP = {'0.0.0.0', '127.0.0.1', '255.255.255.255', '1.1.1.1',
 RESERVED_IP = re.compile(r'^(?:10\.|127\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.|'
                          r'198\.51\.100\.|203\.0\.113\.|192\.0\.2\.|224\.|240\.)')
 IPV4 = re.compile(r'\b(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\b')
+# авторы, которые считаются известными, даже если их ещё нет в истории base;
+# только адреса GitHub noreply, без личной почты
+KNOWN_AUTHORS = {
+    'Daniil A <140379757+daniilprodev@users.noreply.github.com>',
+}
 # адрес считаем адресом только в контексте, где ему неоткуда быть версией пакета
 ADDRESS_CONTEXT = re.compile(r'(?:://|:\d{2,5}\b|\baddress\b|\bhost\b|\bserver\b|\bpeer\b|'
                              r'\bip\b|\bipv4\b|\bconnect\b|\bendpoint\b)', re.I)
@@ -146,7 +151,8 @@ def check_files(root):
 
 
 def check_history(base):
-    """Коммит, автор которого не появлялся в base, — это новая идентификация."""
+    """Коммит, автор которого не появлялся в base и не указан в KNOWN_AUTHORS, —
+    это новая идентификация."""
     if not base:
         return []
     current = subprocess.run(['git', 'log', '--format=%an <%ae>', f'{base}..HEAD'],
@@ -155,7 +161,8 @@ def check_history(base):
                            capture_output=True, text=True)
     if current.returncode != 0 or known.returncode != 0:
         return ['git log не выполнен — историю проверить нечем']
-    fresh = sorted(set(current.stdout.split('\n')) - set(known.stdout.split('\n')) - {''})
+    fresh = sorted(set(current.stdout.split('\n')) - set(known.stdout.split('\n'))
+                   - KNOWN_AUTHORS - {''})
     return [f'новая git-идентичность: {mask(x)}' for x in fresh]
 
 

@@ -3,10 +3,15 @@ import 'dart:io';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'mac_system_proxy.dart';
+
 typedef _SetOptionNative = Int32 Function(IntPtr, IntPtr, Int32);
 typedef _SetOptionDart = int Function(int, int, int);
 
+/// Системный прокси десктопа. На Windows — ключи реестра Internet Settings,
+/// на macOS — [MacSystemProxy] поверх `networksetup`.
 class SystemProxy {
+  static final MacSystemProxy _mac = MacSystemProxy();
   static const _regPath =
       r'HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings';
   static const _savedServerKey = 'proxy.saved_server';
@@ -30,6 +35,7 @@ class SystemProxy {
     int port, {
     bool socks = false,
   }) async {
+    if (Platform.isMacOS) return _mac.enable(host, port, socks: socks);
     final server = socks ? 'socks=$host:$port' : '$host:$port';
 
     await _saveOriginal();
@@ -49,6 +55,7 @@ class SystemProxy {
   }
 
   static Future<void> disable() async {
+    if (Platform.isMacOS) return _mac.disable();
     final prefs = await SharedPreferences.getInstance();
     if (prefs.getString(_oursKey) == null) return;
 
@@ -82,6 +89,7 @@ class SystemProxy {
   /// отключил подключение или приложение стартует после аварии и чинит
   /// состояние через [cleanupAfterCrash]).
   static Future<void> lockLeak() async {
+    if (Platform.isMacOS) return _mac.lockLeak();
     final prefs = await SharedPreferences.getInstance();
     final ours = prefs.getString(_oursKey);
     if (ours == null) return; // мы ничего не включали — блокировать нечего
@@ -95,6 +103,7 @@ class SystemProxy {
   /// Трогает прокси только если он совпадает с тем, что включали мы сами —
   /// иначе можно сломать локальный прокси пользователя (Fiddler, Clash и т.п.).
   static Future<void> cleanupAfterCrash() async {
+    if (Platform.isMacOS) return _mac.cleanupAfterCrash();
     final prefs = await SharedPreferences.getInstance();
     final ours = prefs.getString(_oursKey);
     if (ours == null) return;
