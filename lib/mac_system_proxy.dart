@@ -3,15 +3,15 @@ import 'dart:io';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Запуск `networksetup`: подменяется в проверке, чтобы тест не трогал
-/// настройки сети машины.
+/// Runs `networksetup`: replaced in tests so they do not touch the machine's
+/// network settings.
 typedef NetworkSetupRunner = Future<ProcessResult> Function(List<String> args);
 
 Future<ProcessResult> _runNetworkSetup(List<String> args) =>
     Process.run('/usr/sbin/networksetup', args);
 
-/// Настройка одного вида прокси у одной сетевой службы, как её отдаёт
-/// `networksetup -getwebproxy` и соседние команды.
+/// One kind of proxy on one network service, as `networksetup -getwebproxy`
+/// and its sibling commands report it.
 class MacProxyEntry {
   const MacProxyEntry({
     required this.enabled,
@@ -25,7 +25,7 @@ class MacProxyEntry {
 
   static const off = MacProxyEntry(enabled: false, server: '', port: 0);
 
-  /// Разбор вывода вида:
+  /// Parses output like:
   /// ```
   /// Enabled: Yes
   /// Server: 127.0.0.1
@@ -71,7 +71,7 @@ class MacProxyEntry {
   int get hashCode => Object.hash(enabled, server, port);
 }
 
-/// Снимок прокси одной сетевой службы до нашего включения.
+/// Proxy settings of one network service before we turned ours on.
 class MacServiceSnapshot {
   const MacServiceSnapshot({
     required this.web,
@@ -84,7 +84,7 @@ class MacServiceSnapshot {
   final MacProxyEntry secureWeb;
   final MacProxyEntry socks;
 
-  /// Пустой список — исключений нет («There aren't any bypass domains»).
+  /// An empty list means no exceptions ("There aren't any bypass domains").
   final List<String> bypass;
 
   Map<String, Object> toJson() => {
@@ -93,6 +93,23 @@ class MacServiceSnapshot {
     'socks': socks.toJson(),
     'bypass': bypass,
   };
+
+  /// The same snapshot with our own proxy (`host:port`) treated as off.
+  ///
+  /// A proxy left on by a crash or a cut-short quit is still in the system
+  /// when the next connect takes its snapshot. Saved as the user's setting,
+  /// it would be "restored" on disconnect: the proxy stayed on a dead port
+  /// and the Mac had no internet until the app was started again.
+  MacServiceSnapshot withoutOurs(String host, int port) {
+    MacProxyEntry clean(MacProxyEntry e) =>
+        e.server == host && e.port == port ? MacProxyEntry.off : e;
+    return MacServiceSnapshot(
+      web: clean(web),
+      secureWeb: clean(secureWeb),
+      socks: clean(socks),
+      bypass: bypass,
+    );
+  }
 
   static MacServiceSnapshot fromJson(Object? json) {
     final map = json is Map ? json : const {};
@@ -106,16 +123,16 @@ class MacServiceSnapshot {
   }
 }
 
-/// Системный прокси macOS через `networksetup`.
+/// The macOS system proxy via `networksetup`.
 ///
-/// Прокси на macOS задаётся отдельно для каждой сетевой службы (Wi-Fi,
-/// Ethernet, USB-модем…). Включаем на всех включённых службах: при смене
-/// сети трафик не должен уйти мимо ядра через службу, о которой мы забыли.
-/// Исходные настройки каждой службы сохраняются и возвращаются как были.
+/// On macOS the proxy is set per network service (Wi-Fi, Ethernet, USB
+/// modem…). It is turned on for every enabled service: when the network
+/// changes, traffic must not bypass the core through a service we forgot.
+/// Each service's original settings are saved and restored as they were.
 ///
-/// Логика та же, что у реестра Windows: [lockLeak] держит прокси на мёртвом
-/// порту после аварии ядра, [cleanupAfterCrash] при старте снимает только
-/// то, что включали мы сами.
+/// Same logic as the Windows registry: [lockLeak] keeps the proxy on a dead
+/// port after the core crashes, [cleanupAfterCrash] at startup removes only
+/// what we turned on ourselves.
 class MacSystemProxy {
   MacSystemProxy({NetworkSetupRunner? run}) : _run = run ?? _runNetworkSetup;
 
@@ -124,8 +141,8 @@ class MacSystemProxy {
   static const _savedKey = 'proxy.mac.saved';
   static const _oursKey = 'proxy.ours';
 
-  /// Локальные адреса мимо прокси: иначе браузер проксирует и `localhost`,
-  /// и адреса локальной сети.
+  /// Local addresses bypass the proxy: otherwise the browser proxies
+  /// `localhost` and LAN addresses too.
   static const localBypass = [
     'localhost',
     '127.0.0.1',
@@ -134,14 +151,14 @@ class MacSystemProxy {
     '169.254/16',
   ];
 
-  /// Метка «наш прокси» в настройках: `http 127.0.0.1:10808` или
-  /// `socks 127.0.0.1:10808`. По ней после аварии отличаем свой прокси от
-  /// чужого (Proxyman, Charles, Clash и т.п.).
+  /// The "our proxy" label in settings: `http 127.0.0.1:10808` or
+  /// `socks 127.0.0.1:10808`. After a crash it tells our proxy apart from
+  /// someone else's (Proxyman, Charles, Clash and the like).
   static String oursLabel(String host, int port, {required bool socks}) =>
       '${socks ? 'socks' : 'http'} $host:$port';
 
-  /// Разбор `networksetup -listallnetworkservices`: первая строка —
-  /// пояснение, выключенные службы помечены `*`.
+  /// Parses `networksetup -listallnetworkservices`: the first line is a note,
+  /// disabled services are marked with `*`.
   static List<String> parseServices(String output) => const LineSplitter()
       .convert(output)
       .skip(1)
@@ -149,16 +166,16 @@ class MacSystemProxy {
       .where((line) => line.isNotEmpty && !line.startsWith('*'))
       .toList();
 
-  /// Разбор `networksetup -getproxybypassdomains`: строка-пояснение
-  /// «There aren't any bypass domains…» означает пустой список.
+  /// Parses `networksetup -getproxybypassdomains`: the note "There aren't any
+  /// bypass domains…" means an empty list.
   static List<String> parseBypass(String output) => const LineSplitter()
       .convert(output)
       .map((line) => line.trim())
       .where((line) => line.isNotEmpty && !line.startsWith('There aren'))
       .toList();
 
-  /// Исключения дописываются к текущим, а не заменяются: набор пользователя
-  /// возвращается при отключении в том же виде.
+  /// Exceptions are appended to the current ones, not replaced: the user's
+  /// set comes back unchanged on disconnect.
   static List<String> withLocalBypass(List<String> current) => [
     ...current,
     ...localBypass.where(
@@ -199,10 +216,10 @@ class MacSystemProxy {
 
     final prefs = await SharedPreferences.getInstance();
     final saved = _readSaved(prefs);
-    // Снимок пишется только при первом включении: повторный старт после
-    // аварии не должен затереть настройки пользователя нашими.
+    // The snapshot is written only on the first enable: a restart after a
+    // crash must not overwrite the user's settings with ours.
     for (final service in list) {
-      saved[service] ??= await snapshot(service);
+      saved[service] ??= (await snapshot(service)).withoutOurs(host, port);
     }
     await prefs.setString(
       _savedKey,
@@ -250,7 +267,7 @@ class MacSystemProxy {
     final saved = _readSaved(prefs);
     final present = (await services()).toSet();
     for (final MapEntry(key: service, value: snap) in saved.entries) {
-      // Служба могла пропасть (отключили USB-модем): вернуть некуда.
+      // The service may be gone (USB modem unplugged): nothing to restore.
       if (!present.contains(service)) continue;
       await _restore(service, snap);
     }
@@ -260,9 +277,9 @@ class MacSystemProxy {
   }
 
   Future<void> _restore(String service, MacServiceSnapshot snap) async {
-    // Адрес возвращается и пустым: иначе после отключения в настройках
-    // остался бы наш 127.0.0.1 (выключенный, но видный пользователю).
-    // `-set…proxy` попутно включает прокси, поэтому состояние — вторым шагом.
+    // An empty address is restored too: otherwise our 127.0.0.1 would stay in
+    // the settings after disconnect (off, but visible to the user).
+    // `-set…proxy` also turns the proxy on, so the state goes second.
     Future<void> put(String set, String state, MacProxyEntry entry) async {
       final port = entry.server.isEmpty ? '' : '${entry.port}';
       await _set([set, service, entry.server, port]);
@@ -279,9 +296,8 @@ class MacSystemProxy {
     await _setBypass(service, snap.bypass);
   }
 
-  /// Килл-свитч: при падении ядра прокси остаётся включённым на мёртвый
-  /// порт, и приложения, слушающие системный прокси, получают отказ вместо
-  /// прямого выхода в сеть.
+  /// Kill switch: when the core dies the proxy stays on a dead port, so apps
+  /// that follow the system proxy get a refusal instead of going direct.
   Future<void> lockLeak() async {
     final prefs = await SharedPreferences.getInstance();
     final ours = _parseOurs(prefs.getString(_oursKey));
@@ -299,9 +315,9 @@ class MacSystemProxy {
     }
   }
 
-  /// Откатывает прокси, оставшийся включённым после аварийного завершения.
-  /// Трогает настройки, только если хотя бы на одной службе стоит именно
-  /// наш прокси: иначе пользователь уже поставил свой, и ломать его нельзя.
+  /// Rolls back a proxy left on after a crash. Touches the settings only if at
+  /// least one service has exactly our proxy: otherwise the user has already
+  /// set their own, and it must not be broken.
   Future<void> cleanupAfterCrash() async {
     final prefs = await SharedPreferences.getInstance();
     final ours = _parseOurs(prefs.getString(_oursKey));
@@ -356,7 +372,8 @@ class MacSystemProxy {
 
   Future<void> _set(List<String> args) async {
     final result = await _run(args);
-    // networksetup пишет ошибки в stdout и не всегда меняет код возврата.
+    // networksetup writes errors to stdout and does not always change the
+    // exit code.
     final out = '${result.stdout}${result.stderr}'.trim();
     if (result.exitCode != 0 || out.contains('Error') || out.contains('** ')) {
       throw Exception('networksetup ${args.first} не выполнен: $out');

@@ -4,8 +4,8 @@ import 'package:client_vpn/mac_system_proxy.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Поддельный `networksetup`: держит настройки служб в памяти и отвечает
-/// в том же текстовом виде, что настоящий.
+/// A fake `networksetup`: keeps service settings in memory and answers in the
+/// same text format as the real one.
 class FakeNetworkSetup {
   FakeNetworkSetup(List<String> services, {List<String> disabled = const []})
     : _services = services,
@@ -56,8 +56,8 @@ class FakeNetworkSetup {
       r'^-set(web|secureweb|socksfirewall)proxy$',
     ).hasMatch(cmd)) {
       final kind = cmd.substring(4, cmd.length - 5);
-      // Настоящий networksetup при -setwebproxy сразу включает прокси;
-      // нужное состояние код выставляет следующей командой.
+      // The real networksetup turns the proxy on with -setwebproxy; the code
+      // sets the wanted state with the next command.
       proxies[args[1]]![kind] = MacProxyEntry(
         enabled: true,
         server: args[2],
@@ -183,6 +183,21 @@ void main() {
     expect(fake.proxies['Wi-Fi']!['web']!.enabled, isFalse);
   });
 
+  test('a proxy of ours left on by a crash is not saved as the user\'s', () async {
+    // The previous run died with our proxy on and the keys already cleared.
+    final fake = FakeNetworkSetup(['Wi-Fi']);
+    const ours = MacProxyEntry(enabled: true, server: '127.0.0.1', port: 10808);
+    fake.proxies['Wi-Fi']!['web'] = ours;
+    fake.proxies['Wi-Fi']!['secureweb'] = ours;
+    final proxy = MacSystemProxy(run: fake.call);
+
+    await proxy.enable('127.0.0.1', 10808);
+    await proxy.disable();
+
+    expect(fake.proxies['Wi-Fi']!['web'], MacProxyEntry.off);
+    expect(fake.proxies['Wi-Fi']!['secureweb'], MacProxyEntry.off);
+  });
+
   test('пропавшая служба при отключении пропускается', () async {
     final fake = FakeNetworkSetup(['Wi-Fi', 'iPhone USB']);
     final proxy = MacSystemProxy(run: fake.call);
@@ -199,7 +214,7 @@ void main() {
     final proxy = MacSystemProxy(run: fake.call);
 
     await proxy.enable('127.0.0.1', 10808);
-    // Пользователь или система сбросили прокси, пока ядро падало.
+    // The user or the system reset the proxy while the core was crashing.
     fake.proxies['Wi-Fi']!['web'] = MacProxyEntry.off;
     await proxy.lockLeak();
     expect(

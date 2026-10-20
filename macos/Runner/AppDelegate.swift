@@ -100,14 +100,21 @@ final class AppChannels {
   }
 
   /// true: terminate right away. Otherwise the request goes to Dart; if it
-  /// does not answer within 5 seconds (hung), the app terminates anyway: a
-  /// quit that does not work is worse than an orphan the watchdog will stop.
+  /// does not answer within `quitTimeout` (hung), the app terminates anyway:
+  /// a quit that does not work is worse than an orphan the watchdog will stop.
+  ///
+  /// The timeout must cover a normal disconnect: restoring the proxy takes
+  /// about 36 `networksetup` calls of ~0.13 s each on a Mac with five network
+  /// services, plus up to 5 s for the core to exit. With 5 s the app was
+  /// killed halfway and the system proxy stayed on a dead port.
+  private let quitTimeout: TimeInterval = 20
+
   func shouldTerminate() -> Bool {
     guard !quitAllowed, let app = app else { return true }
     if quitRequested { return false }
     quitRequested = true
     app.invokeMethod("quitRequested", arguments: nil)
-    DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
+    DispatchQueue.main.asyncAfter(deadline: .now() + quitTimeout) { [weak self] in
       self?.quitAllowed = true
       NSApp.terminate(nil)
     }
