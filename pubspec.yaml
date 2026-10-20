@@ -32,7 +32,7 @@ dependencies:
   # gRPC-клиент к StatsService ядра: на десктопе трафик туннеля виден только
   # в счётчиках Xray (в журнале доступа байтов нет). Сообщения QueryStats
   # кодируются вручную, поэтому protoc и пакет protobuf не нужны.
-  grpc: ^4.0.0
+  grpc: ^5.2.0
 
 dev_dependencies:
   flutter_test:
