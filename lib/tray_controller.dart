@@ -42,6 +42,12 @@ class NativeTrayPort implements TrayPort {
   Image? _image;
   final List<MenuItem> _items = [];
   final List<ListenerId> _listeners = [];
+  final List<(MenuItem, ListenerId)> _itemListeners = [];
+
+  /// macOS only: a disabled first menu row with the same text as the tooltip.
+  /// A menu bar tooltip does not show while the app is in the background,
+  /// which is almost always the case for a menu bar app.
+  MenuItem? _statusItem;
 
   @override
   void mount({
@@ -64,17 +70,28 @@ class NativeTrayPort implements TrayPort {
     icon.icon = image;
 
     icon.setTooltip(tooltip);
-    icon.setContextMenu(_buildMenu(rows));
+    icon.setContextMenu(
+      _buildMenu(rows, status: Platform.isMacOS ? tooltip : null),
+    );
     icon.setContextMenuTrigger(ContextMenuTrigger.rightClicked);
     _listeners.add(icon.addListener((event) {
       if (event is TrayIconClickedEvent) onIconClick();
     }));
   }
 
-  Menu _buildMenu(List<TrayMenuRow> rows) {
+  Menu _buildMenu(List<TrayMenuRow> rows, {String? status}) {
     final menu = Menu.create();
     if (menu == null) throw const TrayIconUnavailable('меню не создаётся');
     _menu = menu;
+    if (status != null) {
+      final item = MenuItem.createWithLabelAndType(status, MenuItemType.normal);
+      if (item == null) throw const TrayIconUnavailable('пункт меню не создаётся');
+      item.isEnabled = false;
+      _items.add(item);
+      _statusItem = item;
+      menu.addItem(item);
+      menu.addSeparator();
+    }
     for (final row in rows) {
       final label = row.label;
       if (label == null) {
@@ -87,6 +104,16 @@ class NativeTrayPort implements TrayPort {
       menu.addItem(item);
       final onTap = row.onTap;
       if (onTap == null) continue;
+      if (Platform.isMacOS) {
+        // On macOS the click is emitted by the menu item itself, not by the
+        // menu: a listener on the menu never fired, so Show window and Quit
+        // did nothing. Other platforms keep the menu listener unchanged.
+        final id = item.addListener((event) {
+          if (event is MenuItemClickedEvent) onTap();
+        });
+        _itemListeners.add((item, id));
+        continue;
+      }
       final id = item.id;
       menu.addListener((event) {
         if (event is MenuItemClickedEvent && event.itemId == id) onTap();
@@ -98,6 +125,7 @@ class NativeTrayPort implements TrayPort {
   @override
   void setTooltip(String tooltip) {
     _icon?.setTooltip(tooltip);
+    _statusItem?.label = tooltip;
   }
 
   @override
@@ -112,6 +140,11 @@ class NativeTrayPort implements TrayPort {
       icon.setContextMenu(null);
       icon.dispose();
     }
+    for (final (item, id) in _itemListeners) {
+      item.removeListener(id);
+    }
+    _itemListeners.clear();
+    _statusItem = null;
     // Order matters: the icon holds the menu, so the menu is released after.
     for (final item in _items) {
       item.dispose();
