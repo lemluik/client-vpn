@@ -4,23 +4,26 @@ import ServiceManagement
 
 @main
 class AppDelegate: FlutterAppDelegate {
+  /// AppKit treats a window hidden to the menu bar (`orderOut`) as the last
+  /// window closed: with `true`, Minimize quit the app right away. Quitting
+  /// stays with Dart: the close prompt, the Quit menu item and Cmd+Q.
   override func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
-    return true
+    return false
   }
 
   override func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {
     return true
   }
 
-  /// Cmd+Q, «Завершить» в Dock и выход системы идут мимо Dart. Без этого ядро
-  /// снял бы только сторож, а системный прокси остался бы на мёртвом порту:
-  /// интернет пропал бы до следующего запуска. Поэтому выход сначала уходит
-  /// в Dart — он отключается и сам разрешает завершение.
+  /// Cmd+Q, Quit in the Dock and system logout bypass Dart. Without this only
+  /// the watchdog would stop the core, and the system proxy would stay on a
+  /// dead port: no internet until the next launch. So quitting goes to Dart
+  /// first; it disconnects and then allows termination itself.
   override func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
     return AppChannels.shared.shouldTerminate() ? .terminateNow : .terminateCancel
   }
 
-  /// Клик по значку в Dock возвращает окно, спрятанное в строку меню.
+  /// Clicking the Dock icon brings back a window hidden to the menu bar.
   override func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
     if !flag {
       mainFlutterWindow?.makeKeyAndOrderFront(self)
@@ -29,7 +32,7 @@ class AppDelegate: FlutterAppDelegate {
     return true
   }
 
-  /// Ссылки `vless://`, `trojan://`, `vmess://` из браузера и мессенджеров.
+  /// `vless://`, `trojan://` and `vmess://` links from browsers and messengers.
   override func application(_ application: NSApplication, open urls: [URL]) {
     for url in urls {
       AppChannels.shared.open(link: url.absoluteString)
@@ -37,19 +40,19 @@ class AppDelegate: FlutterAppDelegate {
   }
 }
 
-/// Каналы с Dart: те же имена и методы, что у Android, поэтому общий код
-/// платформу не различает.
+/// Channels to Dart: same names and methods as on Android, so the shared code
+/// does not need to tell the platforms apart.
 final class AppChannels {
   static let shared = AppChannels()
 
   private var app: FlutterMethodChannel?
   private var deepLink: FlutterMethodChannel?
 
-  /// Ссылка холодного старта ждёт, пока Dart подпишется (`takePending`).
+  /// A cold-start link waits until Dart subscribes (`takePending`).
   private var pendingLink: String?
   private var dartTookLinks = false
 
-  /// Dart отключился и разрешил выход.
+  /// Dart has disconnected and allowed the app to quit.
   private var quitAllowed = false
   private var quitRequested = false
 
@@ -96,9 +99,9 @@ final class AppChannels {
     }
   }
 
-  /// true — можно завершаться сразу. Иначе просьба ушла в Dart; если он не
-  /// ответил за 5 секунд (завис), приложение всё равно завершается: выход,
-  /// который не работает, хуже сироты, которую снимет сторож.
+  /// true: terminate right away. Otherwise the request goes to Dart; if it
+  /// does not answer within 5 seconds (hung), the app terminates anyway: a
+  /// quit that does not work is worse than an orphan the watchdog will stop.
   func shouldTerminate() -> Bool {
     guard !quitAllowed, let app = app else { return true }
     if quitRequested { return false }
@@ -111,8 +114,8 @@ final class AppChannels {
     return false
   }
 
-  /// Автозапуск — «Объекты входа» системы (SMAppService, macOS 13+).
-  /// Состояние читается у системы: пользователь мог выключить его там.
+  /// Autostart is a system Login Item (SMAppService, macOS 13+).
+  /// The state is read from the system: the user may have turned it off there.
   static func isAutoStart() -> Bool {
     if #available(macOS 13.0, *) {
       return SMAppService.mainApp.status == .enabled
