@@ -9,12 +9,13 @@ void main() {
     'macOS: ядро и geo-базы в ресурсах бандла, затем папка разработчика',
     () {
       const app = '/Applications/client_vpn.app/Contents';
-      final candidates = DesktopCore.xrayCandidates(
-        '$app/MacOS/client_vpn',
-        macos: true,
-      );
+      final exe = p.join(app, 'MacOS', 'client_vpn');
+      final candidates = DesktopCore.xrayCandidates(exe, macos: true);
+      // разделитель берём у p.join, а не пишем «/»: тест прогоняется и на
+      // рабочей машине разработчика под Windows, где p.join даёт обратную косую
+      final bundled = p.join(p.dirname(p.dirname(exe)), 'Resources', 'xray');
       expect(candidates, [
-        ('$app/Resources/xray/xray', '$app/Resources/xray'),
+        (p.join(bundled, 'xray'), bundled),
         (p.join('macos', 'xray', 'xray'), p.join('macos', 'xray')),
       ]);
     },
