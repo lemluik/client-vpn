@@ -575,6 +575,28 @@ class AppState extends ChangeNotifier {
     return null;
   }
 
+  /// Добавляет ключ, полученный по одноразовому коду (Д2-22): профиль
+  /// создаётся существующим механизмом `addLinks`, новое хранилище не плодим —
+  /// регион, вход и наблюдатель работают над тем же профилем подписки.
+  /// Возвращает текст ошибки или null.
+  Future<String?> addClaimedKey({
+    required String name,
+    required String link,
+  }) async {
+    final ShareLink parsed;
+    try {
+      parsed = parseShareLink(link);
+    } on FormatException catch (error) {
+      // Ссылка держит ключ узла: причина уходит в журнал только через маску.
+      return maskSecrets('Ключ не добавлен: ${error.message}');
+    }
+    final profile = await _store.addLinks(name: name, links: [parsed]);
+    await _store.setActive(profile.id);
+    _addLog('Ключ добавлен по коду');
+    notifyListeners();
+    return null;
+  }
+
   /// Добавляет подписку по адресу и сразу её получает.
   Future<String?> addSubscription(String url) async {
     if (url.trim().isEmpty) return 'Введите адрес подписки';

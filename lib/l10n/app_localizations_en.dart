@@ -648,4 +648,82 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get fragmentApplied => 'Setting applied, the connection is back up';
+
+  @override
+  String get keyClaimMenuItem => 'Add with a code from your service account';
+
+  @override
+  String get keyClaimMenuItemSubtitle =>
+      'The service chat issues a one-time code; no login is requested';
+
+  @override
+  String get keyClaimScreenTitle => 'Connect with a code';
+
+  @override
+  String get keyHeaderCodeLabel => 'Code from the service chat';
+
+  @override
+  String get keyHeaderCodeHint => 'One-time code';
+
+  @override
+  String get keyClaimSubmit => 'Show active keys';
+
+  @override
+  String get keyClaimInfo =>
+      'The service chat issues the code with one command; it lives briefly and works once. The client never asks for or sends your Telegram login.';
+
+  @override
+  String get keyClaimNeedCode => 'Enter the code from the service chat';
+
+  @override
+  String get keyClaimNeedChoice => 'Choose a key from the list';
+
+  @override
+  String get keyClaimChooseTitle => 'Active keys of this account';
+
+  @override
+  String get keyClaimChooseHint => 'Choose a connection';
+
+  @override
+  String get keyClaimConnectSelected => 'Add the selected key';
+
+  @override
+  String get keyClaimEntryUnknown => 'entry not given';
+
+  @override
+  String get keyClaimNoExpiry => 'no expiry';
+
+  @override
+  String get keyClaimTypeTrial => 'trial';
+
+  @override
+  String get keyClaimTypeRegular => 'regular';
+
+  @override
+  String get keyClaimNone => 'No keys have been issued for this account';
+
+  @override
+  String get keyClaimRetry => 'Retry';
+
+  @override
+  String get keyClaimConnectionExpired =>
+      'The connection has ended. Request a new code in the service chat.';
+
+  @override
+  String get keyClaimNewCode => 'Request a new code';
+
+  @override
+  String keyClaimAdded(String name) {
+    return 'Key “$name” added';
+  }
+
+  @override
+  String keyClaimConnected(String name) {
+    return 'Key “$name” connected';
+  }
+
+  @override
+  String keyClaimFailed(String message) {
+    return 'Could not fetch keys: $message';
+  }
 }
