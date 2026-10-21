@@ -109,13 +109,34 @@ def extra_patterns():
     return out
 
 
+def git_ignored(root):
+    """Файлы, которые git не публикует: локальный ключ подписи, кэши, артефакты.
+
+    Гейт ловит то, что может уйти в открытый репозиторий, поэтому проигнорированные
+    git файлы он не читает. Добавленный силой (`git add -f`) файл перестаёт быть
+    «прочим» и снова попадает в проверку; без git сканируется всё дерево.
+    """
+    try:
+        out = subprocess.run(
+            ['git', 'ls-files', '--others', '--ignored', '--exclude-standard'],
+            cwd=root, capture_output=True, text=True, timeout=120)
+    except (OSError, subprocess.SubprocessError):
+        return set()
+    if out.returncode != 0:
+        return set()
+    return {line.strip() for line in out.stdout.split('\n') if line.strip()}
+
+
 def text_files(root):
+    ignored = git_ignored(root)
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = sorted(d for d in dirnames if d not in SKIP_DIRS)
         for name in sorted(filenames):
             if name in SKIP_NAMES or not name.endswith(TEXT_EXT):
                 continue
             path = os.path.join(dirpath, name)
+            if os.path.relpath(path, root).replace(os.sep, '/') in ignored:
+                continue
             if os.path.getsize(path) > MAX_FILE:
                 continue
             try:
