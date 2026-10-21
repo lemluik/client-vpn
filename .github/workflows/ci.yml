@@ -88,9 +88,15 @@ jobs:
     needs: checks
     if: >-
       startsWith(github.ref, 'refs/tags/v') ||
+      github.event_name == 'pull_request' ||
       (github.event_name == 'workflow_dispatch' && github.event.inputs.build == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    env:
+      KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
     steps:
       - uses: actions/checkout@v7
 
@@ -120,8 +126,46 @@ jobs:
           sed -i 's/-Xmx8G/-Xmx3G/; s/MaxMetaspaceSize=4G/MaxMetaspaceSize=1G/'
           android/gradle.properties
 
+      # Релизная подпись: ключ лежит в секретах репозитория и распаковывается во
+      # временный каталог раннера — в дерево репозитория он не пишется,
+      # android/key.properties в .gitignore. Без секретов (запрос из чужого
+      # ответвления) сборка остаётся на отладочном ключе, но релиз по тегу в этом
+      # случае не собирается вовсе: следующий шаг его останавливает.
+      - name: Ключ подписи релиза
+        if: ${{ env.KEYSTORE_B64 != '' }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/keystore"
+          printf '%s' "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/keystore/release.jks"
+          umask 077
+          {
+            printf 'keyAlias=%s\n' "$KEY_ALIAS"
+            printf 'keyPassword=%s\n' "$KEY_PASSWORD"
+            printf 'storeFile=%s/keystore/release.jks\n' "$RUNNER_TEMP"
+            printf 'storePassword=%s\n' "$KEYSTORE_PASSWORD"
+          } > android/key.properties
+
+      - name: Релиз без ключа подписи не собираем
+        if: ${{ startsWith(github.ref, 'refs/tags/v') && env.KEYSTORE_B64 == '' }}
+        run: |
+          echo "::error::Секрета ANDROID_KEYSTORE_BASE64 нет: релизный пакет остался бы на одноразовом отладочном ключе раннера, и обновление поверх него не встанет"
+          exit 1
+
       - name: Сборка APK
         run: flutter build apk --release
+
+      # Пакет с отладочным ключом не даёт обновиться поверх и не принимается
+      # магазинами, поэтому подпись проверяется в том же прогоне (Д-202610-20)
+      - name: Проверка подписи пакета
+        if: ${{ env.KEYSTORE_B64 != '' }}
+        run: |
+          set -euo pipefail
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)"
+          "$APKSIGNER" verify --print-certs build/app/outputs/flutter-apk/app-release.apk | tee certs.txt
+          if grep -q "CN=Android Debug" certs.txt; then
+            echo "::error::APK подписан отладочным ключом, а не релизным"
+            exit 1
+          fi
 
       # артефакт магазина обязан нести лицензию и уведомления (пункт У-6),
       # а релиз — контрольную сумму (R1.10)
@@ -146,6 +190,7 @@ jobs:
     needs: checks
     if: >-
       startsWith(github.ref, 'refs/tags/v') ||
+      github.event_name == 'pull_request' ||
       (github.event_name == 'workflow_dispatch' && github.event.inputs.build == 'true')
     runs-on: windows-latest
     timeout-minutes: 25
