@@ -370,6 +370,59 @@ class AppLocalizationsEn extends AppLocalizations {
       'The browser did not open — copy the link instead';
 
   @override
+  String get updateCritical => 'Critical update';
+
+  @override
+  String get updateNow => 'Update';
+
+  @override
+  String get updateLater => 'Later';
+
+  @override
+  String get updateDisableAutoCheck => 'Disable auto-check';
+
+  @override
+  String get updateDownloading => 'Downloading update…';
+
+  @override
+  String get updateInstallFailed => 'Failed to launch installation';
+
+  @override
+  String get updateHashMismatch => 'Checksum mismatch';
+
+  @override
+  String get updateDownloadFailed => 'Failed to download update';
+
+  @override
+  String get updateApplying => 'Preparing installation…';
+
+  @override
+  String get updateWillRestart =>
+      'The app will close and update itself — the new version opens in a few seconds';
+
+  @override
+  String updateApplied(String version) {
+    return 'Update installed: version $version';
+  }
+
+  @override
+  String get updateUnpackFailed =>
+      'Could not unpack the update — opening the download link';
+
+  @override
+  String get updateNoWriteAccess =>
+      'The app folder is read-only — opening the download link';
+
+  @override
+  String get settingsUpdateSection => 'Updates';
+
+  @override
+  String get settingsAutoUpdate => 'Check automatically';
+
+  @override
+  String get settingsAutoUpdateSubtitle => 'Check for new version on startup';
+
+  @override
   String get settingsScreenTitle => 'Settings';
 
   @override

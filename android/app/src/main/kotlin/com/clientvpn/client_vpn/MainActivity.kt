@@ -10,6 +10,7 @@ import android.net.VpnService
 import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
+import androidx.core.content.FileProvider
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -74,6 +75,7 @@ class MainActivity : FlutterActivity() {
                 "setExcludedApps" -> setExcludedApps(call.arguments, result)
                 "listApps" -> listApps(result)
                 "openUrl" -> openUrl(call.arguments, result)
+                "installApk" -> installApk(call.arguments, result)
                 else -> result.notImplemented()
             }
         }
@@ -262,6 +264,40 @@ class MainActivity : FlutterActivity() {
             result.success(true)
         } catch (e: Exception) {
             result.success(false)
+        }
+    }
+
+    /** Устанавливает APK из каталога кеша приложения. */
+    private fun installApk(arguments: Any?, result: MethodChannel.Result) {
+        val filePath = (arguments as? Map<*, *>)?.get("filePath") as? String
+        if (filePath == null) {
+            result.error("bad_argument", "Не передан путь к APK", null)
+            return
+        }
+
+        val file = File(filePath)
+        if (!file.exists()) {
+            result.error("file_not_found", "APK не найден: $filePath", null)
+            return
+        }
+
+        try {
+            val uri = FileProvider.getUriForFile(
+                this,
+                "${packageName}.fileprovider",
+                file
+            )
+
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "application/vnd.android.package-archive")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+
+            startActivity(intent)
+            result.success(null)
+        } catch (e: Exception) {
+            result.error("install_failed", e.message, null)
         }
     }
 

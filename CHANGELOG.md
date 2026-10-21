@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.4.1] - 2026-10-21
 
 ### Added
 
@@ -27,6 +27,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   The tile starts the tunnel directly only while a freshness marker on the saved config stands —
   every successful in-app connection sets it — otherwise the tap opens the app and connects from
   there, and with no saved connection the tile is greyed out.
+- Android checks for a newer release a few seconds after start and offers to update in place: the
+  package is downloaded over HTTPS, its SHA-256 is checked against the release's own checksum file
+  before the installer is opened, "Later" snoozes the offer for a week, and the whole check can be
+  switched off in settings
+- Windows updates itself in place the same way: the zip is downloaded and checked, unpacked into a
+  staging folder, and a detached script waits for the app to exit, swaps the files and relaunches
+  it. Files the package does not carry — the core binary and the geo databases — are left alone, and
+  a failed swap rolls back from the backup copy it made. If the install folder is read-only the app
+  says so and opens the download link instead of asking Windows for elevated rights behind the
+  user's back
 
 ### Security
 
@@ -38,6 +48,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [0.4.0] - 2026-10-17
 
 ### Added
+
 
 - Closing the window asks what to do instead of guessing: minimize to the tray keeps the tunnel
   running, quit tears it down, and the checkbox remembers which one was chosen. Both answers stay
@@ -96,6 +107,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Pressing "Update" in the update dialog closed the screen under it instead of starting the
+  download. Both the button and the callback the dialog was given popped the route, so the first
+  pop returned `null` — read as "turn automatic checks off" — and the second removed the home
+  screen, leaving a black window. Dismissal now belongs to the callbacks alone.
 - The tray tooltip now uses the method the Windows plugin actually implements.
   `setTitle` only exists on macOS, so on Windows mounting the tray threw
   `MissingPluginException`, the app believed no tray was available, and closing the

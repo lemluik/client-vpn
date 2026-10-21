@@ -38,11 +38,21 @@ class ReleaseInfo {
     required this.version,
     required this.notes,
     required this.links,
+    this.sha256,
+    this.checksums = const {},
   });
 
   final String version;
   final String notes;
   final Map<String, String> links;
+
+  /// Контрольная сумма пакета из собственного манифеста. Companion-ассет
+  /// `.sha256` на GitHub — это не сама сумма, а адрес файла с ней, поэтому сумма
+  /// и ссылка на неё живут отдельно: поле [sha256] и метод [checksumUrlFor].
+  final String? sha256;
+
+  /// Companion-файлы с суммой: имя пакета (без `.sha256`) → адрес загрузки.
+  final Map<String, String> checksums;
 
   /// Адрес под текущую платформу: ищем по ключу (`windows`, `android`,
   /// `macos`), потом по имени файла, потом первую ссылку. [anyAsLast] = false
@@ -58,6 +68,19 @@ class ReleaseInfo {
     if (!anyAsLast) return null;
     return links.isEmpty ? null : links.values.first;
   }
+
+  /// Адрес companion-файла с SHA-256 для пакета [downloadUrl]: ищем ассет,
+  /// ссылка которого ровно эта же или эта плюс суффикс `.sha256`.
+  /// `null` — суммы на площадке нет.
+  String? checksumUrlFor(String downloadUrl) {
+    if (checksums.isEmpty) return null;
+    for (final entry in links.entries) {
+      if (entry.value != downloadUrl) continue;
+      final sum = checksums[entry.key] ?? checksums['${entry.key}.sha256'];
+      if (sum != null) return sum;
+    }
+    return null;
+  }
 }
 
 /// Разбирает манифест релиза. Поддержаны два формата, и оба — без серверной
@@ -71,12 +94,19 @@ ReleaseInfo? parseRelease(Object? json) {
   if (tag is String && tag.isNotEmpty) {
     final assets = json['assets'];
     final links = <String, String>{};
+    final checksums = <String, String>{};
     if (assets is List) {
       for (final asset in assets.whereType<Map>()) {
         final name = asset['name'];
         final url = asset['browser_download_url'];
         if (name is String && url is String && url.isNotEmpty) {
-          links[name.toLowerCase()] = url;
+          // Companion-файл с SHA-256 (`app.apk.sha256`) — не ссылка на пакет.
+          final lower = name.toLowerCase();
+          if (lower.endsWith('.sha256')) {
+            checksums[lower.substring(0, lower.length - '.sha256'.length)] = url;
+            continue;
+          }
+          links[lower] = url;
         }
       }
     }
@@ -84,6 +114,7 @@ ReleaseInfo? parseRelease(Object? json) {
       version: normalizeVersion(tag),
       notes: json['body'] is String ? json['body'] as String : '',
       links: links,
+      checksums: checksums,
     );
   }
 
@@ -91,11 +122,22 @@ ReleaseInfo? parseRelease(Object? json) {
   final version = json['version'];
   if (version is! String || version.isEmpty) return null;
   final links = <String, String>{};
+  String? manifestSha;
   final files = json['files'];
   if (files is Map) {
     files.forEach((key, value) {
-      if (key is String && value is String && value.isNotEmpty) {
-        links[key.toLowerCase()] = value;
+      if (key is! String) return;
+      final lower = key.toLowerCase();
+      if (value is String && value.isNotEmpty) {
+        links[lower] = value;
+        return;
+      }
+      // Раздел вида {"android": {"url": …, "sha256": …}}.
+      if (value is Map) {
+        final url = value['url'];
+        if (url is String && url.isNotEmpty) links[lower] = url;
+        final sum = value['sha256'];
+        if (sum is String && sum.isNotEmpty) manifestSha = sum.toLowerCase();
       }
     });
   }
@@ -103,10 +145,15 @@ ReleaseInfo? parseRelease(Object? json) {
   if (links.isEmpty && single is String && single.isNotEmpty) {
     links['download'] = single;
   }
+  final flat = json['sha256'];
+  if (manifestSha == null && flat is String && flat.isNotEmpty) {
+    manifestSha = flat.toLowerCase();
+  }
   return ReleaseInfo(
     version: normalizeVersion(version),
     notes: json['notes'] is String ? json['notes'] as String : '',
     links: links,
+    sha256: manifestSha,
   );
 }
 

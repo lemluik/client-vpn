@@ -197,6 +197,29 @@
   "updateCopied": "Ссылка скопирована",
   "updateNoLink": "Ссылка на эту платформу в манифесте не указана",
   "updateOpenFailed": "Браузер не открылся — скопируйте ссылку",
+  "updateCritical": "Критическое обновление",
+  "updateNow": "Обновить",
+  "updateLater": "Позже",
+  "updateDisableAutoCheck": "Отключить автопроверку",
+  "updateDownloading": "Скачивание обновления…",
+  "updateInstallFailed": "Не удалось запустить установку",
+  "updateHashMismatch": "Контрольная сумма не совпадает",
+  "updateDownloadFailed": "Не удалось скачать обновление",
+  "updateApplying": "Готовлю установку…",
+  "updateWillRestart": "Приложение закроется и обновится само — через несколько секунд откроется новая версия",
+  "updateApplied": "Обновление установлено: версия {version}",
+  "@updateApplied": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "updateUnpackFailed": "Не удалось распаковать обновление — открываю ссылку загрузки",
+  "updateNoWriteAccess": "Каталог с приложением доступен только для чтения — открываю ссылку загрузки",
+  "settingsUpdateSection": "Обновления",
+  "settingsAutoUpdate": "Проверять автоматически",
+  "settingsAutoUpdateSubtitle": "Проверять наличие новой версии при запуске",
   "settingsScreenTitle": "Настройки",
   "settingsThemeSection": "Оформление",
   "themeSystem": "Системная",

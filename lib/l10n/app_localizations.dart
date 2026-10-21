@@ -740,6 +740,102 @@ abstract class AppLocalizations {
   /// **'Браузер не открылся — скопируйте ссылку'**
   String get updateOpenFailed;
 
+  /// No description provided for @updateCritical.
+  ///
+  /// In ru, this message translates to:
+  /// **'Критическое обновление'**
+  String get updateCritical;
+
+  /// No description provided for @updateNow.
+  ///
+  /// In ru, this message translates to:
+  /// **'Обновить'**
+  String get updateNow;
+
+  /// No description provided for @updateLater.
+  ///
+  /// In ru, this message translates to:
+  /// **'Позже'**
+  String get updateLater;
+
+  /// No description provided for @updateDisableAutoCheck.
+  ///
+  /// In ru, this message translates to:
+  /// **'Отключить автопроверку'**
+  String get updateDisableAutoCheck;
+
+  /// No description provided for @updateDownloading.
+  ///
+  /// In ru, this message translates to:
+  /// **'Скачивание обновления…'**
+  String get updateDownloading;
+
+  /// No description provided for @updateInstallFailed.
+  ///
+  /// In ru, this message translates to:
+  /// **'Не удалось запустить установку'**
+  String get updateInstallFailed;
+
+  /// No description provided for @updateHashMismatch.
+  ///
+  /// In ru, this message translates to:
+  /// **'Контрольная сумма не совпадает'**
+  String get updateHashMismatch;
+
+  /// No description provided for @updateDownloadFailed.
+  ///
+  /// In ru, this message translates to:
+  /// **'Не удалось скачать обновление'**
+  String get updateDownloadFailed;
+
+  /// No description provided for @updateApplying.
+  ///
+  /// In ru, this message translates to:
+  /// **'Готовлю установку…'**
+  String get updateApplying;
+
+  /// No description provided for @updateWillRestart.
+  ///
+  /// In ru, this message translates to:
+  /// **'Приложение закроется и обновится само — через несколько секунд откроется новая версия'**
+  String get updateWillRestart;
+
+  /// No description provided for @updateApplied.
+  ///
+  /// In ru, this message translates to:
+  /// **'Обновление установлено: версия {version}'**
+  String updateApplied(String version);
+
+  /// No description provided for @updateUnpackFailed.
+  ///
+  /// In ru, this message translates to:
+  /// **'Не удалось распаковать обновление — открываю ссылку загрузки'**
+  String get updateUnpackFailed;
+
+  /// No description provided for @updateNoWriteAccess.
+  ///
+  /// In ru, this message translates to:
+  /// **'Каталог с приложением доступен только для чтения — открываю ссылку загрузки'**
+  String get updateNoWriteAccess;
+
+  /// No description provided for @settingsUpdateSection.
+  ///
+  /// In ru, this message translates to:
+  /// **'Обновления'**
+  String get settingsUpdateSection;
+
+  /// No description provided for @settingsAutoUpdate.
+  ///
+  /// In ru, this message translates to:
+  /// **'Проверять автоматически'**
+  String get settingsAutoUpdate;
+
+  /// No description provided for @settingsAutoUpdateSubtitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Проверять наличие новой версии при запуске'**
+  String get settingsAutoUpdateSubtitle;
+
   /// No description provided for @settingsScreenTitle.
   ///
   /// In ru, this message translates to:

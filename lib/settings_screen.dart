@@ -15,6 +15,7 @@ import 'rules_screen.dart';
 import 'settings_store.dart';
 import 'split_screen.dart';
 import 'update_screen.dart';
+import 'update_service.dart';
 
 /// Настройки клиента: профили, оформление, запуск, маршрут и обслуживание.
 ///
@@ -166,6 +167,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
               trailing: const Icon(Icons.chevron_right),
               onTap: _editProbeTarget,
             ),
+            if (Platform.isAndroid || Platform.isWindows) ...[
+              _SectionTitle(l.settingsUpdateSection),
+              _AutoUpdateSwitch(),
+            ],
             ListTile(
               key: const ValueKey('update-source'),
               leading: const Icon(Icons.system_update_alt),
@@ -547,6 +552,57 @@ class _SectionDivider extends StatelessWidget {
     return const Padding(
       padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
       child: Divider(height: 1),
+    );
+  }
+}
+
+class _AutoUpdateSwitch extends StatefulWidget {
+  @override
+  State<_AutoUpdateSwitch> createState() => _AutoUpdateSwitchState();
+}
+
+class _AutoUpdateSwitchState extends State<_AutoUpdateSwitch> {
+  bool _enabled = true;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final service = UpdateService.instance;
+    final enabled = await service.isAutoCheckEnabled();
+    if (mounted) {
+      setState(() {
+        _enabled = enabled;
+        _loading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+
+    if (_loading) {
+      return const ListTile(
+        leading: CircularProgressIndicator(),
+        title: Text('Loading...'),
+      );
+    }
+
+    return SwitchListTile(
+      secondary: const Icon(Icons.system_update_alt),
+      title: Text(l.settingsAutoUpdate),
+      subtitle: Text(l.settingsAutoUpdateSubtitle),
+      value: _enabled,
+      onChanged: (value) async {
+        final service = UpdateService.instance;
+        await service.setAutoCheckEnabled(value);
+        setState(() => _enabled = value);
+      },
     );
   }
 }

@@ -109,6 +109,53 @@ void main() {
     expect(parseRelease({'notes': 'только текст'}), isNull);
   });
 
+  test('companion-ассет .sha256 суммой не считается и привязан к пакету', () {
+    final release = parseRelease({
+      'tag_name': 'v0.4.1',
+      'assets': [
+        {
+          'name': 'neutrino-android-v0.4.1.apk',
+          'browser_download_url':
+              'https://example.test/files/neutrino-android-v0.4.1.apk',
+        },
+        {
+          'name': 'neutrino-android-v0.4.1.apk.sha256',
+          'browser_download_url':
+              'https://example.test/files/neutrino-android-v0.4.1.apk.sha256',
+        },
+      ],
+    });
+    expect(release?.sha256, isNull);
+    expect(
+        release?.checksumUrlFor(
+            'https://example.test/files/neutrino-android-v0.4.1.apk'),
+        'https://example.test/files/neutrino-android-v0.4.1.apk.sha256');
+    // сумма привязана к этому пакету, а не к первой ссылке подряд
+    expect(release?.checksumUrlFor('https://example.test/other.zip'), isNull);
+  });
+
+  test('сумма собственного манифеста прочитана в обоих видах', () {
+    final nested = parseRelease({
+      'version': '0.5.0',
+      'files': {
+        'android': {
+          'url': 'https://example.test/a.apk',
+          'sha256': 'ABCDEF',
+        },
+      },
+    });
+    expect(nested?.sha256, 'abcdef');
+    expect(nested?.downloadUrlFor('android'), 'https://example.test/a.apk');
+
+    final flat = parseRelease({
+      'version': '0.5.0',
+      'url': 'https://example.test/a.apk',
+      'sha256': '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+    });
+    expect(flat?.sha256, flat?.sha256?.toLowerCase());
+    expect(flat?.checksums, isEmpty);
+  });
+
   test('источник с релизом новее текущей версии найден', () async {
     final feed = await _jsonFeed({
       'version': '9.9.9',

@@ -128,6 +128,29 @@
   "updateCopied": "Link copied",
   "updateNoLink": "The manifest has no link for this platform",
   "updateOpenFailed": "The browser did not open — copy the link instead",
+  "updateCritical": "Critical update",
+  "updateNow": "Update",
+  "updateLater": "Later",
+  "updateDisableAutoCheck": "Disable auto-check",
+  "updateDownloading": "Downloading update…",
+  "updateInstallFailed": "Failed to launch installation",
+  "updateHashMismatch": "Checksum mismatch",
+  "updateDownloadFailed": "Failed to download update",
+  "updateApplying": "Preparing installation…",
+  "updateWillRestart": "The app will close and update itself — the new version opens in a few seconds",
+  "updateApplied": "Update installed: version {version}",
+  "@updateApplied": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "updateUnpackFailed": "Could not unpack the update — opening the download link",
+  "updateNoWriteAccess": "The app folder is read-only — opening the download link",
+  "settingsUpdateSection": "Updates",
+  "settingsAutoUpdate": "Check automatically",
+  "settingsAutoUpdateSubtitle": "Check for new version on startup",
   "settingsScreenTitle": "Settings",
   "settingsThemeSection": "Appearance",
   "themeSystem": "System",

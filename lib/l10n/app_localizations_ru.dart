@@ -368,6 +368,60 @@ class AppLocalizationsRu extends AppLocalizations {
   String get updateOpenFailed => 'Браузер не открылся — скопируйте ссылку';
 
   @override
+  String get updateCritical => 'Критическое обновление';
+
+  @override
+  String get updateNow => 'Обновить';
+
+  @override
+  String get updateLater => 'Позже';
+
+  @override
+  String get updateDisableAutoCheck => 'Отключить автопроверку';
+
+  @override
+  String get updateDownloading => 'Скачивание обновления…';
+
+  @override
+  String get updateInstallFailed => 'Не удалось запустить установку';
+
+  @override
+  String get updateHashMismatch => 'Контрольная сумма не совпадает';
+
+  @override
+  String get updateDownloadFailed => 'Не удалось скачать обновление';
+
+  @override
+  String get updateApplying => 'Готовлю установку…';
+
+  @override
+  String get updateWillRestart =>
+      'Приложение закроется и обновится само — через несколько секунд откроется новая версия';
+
+  @override
+  String updateApplied(String version) {
+    return 'Обновление установлено: версия $version';
+  }
+
+  @override
+  String get updateUnpackFailed =>
+      'Не удалось распаковать обновление — открываю ссылку загрузки';
+
+  @override
+  String get updateNoWriteAccess =>
+      'Каталог с приложением доступен только для чтения — открываю ссылку загрузки';
+
+  @override
+  String get settingsUpdateSection => 'Обновления';
+
+  @override
+  String get settingsAutoUpdate => 'Проверять автоматически';
+
+  @override
+  String get settingsAutoUpdateSubtitle =>
+      'Проверять наличие новой версии при запуске';
+
+  @override
   String get settingsScreenTitle => 'Настройки';
 
   @override

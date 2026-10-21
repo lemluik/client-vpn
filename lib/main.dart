@@ -7,6 +7,7 @@ import 'package:flutter/services.dart' show MethodChannel, SystemNavigator;
 import 'package:window_manager/window_manager.dart';
 
 import 'app_state.dart';
+import 'auto_update_checker.dart';
 import 'close_prompt.dart';
 import 'home_screen.dart';
 import 'l10n/app_localizations.dart';
@@ -259,7 +260,14 @@ class _ClientVpnAppState extends State<ClientVpnApp> with WindowListener {
             final l10n = AppLocalizations.of(context);
             _l10n = l10n;
             _ensureTray(l10n);
-            return HomeScreen(state: widget.state);
+            return Stack(
+              children: [
+                HomeScreen(state: widget.state),
+                // Windows: перед подменой файлов приложение обязано выйти,
+                // иначе собственный exe заблокирован процессом.
+                AutoUpdateChecker(onQuit: _shutdown),
+              ],
+            );
           },
         ),
       ),
