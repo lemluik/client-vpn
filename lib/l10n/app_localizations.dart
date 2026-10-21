@@ -1231,6 +1231,144 @@ abstract class AppLocalizations {
   /// In ru, this message translates to:
   /// **'Настройка применена, подключение поднято заново'**
   String get fragmentApplied;
+
+  /// Пункт меню добавления Д2-22, нейтральное название
+  ///
+  /// In ru, this message translates to:
+  /// **'Добавить по коду из аккаунта сервиса'**
+  String get keyClaimMenuItem;
+
+  /// No description provided for @keyClaimMenuItemSubtitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Одноразовый код выдаёт чат сервиса; логин не запрашивается'**
+  String get keyClaimMenuItemSubtitle;
+
+  /// No description provided for @keyClaimScreenTitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Подключение по коду'**
+  String get keyClaimScreenTitle;
+
+  /// No description provided for @keyHeaderCodeLabel.
+  ///
+  /// In ru, this message translates to:
+  /// **'Код из чата сервиса'**
+  String get keyHeaderCodeLabel;
+
+  /// No description provided for @keyHeaderCodeHint.
+  ///
+  /// In ru, this message translates to:
+  /// **'Одноразовый код'**
+  String get keyHeaderCodeHint;
+
+  /// No description provided for @keyClaimSubmit.
+  ///
+  /// In ru, this message translates to:
+  /// **'Показать действующие ключи'**
+  String get keyClaimSubmit;
+
+  /// No description provided for @keyClaimInfo.
+  ///
+  /// In ru, this message translates to:
+  /// **'Код выдаёт чат сервиса одной командой; он живёт недолго и применяется один раз. Логин Telegram клиент не запрашивает и никуда не отправляет.'**
+  String get keyClaimInfo;
+
+  /// No description provided for @keyClaimNeedCode.
+  ///
+  /// In ru, this message translates to:
+  /// **'Введите код из чата сервиса'**
+  String get keyClaimNeedCode;
+
+  /// No description provided for @keyClaimNeedChoice.
+  ///
+  /// In ru, this message translates to:
+  /// **'Выберите ключ из списка'**
+  String get keyClaimNeedChoice;
+
+  /// No description provided for @keyClaimChooseTitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Действующие ключи этого аккаунта'**
+  String get keyClaimChooseTitle;
+
+  /// No description provided for @keyClaimChooseHint.
+  ///
+  /// In ru, this message translates to:
+  /// **'Выберите подключение'**
+  String get keyClaimChooseHint;
+
+  /// No description provided for @keyClaimConnectSelected.
+  ///
+  /// In ru, this message translates to:
+  /// **'Добавить выбранный ключ'**
+  String get keyClaimConnectSelected;
+
+  /// No description provided for @keyClaimEntryUnknown.
+  ///
+  /// In ru, this message translates to:
+  /// **'вход не указан'**
+  String get keyClaimEntryUnknown;
+
+  /// No description provided for @keyClaimNoExpiry.
+  ///
+  /// In ru, this message translates to:
+  /// **'без срока'**
+  String get keyClaimNoExpiry;
+
+  /// No description provided for @keyClaimTypeTrial.
+  ///
+  /// In ru, this message translates to:
+  /// **'пробный'**
+  String get keyClaimTypeTrial;
+
+  /// No description provided for @keyClaimTypeRegular.
+  ///
+  /// In ru, this message translates to:
+  /// **'обычный'**
+  String get keyClaimTypeRegular;
+
+  /// No description provided for @keyClaimNone.
+  ///
+  /// In ru, this message translates to:
+  /// **'Для этого аккаунта ключи не выпущены'**
+  String get keyClaimNone;
+
+  /// No description provided for @keyClaimRetry.
+  ///
+  /// In ru, this message translates to:
+  /// **'Повторить'**
+  String get keyClaimRetry;
+
+  /// No description provided for @keyClaimConnectionExpired.
+  ///
+  /// In ru, this message translates to:
+  /// **'Подключение закончилось. Запросите новый код в чате сервиса.'**
+  String get keyClaimConnectionExpired;
+
+  /// No description provided for @keyClaimNewCode.
+  ///
+  /// In ru, this message translates to:
+  /// **'Запросить новый код'**
+  String get keyClaimNewCode;
+
+  /// Ответ после ручного выбора из списка
+  ///
+  /// In ru, this message translates to:
+  /// **'Ключ «{name}» добавлен'**
+  String keyClaimAdded(String name);
+
+  /// Ответ после автоподключения единственного ключа
+  ///
+  /// In ru, this message translates to:
+  /// **'Ключ «{name}» подключён'**
+  String keyClaimConnected(String name);
+
+  /// Причина от транспорта: код, лимит попыток, недоступность
+  ///
+  /// In ru, this message translates to:
+  /// **'Не удалось получить ключи: {message}'**
+  String keyClaimFailed(String message);
 }
 
 class _AppLocalizationsDelegate

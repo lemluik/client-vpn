@@ -649,4 +649,82 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get fragmentApplied =>
       'Настройка применена, подключение поднято заново';
+
+  @override
+  String get keyClaimMenuItem => 'Добавить по коду из аккаунта сервиса';
+
+  @override
+  String get keyClaimMenuItemSubtitle =>
+      'Одноразовый код выдаёт чат сервиса; логин не запрашивается';
+
+  @override
+  String get keyClaimScreenTitle => 'Подключение по коду';
+
+  @override
+  String get keyHeaderCodeLabel => 'Код из чата сервиса';
+
+  @override
+  String get keyHeaderCodeHint => 'Одноразовый код';
+
+  @override
+  String get keyClaimSubmit => 'Показать действующие ключи';
+
+  @override
+  String get keyClaimInfo =>
+      'Код выдаёт чат сервиса одной командой; он живёт недолго и применяется один раз. Логин Telegram клиент не запрашивает и никуда не отправляет.';
+
+  @override
+  String get keyClaimNeedCode => 'Введите код из чата сервиса';
+
+  @override
+  String get keyClaimNeedChoice => 'Выберите ключ из списка';
+
+  @override
+  String get keyClaimChooseTitle => 'Действующие ключи этого аккаунта';
+
+  @override
+  String get keyClaimChooseHint => 'Выберите подключение';
+
+  @override
+  String get keyClaimConnectSelected => 'Добавить выбранный ключ';
+
+  @override
+  String get keyClaimEntryUnknown => 'вход не указан';
+
+  @override
+  String get keyClaimNoExpiry => 'без срока';
+
+  @override
+  String get keyClaimTypeTrial => 'пробный';
+
+  @override
+  String get keyClaimTypeRegular => 'обычный';
+
+  @override
+  String get keyClaimNone => 'Для этого аккаунта ключи не выпущены';
+
+  @override
+  String get keyClaimRetry => 'Повторить';
+
+  @override
+  String get keyClaimConnectionExpired =>
+      'Подключение закончилось. Запросите новый код в чате сервиса.';
+
+  @override
+  String get keyClaimNewCode => 'Запросить новый код';
+
+  @override
+  String keyClaimAdded(String name) {
+    return 'Ключ «$name» добавлен';
+  }
+
+  @override
+  String keyClaimConnected(String name) {
+    return 'Ключ «$name» подключён';
+  }
+
+  @override
+  String keyClaimFailed(String message) {
+    return 'Не удалось получить ключи: $message';
+  }
 }

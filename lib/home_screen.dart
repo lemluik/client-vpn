@@ -8,6 +8,7 @@ import 'log_screen.dart';
 import 'profile_store.dart';
 import 'provider.dart';
 import 'region.dart';
+import 'screens/key_claim/key_claim_screen.dart';
 import 'screens/registration/registration_screen.dart';
 import 'settings_screen.dart';
 import 'support_chat_screen.dart';
@@ -296,6 +297,18 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  /// Авторецепт ключей по коду (Д2-22): виден только когда конфигурация
+  /// внедрения задала точку контроля. Без адреса функция недоступна,
+  /// и открытый клиент не показывает путь к чужому сервису.
+  Future<void> _openKeyClaim() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute<void>(
+        builder: (context) => KeyClaimScreen(state: _state),
+      ),
+    );
+  }
+
   void _notify(String text) {
     if (!mounted) return;
     ScaffoldMessenger.of(context)
@@ -337,6 +350,17 @@ class _HomeScreenState extends State<HomeScreen> {
                   await _openRegistration();
                 },
               ),
+              if (_state.serviceConfig.controlPoint?.isNotEmpty ?? false)
+                ListTile(
+                  key: const ValueKey('add-by-code'),
+                  leading: const Icon(Icons.vpn_key_outlined),
+                  title: Text(l.keyClaimMenuItem),
+                  subtitle: Text(l.keyClaimMenuItemSubtitle),
+                  onTap: () async {
+                    Navigator.pop(context);
+                    await _openKeyClaim();
+                  },
+                ),
               ListTile(
                 leading: const Icon(Icons.link),
                 title: Text(l.addLinkTitle),

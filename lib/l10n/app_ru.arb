@@ -362,5 +362,55 @@
   "fragmentApplied": "Настройка применена, подключение поднято заново",
   "@fragmentApplied": {
     "description": "Ответ после переподключения"
+  },
+  "keyClaimMenuItem": "Добавить по коду из аккаунта сервиса",
+  "@keyClaimMenuItem": {
+    "description": "Пункт меню добавления Д2-22, нейтральное название"
+  },
+  "keyClaimMenuItemSubtitle": "Одноразовый код выдаёт чат сервиса; логин не запрашивается",
+  "keyClaimScreenTitle": "Подключение по коду",
+  "keyHeaderCodeLabel": "Код из чата сервиса",
+  "keyHeaderCodeHint": "Одноразовый код",
+  "keyClaimSubmit": "Показать действующие ключи",
+  "keyClaimInfo": "Код выдаёт чат сервиса одной командой; он живёт недолго и применяется один раз. Логин Telegram клиент не запрашивает и никуда не отправляет.",
+  "keyClaimNeedCode": "Введите код из чата сервиса",
+  "keyClaimNeedChoice": "Выберите ключ из списка",
+  "keyClaimChooseTitle": "Действующие ключи этого аккаунта",
+  "keyClaimChooseHint": "Выберите подключение",
+  "keyClaimConnectSelected": "Добавить выбранный ключ",
+  "keyClaimEntryUnknown": "вход не указан",
+  "keyClaimNoExpiry": "без срока",
+  "keyClaimTypeTrial": "пробный",
+  "keyClaimTypeRegular": "обычный",
+  "keyClaimNone": "Для этого аккаунта ключи не выпущены",
+  "keyClaimRetry": "Повторить",
+  "keyClaimConnectionExpired": "Подключение закончилось. Запросите новый код в чате сервиса.",
+  "keyClaimNewCode": "Запросить новый код",
+  "keyClaimAdded": "Ключ «{name}» добавлен",
+  "@keyClaimAdded": {
+    "description": "Ответ после ручного выбора из списка",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "keyClaimConnected": "Ключ «{name}» подключён",
+  "@keyClaimConnected": {
+    "description": "Ответ после автоподключения единственного ключа",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "keyClaimFailed": "Не удалось получить ключи: {message}",
+  "@keyClaimFailed": {
+    "description": "Причина от транспорта: код, лимит попыток, недоступность",
+    "placeholders": {
+      "message": {
+        "type": "String"
+      }
+    }
   }
 }
