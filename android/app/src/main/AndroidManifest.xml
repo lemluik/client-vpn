@@ -1,4 +1,5 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
@@ -88,9 +89,12 @@
             <meta-data
                 android:name="android.service.quicksettings.TOGGLEABLE_TILE"
                 android:value="true"/>
+            <!-- Подсказку плитки читает SystemUI в рантайме, поэтому перевод
+                 применяется; линтер считает иначе и рвёт релизную сборку -->
             <property
                 android:name="android.service.quicksettings.TOOL_TIP"
-                android:value="@string/tile_description"/>
+                android:value="@string/tile_description"
+                tools:ignore="ManifestResource"/>
         </service>
 
         <provider
