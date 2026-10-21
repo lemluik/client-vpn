@@ -275,7 +275,9 @@ def run(args):
         return cleanup(procs, args)
 
     print(f"variant={args.variant} fail_mode={args.fail_mode} duration={args.duration}s "
-          f"interval={args.interval}s fail_after={args.fail_after}s")
+          f"interval={args.interval}s fail_after={args.fail_after}s fail_node={args.fail_node}")
+
+    fail_node = args.fail_node
 
     timeline = []
     fail_at = None
@@ -285,19 +287,28 @@ def run(args):
     end = started + args.duration
     while time.time() < end:
         if fail_at is None and args.fail_after >= 0 and time.time() >= started + args.fail_after:
-            write_mode("A", args.fail_mode)
+            if fail_node == "carrying":
+                # Ломать надо узел, на котором трафик стоит прямо сейчас: считаем
+                # теги последних строк журнала доступа и берём большинственный.
+                recent = [t for _, t in parse_tags(args.variant)[-15:]]
+                fail_node = "A" if recent.count(TAG_A) >= recent.count(TAG_B) else "B"
+                print(f"[{time.strftime('%H:%M:%S')}] трафик несёт узел {fail_node} "
+                      f"(A={recent.count(TAG_A)} B={recent.count(TAG_B)} из последних {len(recent)})")
+            live_node = "B" if fail_node == "A" else "A"
+            live_tag = TAG_B if fail_node == "A" else TAG_A
+            write_mode(fail_node, args.fail_mode)
             fail_at = time.time()
-            print(f"[{time.strftime('%H:%M:%S')}] впрыск отказа на узле A: {args.fail_mode}")
+            print(f"[{time.strftime('%H:%M:%S')}] впрыск отказа на узле {fail_node}: {args.fail_mode}")
         if (fail_at is not None and recover_at is None and args.recover_after >= 0
                 and time.time() >= fail_at + args.recover_after):
-            write_mode("A", "ok")
+            write_mode(fail_node, "ok")
             recover_at = time.time()
-            print(f"[{time.strftime('%H:%M:%S')}] узел A восстановлен")
+            print(f"[{time.strftime('%H:%M:%S')}] узел {fail_node} восстановлен")
         if (fail_at is not None and failb_at is None and args.fail_b_after >= 0
                 and time.time() >= fail_at + args.fail_b_after):
-            write_mode("B", args.fail_mode)
+            write_mode(live_node, args.fail_mode)
             failb_at = time.time()
-            print(f"[{time.strftime('%H:%M:%S')}] впрыск отказа на узле B: {args.fail_mode}")
+            print(f"[{time.strftime('%H:%M:%S')}] впрыск отказа на узле {live_node}: {args.fail_mode}")
         code, dt = socks_get(timeout=args.timeout)
         timeline.append((time.time(), code, round(dt, 3)))
         if code is None:
@@ -316,7 +327,11 @@ def run(args):
         for line in hits.read_text(encoding="utf-8").splitlines():
             if not line.strip():
                 continue
-            path = json.loads(line).get("path", "")
+            try:
+                path = json.loads(line).get("path", "")
+            except json.JSONDecodeError:
+                # строка дописывалась на лету — счётчик не должен из-за неё падать
+                continue
             if path.startswith("/observatory"):
                 obs_hits += 1
             else:
@@ -336,12 +351,12 @@ def run(args):
         print(f"до впрыска: A={before.count(TAG_A)} B={before.count(TAG_B)}")
         print(f"после впрыска: A={sum(1 for _, t in after if t == TAG_A)} "
               f"B={sum(1 for _, t in after if t == TAG_B)}")
-        first_b = next(((ts, t) for ts, t in after if t == TAG_B), None)
-        if first_b:
-            print(f"время перехода на узел B: {first_b[0] - fail_s} с "
-                  f"(первая строка с тегом B в {first_b[0] - fail_s} с после впрыска)")
+        first_live = next(((ts, t) for ts, t in after if t == live_tag), None)
+        if first_live:
+            print(f"время перехода на узел {live_node}: {first_live[0] - fail_s} с "
+                  f"(первая строка с тегом {live_node} в {first_live[0] - fail_s} с после впрыска)")
         else:
-            print("время перехода на узел B: перехода не было")
+            print(f"время перехода на узел {live_node}: перехода не было")
         leak = [l for l in (RUN / f"access_{args.variant}.log").read_text(
             encoding="utf-8", errors="replace").splitlines() if "cvpn-direct" in l]
         print(f"строк с уходом напрямую (cvpn-direct): {len(leak)}")
@@ -349,7 +364,7 @@ def run(args):
     if recover_at is not None:
         rec_s = wall_to_day_seconds(recover_at)
         back = [t for ts, t in tags if ts >= rec_s]
-        print(f"после восстановления A: A={back.count(TAG_A)} B={back.count(TAG_B)}")
+        print(f"после восстановления {fail_node}: A={back.count(TAG_A)} B={back.count(TAG_B)}")
     if failb_at is not None:
         fb_s = wall_to_day_seconds(failb_at)
         dead = [t for ts, t in tags if ts >= fb_s]
@@ -403,7 +418,12 @@ def main():
     p.add_argument("--recover-after", type=int, default=-1,
                    help="через сколько секунд после впрыска вернуть узел A в строй (-1 = не возвращать)")
     p.add_argument("--fail-b-after", type=int, default=-1,
-                   help="через сколько секунд после впрыска сломать и узел B тем же режимом (-1 = не ломать)")
+                   help="через сколько секунд после впрыска сломать и второй узел тем же режимом (-1 = не ломать)")
+    p.add_argument("--fail-node", choices=["A", "B", "carrying"], default="A",
+                   help="какой узел ломать первым: балансировщик может поставить трафик на любой, "
+                        "ломать надо тот, на котором трафик реально стоит; "
+                        "carrying — в момент впрыска посмотреть журнал и сломать узел, "
+                        "который сейчас несёт трафик")
     p.add_argument("--timeout", type=float, default=8.0)
     a = p.parse_args()
     kill_by_ports()
