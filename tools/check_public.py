@@ -14,6 +14,7 @@ NEUTRAL_EXTRA_PATTERNS (regex по строке, каждый с новой ли
 Запуск:
     python tools/check_public.py                       # всё дерево
     python tools/check_public.py --commits --base SHA  # плюс проверка истории
+    python tools/check_public.py --tag v0.4.1          # плюс сверка версии с тегом
 
 Код возврата 1, если есть хоть одна находка. Значения печатаются маской.
 """
@@ -187,10 +188,55 @@ def check_dependencies(root):
     return findings
 
 
+VERSION_CONST = re.compile(r"const String clientVersion = '([^']+)'")
+
+
+def read_version(path, prefix=None, pattern=None):
+    with io.open(path, encoding='utf-8') as handle:
+        for line in handle:
+            if prefix and line.startswith(prefix):
+                return line.split(':', 1)[1].strip().split('+')[0]
+            if pattern:
+                found = pattern.match(line.strip())
+                if found:
+                    return found.group(1)
+    return None
+
+
+def check_version(root, tag):
+    """Версия сборки и имя тега — одно и то же число.
+
+    Тег v0.4.0 был собран с `version: 0.3.0` в pubspec.yaml и `clientVersion =
+    '0.3.0'` на экране «О программе», из-за чего каждая установленная 0.4.0
+    считала себя 0.3.0 и предлагала обновиться до самой себя. Сверка clientVersion
+    с pubspec есть в test/about_test.dart, но тег не проверял никто.
+    """
+    findings = []
+    pubspec = os.path.join(root, 'pubspec.yaml')
+    about = os.path.join(root, 'lib', 'about_screen.dart')
+    for path in (pubspec, about):
+        if not os.path.exists(path):
+            return [f'{os.path.relpath(path, root)}: файла нет, версию сверить нечем']
+    version = read_version(pubspec, prefix='version:')
+    if not version:
+        return ['pubspec.yaml: строка version: не найдена']
+    const = read_version(about, pattern=VERSION_CONST)
+    if const is None:
+        findings.append('lib/about_screen.dart: clientVersion не найден')
+    elif const != version:
+        findings.append(f'clientVersion {const} != версия в pubspec.yaml {version}')
+    if tag:
+        expected = tag[1:] if tag.startswith('v') else tag
+        if expected != version:
+            findings.append(f'тег {tag} != версия сборки {version}')
+    return findings
+
+
 def main(argv):
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     base = argv[argv.index('--base') + 1] if '--base' in argv else None
-    findings = check_files(root) + check_dependencies(root)
+    tag = argv[argv.index('--tag') + 1] if '--tag' in argv else None
+    findings = check_files(root) + check_dependencies(root) + check_version(root, tag)
     if '--commits' in argv:
         findings += check_history(base)
     for line in findings:

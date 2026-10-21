@@ -56,10 +56,12 @@ jobs:
           NEUTRAL_EXTRA_PATTERNS: ${{ secrets.NEUTRAL_EXTRA_PATTERNS }}
         run: |
           BASE="${{ github.event.pull_request.base.sha || github.event.before }}"
+          TAG=""
+          case "$GITHUB_REF" in refs/tags/*) TAG="$GITHUB_REF_NAME" ;; esac
           if [ -n "$BASE" ] && git cat-file -e "${BASE}^{commit}" 2>/dev/null; then
-            python tools/check_public.py --commits --base "$BASE"
+            python tools/check_public.py --commits --base "$BASE" ${TAG:+--tag "$TAG"}
           else
-            python tools/check_public.py
+            python tools/check_public.py ${TAG:+--tag "$TAG"}
           fi
 
       - uses: subosito/flutter-action@v2
@@ -226,6 +228,11 @@ jobs:
           cd dist
           sha256sum "ClientVPN-${TAG}-Android.apk" "ClientVPN-${TAG}-Windows-x64.zip" \
             LICENSE NOTICE > SHA256SUMS.txt
+          # клиент проверяет пакет по companion-ассету <имя пакета>.sha256, а сводный
+          # SHA256SUMS.txt намеренно не читает: без этих двух файлов сверка суммы
+          # молча превращается в скачивание без проверки
+          sha256sum "ClientVPN-${TAG}-Android.apk" > "ClientVPN-${TAG}-Android.apk.sha256"
+          sha256sum "ClientVPN-${TAG}-Windows-x64.zip" > "ClientVPN-${TAG}-Windows-x64.zip.sha256"
 
       - name: Опубликовать релиз
         env:
