@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.4.2] - 2026-10-22
+
+### Fixed
+
+- Failover between entry nodes actually works now. The observatory block the client used to build
+  carried a single `target` field, which the core (Xray 26.3.27) silently ignores: `xray run -test`
+  accepts unknown JSON fields, so the broken shape passed validation while the observatory never
+  sent a single probe and the `leastPing` strategy stayed on the first node forever. The block is
+  now built as `subjectSelector` + `probeURL` + `probeInterval` (a duration string — the core
+  rejects a bare number with `invalid duration`) + `enableConcurrency`.
+- Verified against a live stand (`test/stand`): two local SOCKS relays as entry nodes, a counting
+  HTTP target for the observatory, injected node failure. Measured behaviour: the core probes the
+  target, traffic moves to the live node after the first one fails, returns to the recovered node,
+  and with both nodes dead nothing leaks direct (no `fallbackTag`, no `cvpn-direct` lines).
+
 ## [0.4.1] - 2026-10-21
 
 ### Added
