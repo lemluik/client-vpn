@@ -38,6 +38,7 @@ class SettingsStore {
     required this.themeChoice,
     required this.autoConnect,
     required this.closeAction,
+    required this.fragmentHandshake,
     this.lastProfileId,
   });
 
@@ -45,6 +46,7 @@ class SettingsStore {
   static const _autoConnectKey = 'settings.autoConnect';
   static const _lastProfileKey = 'settings.lastProfile';
   static const _closeActionKey = 'settings.closeAction';
+  static const _fragmentHandshakeKey = 'settings.fragmentHandshake';
 
   final SharedPreferences _prefs;
 
@@ -54,6 +56,12 @@ class SettingsStore {
   /// По умолчанию крестик спрашивает: молчаливый выход рвёт туннель, а
   /// молчаливый трей прячет окно так, что его не найти.
   CloseAction closeAction;
+
+  /// Фрагментация рукопожатия (Д2-20, решение Р-83): отдельная опция,
+  /// по умолчанию выключена. Включается пользователем по итогам полевого
+  /// замера; значение живёт рядом с пресетом маршрутизации, в этом же
+  /// хранилище настроек — нового хранилища плодить не нужно.
+  bool fragmentHandshake;
 
   /// Профиль, которым удалось подключиться в прошлый раз: именно его
   /// автоподключение поднимает снова.
@@ -66,6 +74,7 @@ class SettingsStore {
       themeChoice: ThemeChoice.named(prefs.getString(_themeKey)),
       autoConnect: prefs.getBool(_autoConnectKey) ?? false,
       closeAction: CloseAction.named(prefs.getString(_closeActionKey)),
+      fragmentHandshake: prefs.getBool(_fragmentHandshakeKey) ?? false,
       lastProfileId: prefs.getString(_lastProfileKey),
     );
   }
@@ -83,6 +92,11 @@ class SettingsStore {
   Future<void> setCloseAction(CloseAction value) async {
     closeAction = value;
     await _prefs.setString(_closeActionKey, value.name);
+  }
+
+  Future<void> setFragmentHandshake(bool value) async {
+    fragmentHandshake = value;
+    await _prefs.setBool(_fragmentHandshakeKey, value);
   }
 
   Future<void> rememberProfile(String id) async {

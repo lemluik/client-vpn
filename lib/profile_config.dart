@@ -57,6 +57,8 @@ Map<String, dynamic> terminalRule(String tag, {Object? balancers}) {
 /// читает ядро, — и завершающее правило начинает ссылаться на них.
 /// Блоки [observatory] и [burstObservatory] встают на верхнем уровне: без
 /// наблюдателя ядро не принимает явную стратегию балансировщика.
+/// [fragmentHandshake] — отдельная опция фрагментации рукопожатия (Д2-20,
+/// Р-83): по умолчанию выключена, добавляет блок finalmask к tcp-выходам.
 String buildConfigFromLinks(
   Iterable<ShareLink> links, {
   int httpPort = defaultHttpPort,
@@ -65,6 +67,7 @@ String buildConfigFromLinks(
   List<Map<String, dynamic>> balancers = const [],
   Map<String, dynamic>? observatory,
   Map<String, dynamic>? burstObservatory,
+  bool fragmentHandshake = false,
 }) {
   final profiles = links.toList();
   if (profiles.isEmpty) {
@@ -92,7 +95,10 @@ String buildConfigFromLinks(
     ],
     'outbounds': [
       for (final (index, link) in profiles.indexed)
-        link.toOutbound(tag: tagForProfile(index)),
+        link.toOutbound(
+          tag: tagForProfile(index),
+          fragmentHandshake: fragmentHandshake,
+        ),
       {'protocol': 'freedom', 'tag': directTag},
     ],
     // `AsIs` принудительно: ядро не должно резолвить домены на устройстве,

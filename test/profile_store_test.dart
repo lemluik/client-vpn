@@ -396,4 +396,38 @@ void main() {
       expect(store.providers, isEmpty);
     });
   });
+
+  group('фрагментация рукопожатия в activeConfig (Д2-20)', () {
+    test(
+      'флаг из настроек доходит до конфига, файл пользователя не трогается',
+      () async {
+        final store = await ProfileStore.open();
+        await store.addLinks(
+          name: 'Тест',
+          links: parseLinks(plainBody).links,
+          now: fixedNow,
+        );
+
+        expect(store.activeConfig().json, isNot(contains('finalmask')));
+        expect(
+          store.activeConfig(fragmentHandshake: true).json,
+          contains('finalmask'),
+        );
+
+        // Свой config.json пользователь пишет сам: опция его не касается.
+        final file = await store.addFile(
+          const VpnConfig(
+            name: 'свой.json',
+            json: '{"log":{"loglevel":"none"}}',
+          ),
+          now: fixedNow,
+        );
+        await store.setActive(file.id);
+        expect(
+          store.activeConfig(fragmentHandshake: true).json,
+          '{"log":{"loglevel":"none"}}',
+        );
+      },
+    );
+  });
 }

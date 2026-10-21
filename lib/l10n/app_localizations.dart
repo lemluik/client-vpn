@@ -1207,6 +1207,30 @@ abstract class AppLocalizations {
   /// In ru, this message translates to:
   /// **'Откройте шторку, нажмите редактировать и перетащите плитку «Туннель» на панель быстрых настроек'**
   String get tileFallback;
+
+  /// Переключатель Д2-20 в разделе маршрута
+  ///
+  /// In ru, this message translates to:
+  /// **'Фрагментация рукопожатия'**
+  String get fragmentHandshakeTitle;
+
+  /// Пояснение: опция выключена по умолчанию (Р-83)
+  ///
+  /// In ru, this message translates to:
+  /// **'Для сетей с жёсткой фильтрацией: начало TLS-рукопожатия уходит в ядро частями. По умолчанию выключена, включать по итогам замера.'**
+  String get fragmentHandshakeSubtitle;
+
+  /// Ответ на выключенном туннеле
+  ///
+  /// In ru, this message translates to:
+  /// **'Настройка сохранена'**
+  String get fragmentSaved;
+
+  /// Ответ после переподключения
+  ///
+  /// In ru, this message translates to:
+  /// **'Настройка применена, подключение поднято заново'**
+  String get fragmentApplied;
 }
 
 class _AppLocalizationsDelegate

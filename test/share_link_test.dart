@@ -7,7 +7,8 @@ const testUuid = '2f6bd5a1-1e73-4b1a-9d3c-000000000001';
 const testPublicKey = 'SaMdKeySaMdKeySaMdKeySaMdKeySaMdKeySaMd1234';
 
 /// Ссылка VLESS+Reality с русским именем профиля в percent-кодировке.
-const realityLink = 'vless://$testUuid@example.org:443'
+const realityLink =
+    'vless://$testUuid@example.org:443'
     '?type=tcp&security=reality&flow=xtls-rprx-vision'
     '&sni=www.example.org&fp=chrome&pbk=$testPublicKey&sid=a1b2c3d4'
     '#%D0%9C%D0%BE%D1%81%D0%BA%D0%B2%D0%B0';
@@ -48,8 +49,9 @@ void main() {
     });
 
     test('подставляет порт 443 и имя по адресу, если их нет', () {
-      final link =
-          parseShareLink('vless://$testUuid@example.org?security=none');
+      final link = parseShareLink(
+        'vless://$testUuid@example.org?security=none',
+      );
 
       expect(link.port, 443);
       expect(link.name, 'example.org');
@@ -121,24 +123,22 @@ void main() {
 
     test('разбирает vmess из base64', () {
       final link = parseShareLink(
-        vmess(
-          {
-            'v': '2',
-            'ps': 'Тестовый узел',
-            'add': 'example.org',
-            'port': '2087',
-            'id': testUuid,
-            'aid': '4',
-            'scy': 'auto',
-            'net': 'ws',
-            'type': 'none',
-            'host': 'cdn.example.org',
-            'path': '/ws',
-            'tls': 'tls',
-            'fp': 'chrome',
-            'alpn': 'h2,http',
-          },
-        ),
+        vmess({
+          'v': '2',
+          'ps': 'Тестовый узел',
+          'add': 'example.org',
+          'port': '2087',
+          'id': testUuid,
+          'aid': '4',
+          'scy': 'auto',
+          'net': 'ws',
+          'type': 'none',
+          'host': 'cdn.example.org',
+          'path': '/ws',
+          'tls': 'tls',
+          'fp': 'chrome',
+          'alpn': 'h2,http',
+        }),
       );
 
       expect(link.protocol, LinkProtocol.vmess);
@@ -155,15 +155,13 @@ void main() {
 
     test('в vmess имя службы gRPC берётся из path', () {
       final link = parseShareLink(
-        vmess(
-          {
-            'add': 'example.org',
-            'port': '443',
-            'id': testUuid,
-            'net': 'grpc',
-            'path': 'grpc-service',
-          },
-        ),
+        vmess({
+          'add': 'example.org',
+          'port': '443',
+          'id': testUuid,
+          'net': 'grpc',
+          'path': 'grpc-service',
+        }),
       );
 
       expect(link.network, 'grpc');
@@ -195,9 +193,13 @@ void main() {
     });
 
     test('собирает настройки ws с заголовком Host', () {
-      final stream = outboundOf(
-        parseShareLink(vless(query: 'type=ws&host=cdn.example.org&path=/ray')),
-      )['streamSettings'] as Map;
+      final stream =
+          outboundOf(
+                parseShareLink(
+                  vless(query: 'type=ws&host=cdn.example.org&path=/ray'),
+                ),
+              )['streamSettings']
+              as Map;
       final ws = stream['wsSettings'] as Map;
 
       expect(stream['network'], 'ws');
@@ -233,20 +235,19 @@ void main() {
     test('собирает исходящее соединение vmess', () {
       final outbound = outboundOf(
         parseShareLink(
-          vmess(
-            {
-              'add': 'example.org',
-              'port': '2087',
-              'id': testUuid,
-              'aid': '4',
-              'scy': 'auto',
-              'net': 'tcp',
-            },
-          ),
+          vmess({
+            'add': 'example.org',
+            'port': '2087',
+            'id': testUuid,
+            'aid': '4',
+            'scy': 'auto',
+            'net': 'tcp',
+          }),
         ),
       );
-      final users = ((outbound['settings'] as Map)['vnext'] as List)
-          .single['users'] as List;
+      final users =
+          ((outbound['settings'] as Map)['vnext'] as List).single['users']
+              as List;
 
       expect(outbound['protocol'], 'vmess');
       expect((users.single as Map)['id'], testUuid);
@@ -329,13 +330,7 @@ void main() {
       );
       expect(
         () => parseShareLink(
-          vmess(
-            {
-              'add': 'example.org',
-              'port': '0',
-              'id': testUuid,
-            },
-          ),
+          vmess({'add': 'example.org', 'port': '0', 'id': testUuid}),
         ),
         throwsA(isA<LinkFormatException>()),
       );
@@ -363,7 +358,8 @@ void main() {
     });
 
     test('текст ошибки не содержит значений из ссылки', () {
-      const broken = 'vless://$testUuid@example.org:443?security=reality'
+      const broken =
+          'vless://$testUuid@example.org:443?security=reality'
           '&pbk=$testPublicKey&flow=xtls-rprx-direct';
 
       try {
@@ -426,6 +422,68 @@ void main() {
       expect(result.links, isEmpty);
       expect(result.skipped, isEmpty);
       expect(result.isEmpty, isTrue);
+    });
+  });
+
+  group('фрагментация рукопожатия (Д2-20)', () {
+    // Ровно та форма, что подтверждена прогонами ядра 26.3.27: интервал —
+    // `delay`, тегов `handshake` и `interval` в сборке нет.
+    const confirmedForm = {
+      'tcp': [
+        {
+          'type': 'fragment',
+          'settings': {
+            'packets': 'tlshello',
+            'length': '100-200',
+            'delay': '10-20',
+            'maxSplit': '2-8',
+          },
+        },
+      ],
+    };
+
+    test('при выключенной опции конфиг не содержит finalmask', () {
+      final outbound = outboundOf(parseShareLink(realityLink));
+
+      expect(jsonEncode(outbound), isNot(contains('finalmask')));
+      expect(
+        (outbound['streamSettings'] as Map).containsKey('finalmask'),
+        isFalse,
+      );
+    });
+
+    test('при включённой опции — ровно подтверждённая форма', () {
+      final outbound = parseShareLink(
+        realityLink,
+      ).toOutbound(tag: 'proxy', fragmentHandshake: true);
+
+      expect((outbound['streamSettings'] as Map)['finalmask'], confirmedForm);
+    });
+
+    test('блок уходит только в tcp-транспорт', () {
+      final ws = parseShareLink(
+        vless(query: 'security=tls&type=ws&host=example.org&path=%2Fws'),
+      ).toOutbound(fragmentHandshake: true);
+
+      expect((ws['streamSettings'] as Map).containsKey('finalmask'), isFalse);
+    });
+
+    test('мёртвое поле packetEncoding не уходит в конфиг ядра', () {
+      final link = parseShareLink(
+        vless(query: 'security=none&packetEncoding=xudp'),
+      );
+
+      // Ссылка разбирается и сохраняется без потерь…
+      expect(link.packetEncoding, 'xudp');
+      expect(link.source, contains('packetEncoding=xudp'));
+      // …но в vnext поля нет: сборка 26.3.27 его не читает.
+      final outbound = link.toOutbound(tag: 'proxy', fragmentHandshake: true);
+      final user =
+          (((outbound['settings'] as Map)['vnext'] as List).first
+                  as Map)['users']
+              as List;
+
+      expect((user.first as Map).containsKey('packetEncoding'), isFalse);
     });
   });
 }

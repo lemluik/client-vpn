@@ -367,9 +367,13 @@ class ProfileStore {
   /// файле пользователя пресет не появляется: свой config.json он собирает сам.
   /// [probeEndpoint] — точка проб наблюдателя (У-3): клиент строит
   /// балансировщик узлов региона, а без точки проб ядро стратегию не принимает.
+  /// [fragmentHandshake] — опция фрагментации рукопожатия (Д2-20): применяется
+  /// только к собранным из ссылок конфигам; свой config.json пользователь пишет
+  /// сам, и навязывать ему блок нельзя.
   VpnConfig activeConfig({
     List<Map<String, dynamic>> rules = const [],
     String probeEndpoint = defaultProbeEndpoint,
+    bool fragmentHandshake = false,
   }) {
     final profile = active;
     if (profile == null) {
@@ -399,6 +403,7 @@ class ProfileStore {
         observatory: balancers.isEmpty
             ? null
             : observatoryFor(probeEndpoint, tags),
+        fragmentHandshake: fragmentHandshake,
       ),
     );
   }

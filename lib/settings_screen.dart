@@ -157,6 +157,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 MaterialPageRoute(builder: (_) => RulesScreen(state: _state)),
               ),
             ),
+            _fragmentTile(l),
             const _SectionDivider(),
             _SectionTitle(l.settingsServiceSection),
             ListTile(
@@ -273,6 +274,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
         'none' => l.presetOff,
         _ => preset.label,
       };
+
+  /// Переключатель фрагментации рукопожатия (Д2-20, решение Р-83).
+  ///
+  /// Название нейтральное: клиент универсальный, опция описывает поведение
+  /// транспорта, а не наш сервис. Меняется той же дорогой, что и маршрут:
+  /// блок читается при сборке конфига, поэтому поднятый туннель
+  /// переподключается с спросом.
+  Widget _fragmentTile(AppLocalizations l) {
+    return SwitchListTile(
+      key: const ValueKey('fragment-handshake'),
+      secondary: const Icon(Icons.content_cut),
+      title: Text(l.fragmentHandshakeTitle),
+      subtitle: Text(l.fragmentHandshakeSubtitle),
+      value: _state.fragmentHandshake,
+      onChanged: (value) => applyRoutingChange(
+        context,
+        _state,
+        l,
+        change: () => _state.setFragmentHandshake(value),
+        savedNote: l.fragmentSaved,
+        appliedNote: l.fragmentApplied,
+      ),
+    );
+  }
 
   /// Точка проб наблюдателя (У-3): значение вводит пользователь, нейтральное
   /// по умолчанию ничего о провайдере не сообщает.

@@ -328,6 +328,10 @@ void main() {
 
         expect(find.text('Мои правила'), findsOneWidget);
         expect(find.text('Правил пока нет'), findsOneWidget);
+        // Переключатель фрагментации (Д2-20) придвинул низ списка за край
+        // экрана: ListView ленивый, нижнюю часть надо докрутить.
+        await tester.drag(find.byType(ListView), const Offset(0, -320));
+        await tester.pumpAndSettle();
         expect(find.text('Обслуживание'), findsOneWidget);
         expect(find.text('Точка проб'), findsOneWidget);
         expect(find.text('Обновление'), findsOneWidget);
@@ -515,5 +519,54 @@ void main() {
 
       expect(chosen('quit'), findsOneWidget);
     }, skip: windowsOnly);
+  });
+
+  group('фрагментация рукопожатия в настройках (Д2-20)', () {
+    testWidgets('переключатель выключен по умолчанию', (tester) async {
+      final state = await makeState();
+      addTearDown(state.dispose);
+      await openSettings(tester, state);
+
+      final tile = find.byKey(const ValueKey('fragment-handshake'));
+      expect(tile, findsOneWidget);
+      expect(tester.widget<SwitchListTile>(tile).value, isFalse);
+    });
+
+    testWidgets('включение сохраняется и переживает перезапуск', (
+      tester,
+    ) async {
+      final state = await makeState();
+      addTearDown(state.dispose);
+      await openSettings(tester, state);
+
+      await tester.tap(find.byKey(const ValueKey('fragment-handshake')));
+      await tester.pumpAndSettle();
+
+      expect(state.fragmentHandshake, isTrue);
+      expect(find.text('Настройка сохранена'), findsOneWidget);
+      // Туннель не поднят — переподключение не требовалось.
+      expect(find.text('Переподключиться?'), findsNothing);
+
+      final reopened = await SettingsStore.open();
+      expect(reopened.fragmentHandshake, isTrue);
+    });
+
+    testWidgets('на поднятом туннеле переподключение спрашивается', (
+      tester,
+    ) async {
+      final state = await makeState();
+      addTearDown(state.dispose);
+      await state.addFromText(linkOne);
+      await state.connect();
+      await openSettings(tester, state);
+
+      await tester.tap(find.byKey(const ValueKey('fragment-handshake')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Переподключиться?'), findsOneWidget);
+      await tester.tap(find.text('Отмена'));
+      await tester.pumpAndSettle();
+      expect(state.fragmentHandshake, isFalse);
+    });
   });
 }

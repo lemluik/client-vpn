@@ -263,5 +263,9 @@
   "expiredProgramNote": "The testing program is valid until 31.10.2026",
   "tileTitle": "Quick settings tile",
   "tileSubtitle": "Start and stop the tunnel without opening the app",
-  "tileFallback": "Open the shade, tap edit and drag the Tunnel tile onto the quick settings panel"
+  "tileFallback": "Open the shade, tap edit and drag the Tunnel tile onto the quick settings panel",
+  "fragmentHandshakeTitle": "Handshake fragmentation",
+  "fragmentHandshakeSubtitle": "For networks with strict filtering: the start of the TLS handshake goes to the core in pieces. Off by default; turn it on after measuring.",
+  "fragmentSaved": "Setting saved",
+  "fragmentApplied": "Setting applied, the connection is back up"
 }
