@@ -15,7 +15,7 @@ void main() {
       );
       expect(candidates, [
         ('$app/Resources/xray/xray', '$app/Resources/xray'),
-        (p.join('macos', 'xray', 'xray'), p.join('macos', 'xray')),
+        (p.posix.join('macos', 'xray', 'xray'), p.posix.join('macos', 'xray')),
       ]);
     },
   );

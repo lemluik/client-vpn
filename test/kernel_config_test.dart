@@ -141,21 +141,18 @@ void main() {
             },
           },
           'observatory': {
-            'enableMemoryStats': true,
-            'subjectFrequency': {
-              'enabled': true,
-              'target': 'https://www.gstatic.com/generate_204',
-              'timeout': '1s',
-              'frequency': '5m',
-            },
+            'subjectSelector': ['proxy-a', 'proxy-b'],
+            'probeURL': 'https://www.gstatic.com/generate_204',
+            'probeInterval': '10s',
+            'enableConcurrency': true,
           },
           'burstObservatory': {
-            'maxParallelism': 4,
+            'subjectSelector': ['proxy-a', 'proxy-b'],
             'pingConfig': {
-              'mode': 'connect',
+              'destination': 'https://www.gstatic.com/generate_204',
+              'interval': '30s',
               'timeout': '5s',
-              'frequency': '30s',
-              'targets': ['https://www.gstatic.com/generate_204'],
+              'httpMethod': 'GET',
             },
           },
         },
@@ -175,12 +172,12 @@ void main() {
       final config = configWith(
         {
           'burstObservatory': {
-            'maxParallelism': 2,
+            'subjectSelector': ['proxy-a', 'proxy-b'],
             'pingConfig': {
-              'mode': 'connect',
+              'destination': 'https://www.gstatic.com/generate_204',
+              'interval': '3m',
               'timeout': '5s',
-              'frequency': '3m',
-              'targets': ['https://www.gstatic.com/generate_204'],
+              'httpMethod': 'GET',
             },
           },
         },
@@ -211,25 +208,24 @@ void main() {
       expect(result.exitCode, 0, reason: output(result));
     }, skip: ready ? false : reason);
 
-    test(
-      'конфиг из двух ссылок: балансировщик региона и наблюдатель',
-      () async {
-        final links = parseLinks('$firstLink\n$secondLink').links;
-        final balancers = regionBalancers([
-          for (final (index, _) in links.indexed) tagForProfile(index),
-        ]);
-        final result = await testConfig(
-          buildConfigFromLinks(
-            links,
-            balancers: balancers,
-            observatory: observatoryFor(defaultProbeEndpoint),
-          ),
-        );
+    test('конфиг из двух ссылок: балансировщик региона и наблюдатель', () async {
+      final links = parseLinks('$firstLink\n$secondLink').links;
+      final tags = [
+        for (final (index, _) in links.indexed) tagForProfile(index),
+      ];
+      final balancers = regionBalancers(tags);
+      final result = await testConfig(
+        buildConfigFromLinks(
+          links,
+          balancers: balancers,
+          observatory: observatoryFor(defaultProbeEndpoint, tags),
+        ),
+      );
 
-        expect(result.exitCode, 0, reason: output(result));
-      },
-      skip: ready ? false : reason,
-    );
+      // Гейт синтаксиса, а не доказательство работы: `xray run -test` принимает
+      // и блок с незнакомыми полями. Поведение мерит стенд test/stand.
+      expect(result.exitCode, 0, reason: output(result));
+    }, skip: ready ? false : reason);
 
     test('туннельный конфиг, собранный из конфига пользователя', () async {
       final tun = buildTunConfig(jsonEncode(configWith({})));

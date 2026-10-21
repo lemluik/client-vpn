@@ -35,7 +35,8 @@ const linkTwo =
 /// Ядро без процесса и без сети: состояние переключается вручную.
 class FakeCore implements VpnCore {
   final StreamController<String> _logs = StreamController<String>.broadcast();
-  final StreamController<CoreStatus> _status = StreamController<CoreStatus>.broadcast();
+  final StreamController<CoreStatus> _status =
+      StreamController<CoreStatus>.broadcast();
 
   Object? validateError;
   int startCalls = 0;
@@ -664,7 +665,10 @@ void main() {
 
       await state.connect();
       final json = core.lastConfig!.json;
-      expect(json, contains('"target":"https://example.test/ping"'));
+      expect(json, contains('"probeURL":"https://example.test/ping"'));
+      // Без списка субъектов наблюдатель не делает ни одной пробы и стратегия
+      // навсегда остаётся на первом узле (замер 21.10.2026, test/stand).
+      expect(json, contains('"subjectSelector":["cvpn-proxy","cvpn-proxy-2"]'));
       // Два узла одного региона — правило ведёт на балансировщик (МК-6).
       expect(json, contains('"balancerTag":"cvpn-lb"'));
       expect(json, contains('"strategy":{"type":"leastPing"'));

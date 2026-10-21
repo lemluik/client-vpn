@@ -89,38 +89,56 @@ void main() {
   });
 
   group('наблюдатель', () {
-    test('leastPing требует observatory с target', () {
-      expect(observatoryFor('https://example.com'), {
-        'target': 'https://example.com',
+    test('leastPing требует observatory со списком субъектов', () {
+      expect(observatoryFor('https://example.com', const ['a', 'b']), {
+        'subjectSelector': ['a', 'b'],
+        'probeURL': 'https://example.com',
+        'probeInterval': regionProbeInterval,
+        'enableConcurrency': true,
       });
     });
 
-    test('leastLoad требует burstObservatory с pingConfig.targets', () {
-      expect(burstObservatoryFor('https://example.com'), {
-        'pingConfig': {
-          'targets': ['https://example.com'],
-        },
+    test('в блоке нет полей, которые ядро молча пропускает', () {
+      // Go игнорирует незнакомые поля JSON, поэтому `xray run -test` опечатку не
+      // ловит: прежняя форма {'target': …} проверку проходила и не работала —
+      // наблюдатель не делал ни одной пробы (замер 21.10.2026, test/stand).
+      expect(observatoryFor('https://example.com', const ['a']).keys.toSet(), {
+        'subjectSelector',
+        'probeURL',
+        'probeInterval',
+        'enableConcurrency',
       });
+    });
+
+    test('интервал проб — строка длительности, а не число', () {
+      // На число ядро 26.3.27 отвечает `invalid duration` и не запускается.
+      expect(regionProbeInterval, endsWith('s'));
     });
   });
 
   group('конфиг из ссылок с балансировщиком', () {
     test('наблюдатель и balancerTag попадают в конфиг', () {
       final links = parsed();
-      final balancers = regionBalancers([
+      final tags = [
         for (final (index, _) in links.indexed) tagForProfile(index),
-      ]);
+      ];
+      final balancers = regionBalancers(tags);
       final config =
           jsonDecode(
                 buildConfigFromLinks(
                   links,
                   balancers: balancers,
-                  observatory: observatoryFor(defaultProbeEndpoint),
+                  observatory: observatoryFor(defaultProbeEndpoint, tags),
                 ),
               )
               as Map<String, dynamic>;
 
-      expect(config['observatory'], {'target': defaultProbeEndpoint});
+      expect(config['observatory'], {
+        'subjectSelector': ['cvpn-proxy', 'cvpn-proxy-2'],
+        'probeURL': defaultProbeEndpoint,
+        'probeInterval': regionProbeInterval,
+        'enableConcurrency': true,
+      });
       expect(config.containsKey('burstObservatory'), false);
       final routing = config['routing'] as Map<String, dynamic>;
       expect(routing['balancers'], balancers);
@@ -131,7 +149,8 @@ void main() {
     });
 
     test('один узел — конфига без наблюдателя', () {
-      final balancers = regionBalancers([tagForProfile(0)]);
+      final tags = [tagForProfile(0)];
+      final balancers = regionBalancers(tags);
       final config =
           jsonDecode(
                 buildConfigFromLinks(
@@ -139,7 +158,7 @@ void main() {
                   balancers: balancers,
                   observatory: balancers.isEmpty
                       ? null
-                      : observatoryFor(defaultProbeEndpoint),
+                      : observatoryFor(defaultProbeEndpoint, tags),
                 ),
               )
               as Map<String, dynamic>;

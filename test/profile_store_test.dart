@@ -185,14 +185,19 @@ void main() {
       expect(outbounds.last['protocol'], 'freedom');
       expect(routing['domainStrategy'], 'AsIs');
       // Автопереключение внутри региона (МК-3, МК-6): узлов два, поэтому
-      // завершающее правило ведёт на балансировщик, а наблюдатель нужен,
-      // чтобы ядро принял стратегию.
+      // завершающее правило ведёт на балансировщик, а наблюдатель мерит
+      // задержки узлов — без списка субъектов он не делает ни одной пробы.
       expect(routing['balancers'], hasLength(1));
       expect(((routing['balancers'] as List).first as Map)['selector'], [
         'cvpn-proxy',
         'cvpn-proxy-2',
       ]);
-      expect(document['observatory'], {'target': defaultProbeEndpoint});
+      expect(document['observatory'], {
+        'subjectSelector': ['cvpn-proxy', 'cvpn-proxy-2'],
+        'probeURL': defaultProbeEndpoint,
+        'probeInterval': regionProbeInterval,
+        'enableConcurrency': true,
+      });
       expect(
         (rules.last as Map<String, dynamic>)['balancerTag'],
         regionBalancerTag,

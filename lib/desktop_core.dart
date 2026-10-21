@@ -117,9 +117,18 @@ class DesktopCore implements VpnCore {
       // Contents/Resources/xray: ядро там запечатано подписью бандла как
       // ресурс и остаётся побайтно официальным (срез x86_64 без подписи,
       // поэтому в Contents/MacOS бандл не подписывается).
-      final bundled = p.join(p.dirname(exeDir), 'Resources', 'xray');
-      final dev = p.join('macos', 'xray');
-      return [(p.join(bundled, 'xray'), bundled), (p.join(dev, 'xray'), dev)];
+      // Пути собираются в posix-форме, а не хостовой: ветка проверяется тестом
+      // и с Windows, где `p.join` дал бы обратные слеши.
+      final bundled = p.posix.join(
+        p.posix.dirname(exeDir),
+        'Resources',
+        'xray',
+      );
+      final dev = p.posix.join('macos', 'xray');
+      return [
+        (p.posix.join(bundled, 'xray'), bundled),
+        (p.posix.join(dev, 'xray'), dev),
+      ];
     }
     final dev = p.join('assets', 'xray');
     return [
