@@ -57,32 +57,31 @@ class StoredProfile {
     String? name,
     List<ShareLink>? links,
     String? region,
-  }) =>
-      StoredProfile(
-        id: id,
-        name: name ?? this.name,
-        kind: kind,
-        addedAt: addedAt,
-        links: links ?? this.links,
-        providerId: providerId,
-        rawJson: rawJson,
-        path: path,
-        region: region ?? this.region,
-      );
+  }) => StoredProfile(
+    id: id,
+    name: name ?? this.name,
+    kind: kind,
+    addedAt: addedAt,
+    links: links ?? this.links,
+    providerId: providerId,
+    rawJson: rawJson,
+    path: path,
+    region: region ?? this.region,
+  );
 
   /// Ссылки сохраняем исходным текстом: это компактнее и не зависит от того,
   /// какие поля появятся у модели разбора.
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        'kind': kind.name,
-        'added': addedAt.toIso8601String(),
-        'links': links.map((link) => link.source).toList(),
-        'provider': providerId,
-        'json': rawJson,
-        'path': path,
-        'region': region,
-      };
+    'id': id,
+    'name': name,
+    'kind': kind.name,
+    'added': addedAt.toIso8601String(),
+    'links': links.map((link) => link.source).toList(),
+    'provider': providerId,
+    'json': rawJson,
+    'path': path,
+    'region': region,
+  };
 
   static StoredProfile fromJson(Map<String, dynamic> json) {
     final id = json['id'];
@@ -96,8 +95,9 @@ class StoredProfile {
       kind: _kindOf(json['kind']),
       addedAt: _dateOf(json['added']),
       links: parseLinks(_joinSources(json['links'])).links,
-      providerId:
-          json['provider'] is String ? json['provider'] as String : null,
+      providerId: json['provider'] is String
+          ? json['provider'] as String
+          : null,
       rawJson: json['json'] is String ? json['json'] as String : null,
       path: json['path'] is String ? json['path'] as String : null,
       region: json['region'] is String ? json['region'] as String : null,
@@ -182,11 +182,7 @@ class ProfileStore {
     DateTime? now,
   }) async {
     final provider = await addProvider(url, name: name);
-    final result = await refresh(
-      provider.id,
-      fetch: fetch,
-      now: now,
-    );
+    final result = await refresh(provider.id, fetch: fetch, now: now);
     final updated = result.provider;
     if (!result.ok || updated.links.isEmpty) {
       return SubscriptionAdd(
@@ -258,9 +254,7 @@ class ProfileStore {
 
     final profile = _profileOfProvider(providerId);
     if (result.ok && profile != null) {
-      await _replaceProfile(
-        profile.copyWith(links: result.provider.links),
-      );
+      await _replaceProfile(profile.copyWith(links: result.provider.links));
     }
     return result;
   }
@@ -300,15 +294,15 @@ class ProfileStore {
   }
 
   Future<StoredProfile> addFile(VpnConfig config, {DateTime? now}) => _add(
-        StoredProfile(
-          id: _newId('file', config.path ?? config.json),
-          name: config.name,
-          kind: ProfileKind.file,
-          addedAt: now ?? DateTime.now(),
-          rawJson: config.json,
-          path: config.path,
-        ),
-      );
+    StoredProfile(
+      id: _newId('file', config.path ?? config.json),
+      name: config.name,
+      kind: ProfileKind.file,
+      addedAt: now ?? DateTime.now(),
+      rawJson: config.json,
+      path: config.path,
+    ),
+  );
 
   Future<void> rename(String id, String name) async {
     final profile = _byId(id);
@@ -394,16 +388,17 @@ class ProfileStore {
       throw LinkFormatException('В подключении «${profile.name}» нет профилей');
     }
     final links = linksOfProfile(profile);
-    final balancers = regionBalancers([
-      for (final (index, _) in links.indexed) tagForProfile(index),
-    ]);
+    final tags = [for (final (index, _) in links.indexed) tagForProfile(index)];
+    final balancers = regionBalancers(tags);
     return VpnConfig(
       name: profile.name,
       json: buildConfigFromLinks(
         links,
         rules: rules,
         balancers: balancers,
-        observatory: balancers.isEmpty ? null : observatoryFor(probeEndpoint),
+        observatory: balancers.isEmpty
+            ? null
+            : observatoryFor(probeEndpoint, tags),
       ),
     );
   }
@@ -441,14 +436,14 @@ class ProfileStore {
   }
 
   Future<void> _saveProfiles() => _prefs.setString(
-        _profilesKey,
-        jsonEncode(_profiles.map((profile) => profile.toJson()).toList()),
-      );
+    _profilesKey,
+    jsonEncode(_profiles.map((profile) => profile.toJson()).toList()),
+  );
 
   Future<void> _saveProviders() => _prefs.setString(
-        _providersKey,
-        jsonEncode(_providers.map((provider) => provider.toJson()).toList()),
-      );
+    _providersKey,
+    jsonEncode(_providers.map((provider) => provider.toJson()).toList()),
+  );
 
   StoredProfile? _byId(String id) {
     for (final profile in _profiles) {
