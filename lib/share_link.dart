@@ -28,6 +28,34 @@ const Set<String> supportedFlows = {
   'xtls-rprx-vision-udp443',
 };
 
+/// Параметры фрагментации рукопожатия (Д2-20, решение владельца Р-83):
+/// отдельная опция, по умолчанию выключена, включается пользователем по
+/// итогам полевого замера. Стартовые значения — ГИПОТЕЗА, не норма: их
+/// подбирает замер по матрице Б1–Б3 документа о фрагментации. Форма блока
+/// подтверждена на фактическом бинарнике ядра 26.3.27: интервал называется
+/// `delay`, тегов `handshake` и `interval` в этой сборке нет.
+const String fragmentPackets = 'tlshello';
+const String fragmentLength = '100-200';
+const String fragmentDelay = '10-20';
+const String fragmentMaxSplit = '2-8';
+
+/// Подтверждённая форма блока фрагментации для `streamSettings.finalmask`.
+/// Применять только к tcp-транспорту: для udp фрагментации в сборке нет,
+/// там доступны только маски noise, sudoku, salamander, xdns и xicmp.
+Map<String, dynamic> fragmentHandshakeMask() => {
+  'tcp': [
+    {
+      'type': 'fragment',
+      'settings': {
+        'packets': fragmentPackets,
+        'length': fragmentLength,
+        'delay': fragmentDelay,
+        'maxSplit': fragmentMaxSplit,
+      },
+    },
+  ],
+};
+
 /// Ссылка-профиль от любого провайдера: `vless://`, `trojan://`, `vmess://`.
 ///
 /// Значения нормализованы, но [source] хранит исходный текст: экспорт подписки
@@ -104,6 +132,10 @@ class ShareLink {
 
   final List<String> alpn;
   final bool allowInsecure;
+
+  /// Мёртвое поле: сборка ядра 26.3.27 не знает `packetEncoding` вообще
+  /// (замер по бинарнику 22.10.2026 — ноль вхождений). Разбираем из ссылки
+  /// только ради возврата `source` без потерь; в конфиг ядра не уходит.
   final String? packetEncoding;
 
   /// Исходный текст ссылки — для экспорта без потерь.
@@ -113,100 +145,104 @@ class ShareLink {
   ///
   /// Тег нужен для маршрутизации: завершающее правило конфига ссылается
   /// на тег первого исходящего, а не на его порядок в списке.
-  Map<String, dynamic> toOutbound({String? tag}) {
+  Map<String, dynamic> toOutbound({
+    String? tag,
+    bool fragmentHandshake = false,
+  }) {
     final outbound = switch (protocol) {
       LinkProtocol.vless => {
-          'protocol': 'vless',
-          'settings': {
-            'vnext': [
-              _vnext({
-                'id': id,
-                'encryption': encryption.isEmpty ? 'none' : encryption,
-                if (flow.isNotEmpty) 'flow': flow,
-                if (packetEncoding != null) 'packetEncoding': packetEncoding,
-              }),
-            ],
-          },
+        'protocol': 'vless',
+        'settings': {
+          'vnext': [
+            _vnext({
+              'id': id,
+              'encryption': encryption.isEmpty ? 'none' : encryption,
+              if (flow.isNotEmpty) 'flow': flow,
+            }),
+          ],
         },
+      },
       LinkProtocol.vmess => {
-          'protocol': 'vmess',
-          'settings': {
-            'vnext': [
-              _vnext({
-                'id': id,
-                'alterId': alterId,
-                'security': encryption.isEmpty ? 'auto' : encryption,
-              }),
-            ],
-          },
+        'protocol': 'vmess',
+        'settings': {
+          'vnext': [
+            _vnext({
+              'id': id,
+              'alterId': alterId,
+              'security': encryption.isEmpty ? 'auto' : encryption,
+            }),
+          ],
         },
+      },
       LinkProtocol.trojan => {
-          'protocol': 'trojan',
-          'settings': {
-            'servers': [
-              _serverEntry({
-                'password': id,
-                'level': 0,
-                if (flow.isNotEmpty) 'flow': flow,
-              }),
-            ],
-          },
+        'protocol': 'trojan',
+        'settings': {
+          'servers': [
+            _serverEntry({
+              'password': id,
+              'level': 0,
+              if (flow.isNotEmpty) 'flow': flow,
+            }),
+          ],
         },
+      },
     };
 
     return {
       ...outbound,
-      'streamSettings': _streamSettings(),
+      'streamSettings': _streamSettings(fragmentHandshake: fragmentHandshake),
       'tag': ?tag,
     };
   }
 
   /// Сервер vless и vmess: данные пользователя вложены в `users`.
   Map<String, dynamic> _vnext(Map<String, dynamic> user) => {
-        'address': address,
-        'port': port,
-        'users': [user],
-      };
+    'address': address,
+    'port': port,
+    'users': [user],
+  };
 
   /// Сервер trojan: данные пользователя лежат прямо в описании сервера.
   Map<String, dynamic> _serverEntry(Map<String, dynamic> user) => {
-        'address': address,
-        'port': port,
-        ...user,
-      };
+    'address': address,
+    'port': port,
+    ...user,
+  };
 
-  Map<String, dynamic> _streamSettings() => {
-        'network': network,
-        'security': security,
-        if (security == 'reality')
-          'realitySettings': {
-            if (sni != null) 'serverName': sni,
-            'fingerprint': fingerprint ?? 'chrome',
-            if (publicKey != null) 'publicKey': publicKey,
-            'shortId': shortId ?? '',
-          }
-        else if (security == 'tls')
-          'tlsSettings': {
-            if (sni != null) 'serverName': sni,
-            if (alpn.isNotEmpty) 'alpn': alpn,
-            if (fingerprint != null) 'fingerprint': fingerprint,
-            'allowInsecure': allowInsecure,
-          },
-        if (network == 'ws')
-          'wsSettings': {
-            if (path != null) 'path': path,
-            if (host != null) 'headers': {'Host': host},
-          }
-        else if (network == 'grpc')
-          'grpcSettings': {
-            if (serviceName != null) 'serviceName': serviceName,
-          }
-        else if (network == 'http')
-          'httpSettings': {
-            if (path != null) 'path': path,
-            if (host != null) 'host': [host],
-          },
-      };
+  Map<String, dynamic> _streamSettings({bool fragmentHandshake = false}) => {
+    'network': network,
+    'security': security,
+    if (security == 'reality')
+      'realitySettings': {
+        if (sni != null) 'serverName': sni,
+        'fingerprint': fingerprint ?? 'chrome',
+        if (publicKey != null) 'publicKey': publicKey,
+        'shortId': shortId ?? '',
+      }
+    else if (security == 'tls')
+      'tlsSettings': {
+        if (sni != null) 'serverName': sni,
+        if (alpn.isNotEmpty) 'alpn': alpn,
+        if (fingerprint != null) 'fingerprint': fingerprint,
+        'allowInsecure': allowInsecure,
+      },
+    // Блок фрагментации подтверждён живым прогоном ядра для tcp;
+    // при выключенной опции в конфиге не появляется (Р-83).
+    if (fragmentHandshake && network == 'tcp')
+      'finalmask': fragmentHandshakeMask(),
+    if (network == 'ws')
+      'wsSettings': {
+        if (path != null) 'path': path,
+        if (host != null) 'headers': {'Host': host},
+      }
+    else if (network == 'grpc')
+      'grpcSettings': {if (serviceName != null) 'serviceName': serviceName}
+    else if (network == 'http')
+      'httpSettings': {
+        if (path != null) 'path': path,
+        if (host != null) 'host': [host],
+      },
+  };
 }
 
 /// Ссылка, которую массовый импорт пропустил.
@@ -259,9 +295,9 @@ ShareLink parseShareLink(String raw) {
     'vless' => _parseInline(uri, LinkProtocol.vless, text),
     'trojan' => _parseInline(uri, LinkProtocol.trojan, text),
     _ => throw UnsupportedLinkException(
-        'Протокол $scheme не поддерживается',
-        scheme: scheme,
-      ),
+      'Протокол $scheme не поддерживается',
+      scheme: scheme,
+    ),
   };
 }
 
@@ -332,10 +368,10 @@ ShareLink _parseVmess(String source) {
   if (data is! Map) throw LinkFormatException('Описание vmess не читается');
 
   String field(String key) => switch (data[key]) {
-        final String value => value.trim(),
-        final num value => value.toString(),
-        _ => '',
-      };
+    final String value => value.trim(),
+    final num value => value.toString(),
+    _ => '',
+  };
 
   final address = _stripBrackets(field('add'));
   if (address.isEmpty) throw LinkFormatException('В ссылке vmess нет адреса');

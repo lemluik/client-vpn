@@ -6,7 +6,8 @@ import 'package:client_vpn/share_link.dart';
 import 'package:client_vpn/tun_config.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-const firstLink = 'vless://2f6bd5a1-1e73-4b1a-9d3c-000000000001@example.org:443'
+const firstLink =
+    'vless://2f6bd5a1-1e73-4b1a-9d3c-000000000001@example.org:443'
     '?security=reality&sni=www.example.org&fp=chrome'
     '&pbk=SaMdKeySaMdKeySaMdKeySaMdKeySaMdKeySaMd1234&sid=a1b2c3d4'
     '#%D0%9F%D0%B5%D1%80%D0%B2%D1%8B%D0%B9';
@@ -134,17 +135,37 @@ void main() {
     test('находит балансировщик, которому доверен тег', () {
       expect(
         balancerTagFor([
-          {'tag': 'lb-other', 'selector': ['cvpn-proxy-2']},
-          {'tag': 'lb', 'selector': [proxyTag, 'cvpn-proxy-2']},
+          {
+            'tag': 'lb-other',
+            'selector': ['cvpn-proxy-2'],
+          },
+          {
+            'tag': 'lb',
+            'selector': [proxyTag, 'cvpn-proxy-2'],
+          },
         ], proxyTag),
         'lb',
       );
     });
 
     test('балансировщик без тега и без узла в selector не подходит', () {
-      expect(balancerTagFor([{'selector': [proxyTag]}], proxyTag), isNull);
-      expect(balancerTagFor([{'tag': 'lb', 'selector': ['other']}], proxyTag),
-          isNull);
+      expect(
+        balancerTagFor([
+          {
+            'selector': [proxyTag],
+          },
+        ], proxyTag),
+        isNull,
+      );
+      expect(
+        balancerTagFor([
+          {
+            'tag': 'lb',
+            'selector': ['other'],
+          },
+        ], proxyTag),
+        isNull,
+      );
       expect(balancerTagFor(null, proxyTag), isNull);
       expect(balancerTagFor(const [], proxyTag), isNull);
     });
@@ -152,7 +173,10 @@ void main() {
 
   group('завершающее правило при объявленном балансировщике', () {
     const balancers = [
-      {'tag': 'lb', 'selector': [proxyTag, '$proxyTag-2']},
+      {
+        'tag': 'lb',
+        'selector': [proxyTag, '$proxyTag-2'],
+      },
     ];
 
     test('ссылается на балансировщик, а не на первое исходящее соединение', () {
@@ -183,6 +207,39 @@ void main() {
       );
 
       expect(config.containsKey('balancers'), false);
+    });
+  });
+
+  group('фрагментация рукопожатия в конфиге (Д2-20)', () {
+    test('по умолчанию ни один выход не содержит finalmask', () {
+      expect(buildConfigFromLinks(parsedLinks()), isNot(contains('finalmask')));
+    });
+
+    test('флаг кладёт подтверждённый блок в каждый tcp-выход', () {
+      final config = decode(
+        buildConfigFromLinks(parsedLinks(), fragmentHandshake: true),
+      );
+      final outs = (config['outbounds'] as List).cast<Map<String, dynamic>>();
+
+      // Обе тестовые ссылки — tcp; свобода (freedom) не выходит, блока у него нет.
+      expect(outs, hasLength(3));
+      for (final outbound in outs.take(2)) {
+        expect((outbound['streamSettings'] as Map)['finalmask'], {
+          'tcp': [
+            {
+              'type': 'fragment',
+              'settings': {
+                'packets': 'tlshello',
+                'length': '100-200',
+                'delay': '10-20',
+                'maxSplit': '2-8',
+              },
+            },
+          ],
+        });
+      }
+      expect(outs[2]['protocol'], 'freedom');
+      expect(outs[2].containsKey('streamSettings'), isFalse);
     });
   });
 }

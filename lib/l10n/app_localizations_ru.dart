@@ -635,4 +635,18 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get tileFallback =>
       'Откройте шторку, нажмите редактировать и перетащите плитку «Туннель» на панель быстрых настроек';
+
+  @override
+  String get fragmentHandshakeTitle => 'Фрагментация рукопожатия';
+
+  @override
+  String get fragmentHandshakeSubtitle =>
+      'Для сетей с жёсткой фильтрацией: начало TLS-рукопожатия уходит в ядро частями. По умолчанию выключена, включать по итогам замера.';
+
+  @override
+  String get fragmentSaved => 'Настройка сохранена';
+
+  @override
+  String get fragmentApplied =>
+      'Настройка применена, подключение поднято заново';
 }

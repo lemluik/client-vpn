@@ -451,6 +451,16 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Фрагментация рукопожатия (Д2-20): отдельная опция, выключена по
+  /// умолчанию (Р-83). Применяется при сборке конфига, поэтому поднятый
+  /// туннель перезапускают — той же дорогой, что и смену маршрута.
+  bool get fragmentHandshake => _settings.fragmentHandshake;
+
+  Future<void> setFragmentHandshake(bool value) async {
+    await _settings.setFragmentHandshake(value);
+    notifyListeners();
+  }
+
   /// Флаг автозапуска принадлежит системе и его правят не только отсюда
   /// (regedit, диспетчер задач, настройки Android), поэтому значение
   /// перечитывается, а не хранится в настройках.
@@ -500,6 +510,7 @@ class AppState extends ChangeNotifier {
         _store.activeConfig(
           rules: _routingPreset.rulesWith(_manualRules),
           probeEndpoint: _probeEndpoint,
+          fragmentHandshake: _settings.fragmentHandshake,
         ),
       );
       await _core.validate(config);

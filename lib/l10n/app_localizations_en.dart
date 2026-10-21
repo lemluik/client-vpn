@@ -635,4 +635,17 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get tileFallback =>
       'Open the shade, tap edit and drag the Tunnel tile onto the quick settings panel';
+
+  @override
+  String get fragmentHandshakeTitle => 'Handshake fragmentation';
+
+  @override
+  String get fragmentHandshakeSubtitle =>
+      'For networks with strict filtering: the start of the TLS handshake goes to the core in pieces. Off by default; turn it on after measuring.';
+
+  @override
+  String get fragmentSaved => 'Setting saved';
+
+  @override
+  String get fragmentApplied => 'Setting applied, the connection is back up';
 }
