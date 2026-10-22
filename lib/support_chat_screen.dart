@@ -52,9 +52,12 @@ String imageMimeType(String name) {
 /// выпущена. Самостоятельной регистрации на узлах нет, звонков тоже — только
 /// текст и снимки экрана.
 ///
-/// Провайдер необязателен: без него чат доступен как «первая помощь» тому, у
-/// кого ключ ещё не добавлен или туннель не поднимается. Такая сессия
-/// хранится под отдельным ключом и с данными провайдера не смешивается.
+/// Формы входа нет: по открытию экрана клиент сам входит учёткой из подписки
+/// (МЧ-5.1), а если подписка её ещё не прислала — обновляет подписку и
+/// пробует снова. На сбой показываем текст ошибки и одну кнопку «Повторить».
+///
+/// Провайдер необязателен: без него чат берёт учётку активной записи подписки,
+/// а если и её нет — сессия остаётся под отдельным ключом «первой помощи».
 class SupportChatScreen extends StatefulWidget {
   const SupportChatScreen({
     required this.state,
@@ -79,14 +82,33 @@ class _SupportChatScreenState extends State<SupportChatScreen> {
   final TextEditingController _draft = TextEditingController();
   final ScrollController _scroll = ScrollController();
 
+  /// Идёт автоподключение: лента ещё не открыта, экран рисует индикатор.
+  bool _connecting = false;
+
   ChatService? get _chat => widget.state.chat;
-  String get _scopeId => widget.provider?.id ?? _directScope;
+
+  /// Запись, чьей учёткой входит чат. Экран открыт со снимком провайдера, а
+  /// после обновления подписки он устаревает — поэтому каждый раз перечитываем
+  /// запись из стора.
+  Provider? _provider() {
+    final id = widget.provider?.id;
+    if (id != null) {
+      for (final provider in widget.state.providers) {
+        if (provider.id == id) return provider;
+      }
+    }
+    return widget.provider ?? widget.state.activeProvider;
+  }
+
+  /// Сессия хранится под записью провайдера, чья учётка использована: вместе с
+  /// ней она и удаляется. Без провайдера — отдельный ключ «первой помощи».
+  String get _scopeId => _provider()?.id ?? _directScope;
 
   @override
   void initState() {
     super.initState();
     _chat?.addListener(_onChange);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _open());
+    WidgetsBinding.instance.addPostFrameCallback((_) => _connect());
   }
 
   @override
@@ -109,13 +131,58 @@ class _SupportChatScreenState extends State<SupportChatScreen> {
     });
   }
 
-  Future<void> _open() async {
+  /// Автоподключение: сначала тем, что уже есть (сохранённая сессия, а без неё
+  /// учётка из подписки); если входить нечем — обновляем подписку и пробуем
+  /// снова. Ошибка копится в [ChatService.error] и показывается с кнопкой
+  /// «Повторить», которая запускает этот же поток заново.
+  Future<void> _connect() async {
     final chat = _chat;
-    if (chat == null) return;
-    if (chat.session == null) {
-      chat.clearError();
-      await chat.resume(_scopeId);
+    if (chat == null || _connecting) return;
+    if (chat.signedIn) {
+      // Вход выполнен ещё до закрытия экрана: заново не логинимся, но приём
+      // поднимаем — вместе с экраном он был остановлен.
+      chat.resumePolling();
+      _scrollToEnd();
+      return;
     }
+    setState(() => _connecting = true);
+    chat.clearError();
+
+    var error = await _enter(chat);
+    if (!chat.signedIn && error == null) {
+      if (_provider() == null) {
+        // Учётка чата приходит вместе с ключом: без подключения брать её
+        // неоткуда, и обновлять подписку бессмысленно.
+        error = 'Чат открывается по ключу — сначала добавьте подключение';
+      } else {
+        // Учётки чата в подписке ещё нет: ждём её от провайдера.
+        error = await widget.state.refreshActive() ?? await _enter(chat);
+      }
+    }
+    if (!chat.signedIn) {
+      error ??= 'Подписка ещё не прислала учётку чата';
+      // «Доступ закончился» не понижаем до «нет связи»: отозванный токен
+      // повтором входа не возвращается.
+      final status = chat.status == ChatStatus.blocked
+          ? ChatStatus.blocked
+          : ChatStatus.retrying;
+      await chat.fail(error, status);
+    }
+
+    if (!mounted) return;
+    setState(() => _connecting = false);
+    if (chat.signedIn) _scrollToEnd();
+  }
+
+  /// Одна попытка войти тем, что уже есть. `null` — либо успех, либо входить
+  /// пока нечем; различает их [ChatService.signedIn].
+  Future<String?> _enter(ChatService chat) async {
+    final provider = _provider();
+    if (!chatCredentialsReady(provider)) return null;
+    // `resume` поднимает сохранённую сессию вместе с очередью и курсором, а без
+    // неё входит учёткой провайдера.
+    await chat.resume(_scopeId, provider: provider);
+    return chat.signedIn ? null : chat.error;
   }
 
   @override
@@ -128,12 +195,13 @@ class _SupportChatScreenState extends State<SupportChatScreen> {
       );
     }
 
-    final session = chat.session;
+    final signedIn = chat.signedIn;
+    final busy = _connecting || chat.status == ChatStatus.connecting;
     return Scaffold(
       appBar: AppBar(
         title: const Text('Поддержка'),
         actions: [
-          if (session != null)
+          if (chat.session != null)
             IconButton(
               tooltip: 'Выйти из чата',
               icon: const Icon(Icons.logout),
@@ -145,38 +213,39 @@ class _SupportChatScreenState extends State<SupportChatScreen> {
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-          child: session == null
-              ? _SignIn(
-                  provider: widget.provider,
-                  busy: chat.status == ChatStatus.connecting,
-                  error: chat.error,
-                  onSubmit: _signIn,
-                )
-              : Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _PrivacyNote(tunnelUp: widget.state.isConnected),
-                    const SizedBox(height: 8),
-                    Expanded(
-                      child: _history(chat),
-                    ),
-                    _ChatStatusBar(chat: chat),
-                    const SizedBox(height: 8),
-                    _Composer(
-                      controller: _draft,
-                      blocked: chat.status == ChatStatus.blocked,
-                      replies: chat.quickReplies,
-                      onSend: _send,
-                      onPick: _pick,
-                      onAttach: _attach,
-                      onRetry: chat.retry,
-                    ),
-                  ],
-                ),
+          child: signedIn ? _room(chat) : _entry(chat, busy: busy),
         ),
       ),
     );
   }
+
+  /// Что видит пользователь до открытия ленты: ожидание входа либо причину
+  /// сбоя с одной кнопкой повтора.
+  Widget _entry(ChatService chat, {required bool busy}) => busy
+      ? const _Connecting()
+      : _ConnectFailure(error: chat.error, onRetry: _connect);
+
+  Widget _room(ChatService chat) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _PrivacyNote(tunnelUp: widget.state.isConnected),
+          const SizedBox(height: 8),
+          Expanded(
+            child: _history(chat),
+          ),
+          _ChatStatusBar(chat: chat),
+          const SizedBox(height: 8),
+          _Composer(
+            controller: _draft,
+            blocked: chat.status == ChatStatus.blocked,
+            replies: chat.quickReplies,
+            onSend: _send,
+            onPick: _pick,
+            onAttach: _attach,
+            onRetry: chat.retry,
+          ),
+        ],
+      );
 
   Widget _history(ChatService chat) {
     final messages = chat.messages;
@@ -193,28 +262,6 @@ class _SupportChatScreenState extends State<SupportChatScreen> {
         mine: messages[index].senderName.toLowerCase() == self,
       ),
     );
-  }
-
-  Future<void> _signIn({
-    required String homeserver,
-    required String user,
-    required String password,
-    required String roomId,
-  }) async {
-    final chat = _chat;
-    if (chat == null) return;
-    final error = await chat.signIn(
-      providerId: _scopeId,
-      homeserver: homeserver,
-      user: user,
-      password: password,
-      roomId: roomId.isEmpty ? null : roomId,
-    );
-    if (error == null) _scrollToEnd();
-    if (!mounted) return;
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(error ?? 'Вход выполнен')));
   }
 
   Future<void> _send() async {
@@ -543,134 +590,67 @@ class _Composer extends StatelessWidget {
   }
 }
 
-/// Вход готовой учёткой: узел и комнату берём из подписки, если провайдер их
-/// прислал. Адрес узла можно ввести руками — клиент работает с любым
-/// провайдером, а своих адресов в коде нет.
-class _SignIn extends StatefulWidget {
-  const _SignIn({
-    this.provider,
-    required this.busy,
-    required this.error,
-    required this.onSubmit,
-  });
-
-  final Provider? provider;
-  final bool busy;
-  final String? error;
-  final Future<void> Function({
-    required String homeserver,
-    required String user,
-    required String password,
-    required String roomId,
-  }) onSubmit;
+/// Автоподключение: формы входа нет, поэтому пока клиент входит учёткой из
+/// подписки (или обновляет её), пользователь видит только ожидание.
+class _Connecting extends StatelessWidget {
+  const _Connecting();
 
   @override
-  State<_SignIn> createState() => _SignInState();
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox(
+            key: ValueKey('chat.connecting'),
+            width: 28,
+            height: 28,
+            child: CircularProgressIndicator(strokeWidth: 3),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Подключаем чат…',
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+        ],
+      ),
+    );
+  }
 }
 
-class _SignInState extends State<_SignIn> {
-  late final TextEditingController _homeserver =
-      TextEditingController(text: widget.provider?.chatHomeserver ?? '');
-  final TextEditingController _user = TextEditingController();
-  final TextEditingController _password = TextEditingController();
-  late final TextEditingController _room =
-      TextEditingController(text: widget.provider?.chatRoomId ?? '');
+/// Сбой автоподключения: текст причины и одна кнопка повтора. Полей ввода нет —
+/// учётку чата выдаёт провайдер, вводить пользователю нечего.
+class _ConnectFailure extends StatelessWidget {
+  const _ConnectFailure({required this.error, required this.onRetry});
 
-  @override
-  void dispose() {
-    _homeserver.dispose();
-    _user.dispose();
-    _password.dispose();
-    _room.dispose();
-    super.dispose();
-  }
+  final String? error;
+  final Future<void> Function() onRetry;
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    final missing = widget.provider?.chatHomeserver == null;
-
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const SizedBox(height: 8),
-          Text(
-            'Чат поддержки',
-            style: Theme.of(context).textTheme.headlineSmall,
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Учётку для чата выдаёт провайдер вместе с ключом. '
-            'Регистрации в приложении нет: войти можно только готовым логином '
-            'и паролем. Сообщения читает оператор поддержки.',
-            style: Theme.of(context).textTheme.bodyMedium,
-          ),
-          const SizedBox(height: 16),
-          TextField(
-            key: const ValueKey('homeserver'),
-            controller: _homeserver,
-            keyboardType: TextInputType.url,
-            decoration: InputDecoration(
-              labelText: 'Адрес узла чата',
-              hintText: 'https://узел:8448',
-              border: const OutlineInputBorder(),
-              helperText: missing
-                  ? 'Провайдер не прислал адрес узла — введите его вручную'
-                  : null,
-              helperStyle: missing ? TextStyle(color: colors.error) : null,
-            ),
-          ),
-          const SizedBox(height: 10),
-          TextField(
-            key: const ValueKey('user'),
-            controller: _user,
-            decoration: const InputDecoration(
-              labelText: 'Логин учётки',
-              hintText: '@имя:узел',
-              border: OutlineInputBorder(),
-            ),
-          ),
-          const SizedBox(height: 10),
-          TextField(
-            key: const ValueKey('password'),
-            obscureText: true,
-            controller: _password,
-            decoration: const InputDecoration(
-              labelText: 'Пароль',
-              border: OutlineInputBorder(),
-            ),
-          ),
-          const SizedBox(height: 10),
-          TextField(
-            key: const ValueKey('room'),
-            controller: _room,
-            decoration: const InputDecoration(
-              labelText: 'Комната (необязательно)',
-              hintText: '!id:узел',
-              border: OutlineInputBorder(),
-            ),
-          ),
-          if (widget.error != null) ...[
+    return Center(
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Icon(Icons.forum_outlined, size: 40, color: colors.outline),
             const SizedBox(height: 12),
             Text(
-              widget.error!,
+              error ?? 'Чат закрыт',
+              key: const ValueKey('chat.error'),
+              textAlign: TextAlign.center,
               style: TextStyle(color: colors.error),
             ),
+            const SizedBox(height: 16),
+            FilledButton(
+              key: const ValueKey('chat.retry'),
+              onPressed: onRetry,
+              child: const Text('Повторить'),
+            ),
           ],
-          const SizedBox(height: 16),
-          FilledButton(
-            onPressed: widget.busy
-                ? null
-                : () => widget.onSubmit(
-                      homeserver: _homeserver.text,
-                      user: _user.text,
-                      password: _password.text,
-                      roomId: _room.text.trim(),
-                    ),
-            child: Text(widget.busy ? 'Вход…' : 'Войти в чат'),
-          ),
-        ],
+        ),
       ),
     );
   }

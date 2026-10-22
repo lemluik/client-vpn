@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import 'chat_store.dart';
 import 'matrix_api.dart';
+import 'provider.dart';
 
 /// Состояние чата для интерфейса. `blocked` — токен отозван или доступ кончился:
 /// сам клиент его не восстановит, выдаёт провайдер.
@@ -21,6 +22,15 @@ const List<Duration> chatBackoffs = [
   Duration(seconds: 8),
   Duration(seconds: 16),
 ];
+
+/// Прислала ли подписка всё нужное для автологина. Экран проверяет это до
+/// входа: `null` от [ChatService.signInWithProvider] означает и удачу, и
+/// «входить нечем», а отличить второе от сетевого сбоя надо заранее.
+bool chatCredentialsReady(Provider? provider) =>
+    provider != null &&
+    provider.chatHomeserver != null &&
+    provider.chatUser != null &&
+    provider.chatPassword != null;
 
 /// Двигатель чата: один long-poll `/sync`, очередь с `txnId`, курсор на диске.
 ///
@@ -48,6 +58,15 @@ class ChatService extends ChangeNotifier {
   int _attempts = 0;
   bool _running = false;
 
+  /// Счётчик поколений цикла приёма: `stop()` его увеличивает, и старый цикл,
+  /// досчитав долгий `sync`, выходит сам вместо того чтобы работать наравне
+  /// с новым.
+  int _generation = 0;
+
+  /// Служба уничтожена вместе с состоянием приложения: экран чата закрывается
+  /// позже, и его `stop()` не должен звать слушателей снятого оповестителя.
+  bool _disposed = false;
+
   /// Вложения, которые сейчас качаются: один запрос на файл, иначе лента
   /// заведёт по копии запроса на каждое сообщение с тем же снимком.
   final Set<String> _downloading = {};
@@ -68,15 +87,26 @@ class ChatService extends ChangeNotifier {
   int get queued => _session?.outbox.length ?? 0;
 
   /// Поднимает сохранённую сессию провайдера и начинает приём.
-  Future<bool> resume(String providerId) async {
+  /// Если сессии нет, но есть credentials в провайдере — пробует авто-логин.
+  Future<bool> resume(String providerId, {Provider? provider}) async {
     final session = _store.sessionOf(providerId);
     if (session == null) {
+      // Нет сохранённой сессии: пробуем авто-логин если есть credentials
+      if (chatCredentialsReady(provider)) {
+        final error = await signInWithProvider(provider!);
+        return error == null;
+      }
       _status = ChatStatus.signedOut;
       notifyListeners();
       return false;
     }
     final token = await _store.tokenOf(providerId);
     if (token == null || token.isEmpty) {
+      // Токен утерян (переустановка): пробуем авто-логин
+      if (chatCredentialsReady(provider)) {
+        final error = await signInWithProvider(provider!);
+        return error == null;
+      }
       _session = session;
       _hydrate(session);
       await fail('Доступ к чату закончился', ChatStatus.blocked);
@@ -178,8 +208,17 @@ class ChatService extends ChangeNotifier {
       await client.versions();
       final login = await client.login(user.trim(), password);
       var room = roomId?.trim();
-      if (room == null || room.isEmpty) room = await _firstRoom(client);
-      if (room == null) return 'У этой учётки нет комнаты: чат ещё не выпущен';
+      if (room == null || room.isEmpty) {
+        room = await _firstRoom(client);
+      } else {
+        // Комнату из подписки создаёт служебная учётка узла, и свежий клиент в
+        // ней только приглашённый: без принятого приглашения лента и история
+        // вернут пустоту или 403.
+        await _ensureMembership(client, room);
+      }
+      if (room == null || room.isEmpty) {
+        return 'У этой учётки нет комнаты: чат ещё не выпущен';
+      }
 
       _client = client;
       // Новый вход — новая пара «узел + комната»: старая сессия и её токен
@@ -205,6 +244,40 @@ class ChatService extends ChangeNotifier {
           ? ChatStatus.blocked
           : ChatStatus.retrying);
     }
+  }
+
+  /// Авто-логин по учётным данным из провайдера. Если credentials есть —
+  /// вход происходит без участия пользователя (МЧ-5.1).
+  ///
+  /// `null` означает и удачный вход, и «входить нечем»: отличать одно от
+  /// другого вызывающий код обязан сам, через [chatCredentialsReady] и
+  /// [signedIn]. Сетевой сбой всегда возвращается текстом ошибки.
+  Future<String?> signInWithProvider(Provider provider) async {
+    final user = provider.chatUser;
+    final password = provider.chatPassword;
+    final homeserver = provider.chatHomeserver;
+    if (user == null || password == null || homeserver == null) {
+      return null; // Нет credentials — авто-логин невозможен
+    }
+    return signIn(
+      providerId: provider.id,
+      homeserver: homeserver,
+      user: user,
+      password: password,
+      roomId: provider.chatRoomId,
+    );
+  }
+
+  /// Членство в комнате, которую прислала подписка: узел добавляет учётку
+  /// приглашением, поэтому до чтения ленты приглашение надо принять. Второй
+  /// `/sync` нужен, чтобы комната появилась в `rooms.join` до сохранения
+  /// сессии — иначе курсор запишется на состояние без нашей комнаты.
+  Future<void> _ensureMembership(MatrixClient client, String roomId) async {
+    final reply = await client.sync();
+    final join = (reply.json['rooms'] as Map?)?['join'];
+    if (join is Map && join.containsKey(roomId)) return;
+    await client.joinRoom(roomId);
+    await client.sync();
   }
 
   /// Отправка: сразу в очередь и в историю со статусом «в очереди», потом на узел.
@@ -309,8 +382,24 @@ class ChatService extends ChangeNotifier {
   /// и держать long-poll без пользователя в интерфейсе нельзя. Текущий запрос
   /// доживёт до ответа узла (до 25 с), новых не заводим.
   void stop() {
+    if (_disposed) return;
     _running = false;
+    _generation++;
     notifyListeners();
+  }
+
+  /// Экран чата закрывают — приём останавливается, но сессия и токен живут.
+  /// При повторном открытии цикл поднимаем заново: иначе лента стоит, хотя
+  /// вход выполнен и новых сообщений клиент не видит.
+  void resumePolling() {
+    if (_running || _session == null || _client == null) return;
+    if (_status == ChatStatus.blocked) return;
+    _status = ChatStatus.connecting;
+    _error = null;
+    _attempts = 0;
+    notifyListeners();
+    _start();
+    unawaited(_backfill());
   }
 
   /// Забывает чат провайдера вместе с его записью: сессия, курсор, очередь и
@@ -366,24 +455,33 @@ class ChatService extends ChangeNotifier {
   void _start() {
     if (_running) return;
     _running = true;
-    unawaited(_loop());
+    final generation = ++_generation;
+    unawaited(_loop(generation));
   }
 
   /// Последовательный цикл: отправка очереди, затем одно долгосрочное
   /// соединение. Параллельных `sync` не заводим — на узле лимит соединений.
-  Future<void> _loop() async {
-    while (_running && _session != null && _client != null) {
+  /// [generation] отличает этот цикл от прежнего, остановленного `stop()`:
+  /// долгий `sync` прервать нельзя, он досчитывает свой век и выходит сам,
+  /// а новый цикл тем временем уже поднят повторным открытием экрана.
+  Future<void> _loop(int generation) async {
+    while (_running &&
+        generation == _generation &&
+        _session != null &&
+        _client != null) {
       await _flush();
-      if (!_running) break;
+      if (!_running || generation != _generation) break;
       final session = _session!;
       try {
         final reply = await _client!.sync(since: session.since);
+        if (generation != _generation) break;
         _attempts = 0;
         _absorb(reply.json);
         _status = ChatStatus.live;
         _error = null;
         notifyListeners();
       } on Object catch (error) {
+        if (generation != _generation) break;
         if (error is MatrixException && error.unknownToken) {
           await fail('Доступ к чату закончился', ChatStatus.blocked);
           _running = false;
@@ -585,7 +683,11 @@ class ChatService extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
     _running = false;
+    // Цикл приёма проверяет поколение после долгого `sync`: без этого он
+    // оповестит слушателей уже снятого оповестителя.
+    _generation++;
     super.dispose();
   }
 }

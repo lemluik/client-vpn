@@ -21,6 +21,47 @@ const home = 'https://chat.example:8448';
 const room = '!abc:chat.example';
 const providerId = 'провайдер-1';
 
+/// Один профиль в подписке: без него обновление считается неудачным, а учётку
+/// чата провайдер отдаёт заголовками того же ответа.
+const plainBody =
+    'vless://2f6bd5a1-1e73-4b1a-9d3c-000000000001@example.org:443'
+    '?encryption=none&security=reality'
+    '&pbk=SaMdKeySaMdKeySaMdKeySaMdKeySaMd1234'
+    '&sid=ab12cd34&fp=chrome&type=tcp&sni=example.org'
+    '&flow=xtls-rprx-vision#%D0%A3%D0%B7%D0%B5%D0%BB%201';
+
+/// Учётка чата в заголовках подписки: форма входа удалена, клиент входит сам.
+const chatHeaders = {
+  'chat-homeserver': home,
+  'chat-room': room,
+  'chat-user': '@demo:chat.example',
+  'chat-password': 'пароль',
+};
+
+/// Ответ `/sync`, в котором комната уже наша: приглашение принимать не надо.
+Map<String, dynamic> joinedSync() => {
+      'rooms': {
+        'join': {room: {}},
+      },
+      'next_batch': 's0',
+    };
+
+/// Ответ `/sync` с приглашением: комнаты в `rooms.join` ещё нет.
+Map<String, dynamic> invitedSync() => {
+      'rooms': {'join': {}},
+      'next_batch': 's0',
+    };
+
+/// Провайдер с учёткой чата — как его присылает подписка.
+const chatProvider = Provider(
+  id: providerId,
+  url: 'https://example.org/sub',
+  chatHomeserver: home,
+  chatRoomId: room,
+  chatUser: '@demo:chat.example',
+  chatPassword: 'пароль',
+);
+
 /// Настоящий PNG 1×1: лента обязана его показать, а не нарисовать заглушку.
 final Uint8List png = base64Decode(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
@@ -34,10 +75,14 @@ class FakeNode {
   final List<Uint8List> uploads = [];
   final List<String> uploadPaths = [];
   final List<String> downloads = [];
+
+  /// Комнаты, в которые клиент попросился сам (принял приглашение).
+  final List<String> joins = [];
   final List<Completer<MatrixReply>> _waiting = [];
 
   Object? sendFailure;
   Object? uploadFailure;
+  Object? loginFailure;
   Map<String, dynamic>? quickReplies;
 
   /// Байты, которые узел отдаёт на скачивание вложения.
@@ -57,6 +102,8 @@ class FakeNode {
           : _reply(200, found);
     }
     if (path.endsWith('/login')) {
+      final failure = loginFailure;
+      if (failure != null) throw failure;
       return _reply(200, {
         'access_token': 'токен-Т',
         'device_id': 'DEV1',
@@ -64,6 +111,10 @@ class FakeNode {
       });
     }
     if (path.endsWith('/logout')) return _reply(200, {});
+    if (path.contains('/join/')) {
+      joins.add(Uri.decodeComponent(path.split('/join/').last));
+      return _reply(200, {'room_id': room});
+    }
     if (path.endsWith('/sync')) {
       final completer = Completer<MatrixReply>();
       _waiting.add(completer);
@@ -237,6 +288,7 @@ void main() {
   late MemoryVault vault;
   late ChatService chat;
   late AppState state;
+  late ProfileStore profiles;
 
   /// Что «выбирает» пользователь в диалоге вложения. Null — он передумал.
   late PickedImage? picked;
@@ -257,8 +309,9 @@ void main() {
       call: node.call,
       delay: (_) async {},
     );
+    profiles = await ProfileStore.open();
     state = AppState(
-      await ProfileStore.open(),
+      profiles,
       IdleCore(),
       settings: await SettingsStore.open(),
       chat: chat,
@@ -270,27 +323,22 @@ void main() {
     state.dispose();
   });
 
-  Future<void> openScreen(WidgetTester tester) async {
+  Future<void> openScreen(WidgetTester tester, {Provider? provider}) async {
     await tester.pumpWidget(MaterialApp(
       home: SupportChatScreen(
         state: state,
         pickImage: () async => picked,
-        provider: const Provider(
-          id: providerId,
-          url: 'https://example.org/sub',
-          chatHomeserver: home,
-          chatRoomId: room,
-        ),
+        provider: provider ?? chatProvider,
       ),
     ));
     await pump(tester);
   }
 
+  /// Открытие чата: клиент входит сам, от теста нужен только ответ узла на
+  /// `/sync`, которым проверяется членство в комнате.
   Future<void> signIn(WidgetTester tester) async {
     await openScreen(tester);
-    await tester.enterText(find.byKey(const ValueKey('user')), '@demo:chat.example');
-    await tester.enterText(find.byKey(const ValueKey('password')), 'пароль');
-    await tester.tap(find.text('Войти в чат'));
+    node.answerSync(joinedSync());
     await pump(tester);
     expect(chat.signedIn, isTrue);
   }
@@ -306,15 +354,37 @@ void main() {
     await pump(tester, 6);
   }
 
-  testWidgets('форма входа предзаполнена узлом из подписки', (tester) async {
+  testWidgets('формы входа нет: чат подключается сам', (tester) async {
     await openScreen(tester);
 
-    expect(find.text('Чат поддержки'), findsOneWidget);
-    expect(
-      tester.widget<TextField>(find.byKey(const ValueKey('homeserver'))).controller!.text,
-      home,
-    );
+    // Пока клиент входит учёткой из подписки — ожидание, а не поля ввода.
+    expect(find.text('Подключаем чат…'), findsOneWidget);
+    expect(find.byKey(const ValueKey('chat.connecting')), findsOneWidget);
+    expect(find.byType(TextField), findsNothing);
+
+    node.answerSync(joinedSync());
+    await pump(tester);
+
+    expect(chat.signedIn, isTrue);
+    expect(chat.session?.providerId, providerId);
+    expect(vault.values.values, contains('токен-Т'));
+    expect(find.byKey(const ValueKey('draft')), findsOneWidget);
     expect(find.textContaining('оператор'), findsWidgets);
+  });
+
+  testWidgets('комната из подписки: приглашение принимается до ленты',
+      (tester) async {
+    await openScreen(tester);
+
+    node.answerSync(invitedSync());
+    await pump(tester);
+    expect(node.joins, [room]);
+
+    node.answerSync(joinedSync());
+    await pump(tester);
+
+    expect(chat.signedIn, isTrue);
+    expect(find.text('Пока пусто. Напишите первое сообщение.'), findsOneWidget);
   });
 
   testWidgets('вход открывает ленту, отправка помечена отправленной',
@@ -362,7 +432,9 @@ void main() {
 
     expect(vault.values, isEmpty);
     expect(chat.session, isNull);
-    expect(find.text('Войти в чат'), findsOneWidget);
+    // Формы входа нет: после выхода экран предлагает подключиться заново.
+    expect(find.text('Повторить'), findsOneWidget);
+    expect(find.byType(TextField), findsNothing);
   });
 
   testWidgets('доступ закончился: поле ввода заблокировано',
@@ -381,29 +453,60 @@ void main() {
     expect(chat.status, ChatStatus.blocked);
   });
 
-  testWidgets('без провайдера чат доступен: адрес узла вводится вручную',
+  testWidgets('подключения нет: чат объясняет, что учётка приходит с ключом',
       (tester) async {
     await tester.pumpWidget(MaterialApp(
       home: SupportChatScreen(state: state),
     ));
     await pump(tester);
 
-    expect(find.text('Провайдер не прислал адрес узла — введите его вручную'),
-        findsOneWidget);
+    expect(
+      find.text('Чат открывается по ключу — сначала добавьте подключение'),
+      findsOneWidget,
+    );
+    expect(find.byKey(const ValueKey('chat.retry')), findsOneWidget);
+    // Полей входа больше нет: вводить пользователю нечего.
+    expect(find.byType(TextField), findsNothing);
+    expect(chat.signedIn, isFalse);
+  });
 
-    await tester.enterText(
-        find.byKey(const ValueKey('homeserver')), home);
-    await tester.enterText(
-        find.byKey(const ValueKey('user')), '@demo:chat.example');
-    await tester.enterText(
-        find.byKey(const ValueKey('password')), 'пароль');
-    await tester.enterText(find.byKey(const ValueKey('room')), room);
-    await tester.tap(find.text('Войти в чат'));
+  testWidgets('сбой входа: ошибка, а «Повторить» входит тем же потоком',
+      (tester) async {
+    node.loginFailure = const SocketException('нет связи');
+    await openScreen(tester);
     await pump(tester);
 
-    expect(chat.session?.providerId, 'direct');
-    expect(vault.values.containsKey('chat.token.v1.direct'), isTrue);
+    expect(chat.signedIn, isFalse);
+    expect(find.text('Нет связи с узлом чата'), findsOneWidget);
+
+    node.loginFailure = null;
+    await tester.tap(find.byKey(const ValueKey('chat.retry')));
+    await pump(tester);
+    node.answerSync(joinedSync());
+    await pump(tester);
+
+    expect(chat.signedIn, isTrue);
     expect(find.byKey(const ValueKey('draft')), findsOneWidget);
+  });
+
+  testWidgets('снимок провайдера устарел: учётка берётся из стора заново',
+      (tester) async {
+    // Подписку обновили после того, как экран открыли: объект провайдера в
+    // руках экрана без учётки чата, а в сторе она уже есть.
+    await profiles.addSubscription(
+      'https://example.org/sub',
+      fetch: (url) async =>
+          const SubscriptionResponse(body: plainBody, headers: chatHeaders),
+    );
+    final fresh = state.activeProvider!;
+    expect(fresh.chatPassword, 'пароль');
+
+    await openScreen(tester, provider: Provider(id: fresh.id, url: fresh.url));
+    node.answerSync(joinedSync());
+    await pump(tester);
+
+    expect(chat.signedIn, isTrue);
+    expect(chat.session?.providerId, fresh.id);
   });
 
   testWidgets('кнопки заявки приходят из комнаты и отправляют свой текст', (tester) async {

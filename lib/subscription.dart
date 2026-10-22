@@ -16,9 +16,12 @@ const String _subStatusHeader = 'x-sub-status';
 const String _frozenValue = 'frozen';
 
 /// Настройки чата поддержки приходят теми же заголовками, что и остальное:
-/// адрес узла Matrix и комната. В код клиента адреса провайдера не вписываются.
+/// адрес узла Matrix, комната и учётные данные для авто-логина.
+/// В код клиента адреса провайдера не вписываются.
 const String _chatHomeserverHeader = 'chat-homeserver';
 const String _chatRoomHeader = 'chat-room';
+const String _chatUserHeader = 'chat-user';
+const String _chatPasswordHeader = 'chat-password';
 
 /// Остаток трафика и срок доступа из заголовка `subscription-userinfo`.
 ///
@@ -87,6 +90,8 @@ class Subscription {
     this.supportUrl,
     this.chatHomeserver,
     this.chatRoomId,
+    this.chatUser,
+    this.chatPassword,
     this.usage,
     this.frozen = false,
   });
@@ -108,6 +113,12 @@ class Subscription {
 
   /// Комната чата из `chat-room`: без него клиент берёт первую комнату из `/sync`.
   final String? chatRoomId;
+
+  /// Логин Matrix из `chat-user`: авто-логин без ввода пароля.
+  final String? chatUser;
+
+  /// Пароль Matrix из `chat-password`: хранится только в памяти сессии.
+  final String? chatPassword;
 
   final SubscriptionUsage? usage;
 
@@ -141,6 +152,8 @@ Subscription parseSubscription(
     supportUrl: _nonEmpty(normalized[_supportHeader]),
     chatHomeserver: _nonEmpty(normalized[_chatHomeserverHeader]),
     chatRoomId: _nonEmpty(normalized[_chatRoomHeader]),
+    chatUser: _nonEmpty(normalized[_chatUserHeader]),
+    chatPassword: _nonEmpty(normalized[_chatPasswordHeader]),
     usage: SubscriptionUsage.parse(normalized[_usageHeader]),
     frozen: (normalized[_subStatusHeader] ?? '').trim().toLowerCase() == _frozenValue,
   );
