@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../about_screen.dart' show clientVersion;
 import '../../app_state.dart';
 import '../../l10n/app_localizations.dart';
+import '../../provider.dart';
 import '../../services/device_id.dart';
 import '../../services/registration_api.dart';
 
@@ -30,9 +31,11 @@ class RegistrationScreen extends StatefulWidget {
     required this.state,
     RegistrationApi? api,
     DeviceId? deviceId,
+    SubscriptionFetcher? subscriptionFetch,
     super.key,
   }) : _api = api,
-       _deviceId = deviceId;
+       _deviceId = deviceId,
+       _subscriptionFetch = subscriptionFetch;
 
   final AppState state;
 
@@ -42,6 +45,9 @@ class RegistrationScreen extends StatefulWidget {
 
   /// Источник идентификатора устройства. В испытаниях подменяется.
   final DeviceId? _deviceId;
+
+  /// Чем получать подписку пробного ключа. В испытаниях подменяется.
+  final SubscriptionFetcher? _subscriptionFetch;
 
   @override
   State<RegistrationScreen> createState() => _RegistrationScreenState();
@@ -77,6 +83,16 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     return HttpRegistrationApi(controlPoint: controlPoint);
   }
 
+  /// Пробный ключ добавляем подпиской, а не голой ссылкой: адрес чата поддержки
+  /// и учётка в нём выдаются заголовками ответа подписки, и подключение,
+  /// собранное из одной ссылки, остаётся без чата навсегда. Ссылку используем
+  /// только когда провайдер адреса подписки не дал.
+  Future<String?> _addConnection(RegistrationResult result) {
+    final url = result.subscriptionUrl;
+    if (url == null || url.isEmpty) return widget.state.addFromText(result.key);
+    return widget.state.addSubscription(url, fetch: widget._subscriptionFetch);
+  }
+
   Future<void> _submit() async {
     final l = AppLocalizations.of(context);
     if (!_agreedToTerms) {
@@ -103,7 +119,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
         telegramLogin: '@$login',
         device: device,
       );
-      final error = await widget.state.addFromText(result.key);
+      final error = await _addConnection(result);
       if (error != null) {
         _notify(l.registrationFailed(error));
         return;

@@ -597,14 +597,21 @@ class AppState extends ChangeNotifier {
     return null;
   }
 
-  /// Добавляет подписку по адресу и сразу её получает.
-  Future<String?> addSubscription(String url) async {
+  /// Добавляет подписку по адресу и сразу её получает. [fetch] подменяется
+  /// в испытаниях: сеть не поднимается, ответ задаёт тест.
+  Future<String?> addSubscription(
+    String url, {
+    SubscriptionFetcher? fetch,
+  }) async {
     if (url.trim().isEmpty) return 'Введите адрес подписки';
 
     _busy = true;
     notifyListeners();
     try {
-      final added = await _store.addSubscription(url.trim());
+      final added = await _store.addSubscription(
+        url.trim(),
+        fetch: fetch ?? fetchSubscription,
+      );
       if (!added.ok) {
         _addLog('[ERR] ${added.error}');
         return added.error;
