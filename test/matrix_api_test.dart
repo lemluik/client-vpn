@@ -119,6 +119,40 @@ void main() {
       expect(caller.requests, isEmpty);
     });
 
+    test('принятие приглашения: POST /join с пустым телом и токеном', () async {
+      final caller = FakeCaller()
+        ..respond = (_) => json(200, {'room_id': room});
+      final client = MatrixClient(home, token: 'T', call: caller.call);
+
+      expect(await client.joinRoom(room), room);
+
+      expect(caller.last.method, 'POST');
+      expect(
+        caller.last.url.path,
+        '/_matrix/client/v3/join/${Uri.encodeComponent(room)}',
+      );
+      expect(caller.last.body, '{}');
+      expect(caller.last.token, 'T');
+    });
+
+    test('узел без room_id в ответе — оставляем тот, куда просились', () async {
+      final caller = FakeCaller()..respond = (_) => json(200, {});
+      final client = MatrixClient(home, token: 'T', call: caller.call);
+
+      expect(await client.joinRoom(room), room);
+    });
+
+    test('отказ принять приглашение виден вызывающему коду', () async {
+      final caller = FakeCaller()
+        ..respond = (_) => json(403, {'errcode': 'M_FORBIDDEN'});
+      final client = MatrixClient(home, token: 'T', call: caller.call);
+
+      expect(
+        () => client.joinRoom(room),
+        throwsA(isA<MatrixException>().having((e) => e.status, 'status', 403)),
+      );
+    });
+
     test('выход снимает токен с клиента', () async {
       final caller = FakeCaller()..respond = (_) => json(200, {});
       final client = MatrixClient(home, token: 'T', call: caller.call);

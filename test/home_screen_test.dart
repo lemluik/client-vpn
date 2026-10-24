@@ -266,8 +266,14 @@ void main() {
       await tester.tap(find.byTooltip('Поддержка'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Чат поддержки'), findsOneWidget);
-      expect(find.byKey(const ValueKey('homeserver')), findsOneWidget);
+      // Формы входа нет: экран открывается сам, а без ключа объясняет, что
+      // учётка чата приходит вместе с подключением, и даёт повтор.
+      expect(find.byKey(const ValueKey('homeserver')), findsNothing);
+      expect(
+        find.text('Чат открывается по ключу — сначала добавьте подключение'),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey('chat.retry')), findsOneWidget);
     });
     testWidgets('ссылка из буфера поднимает профиль без файла', (tester) async {
       final state = await makeState();

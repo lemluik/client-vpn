@@ -4,6 +4,7 @@ import 'package:client_vpn/app_state.dart';
 import 'package:client_vpn/autostart.dart';
 import 'package:client_vpn/l10n/app_localizations.dart';
 import 'package:client_vpn/profile_store.dart';
+import 'package:client_vpn/provider.dart';
 import 'package:client_vpn/screens/expired_key_screen.dart';
 import 'package:client_vpn/screens/registration/registration_screen.dart';
 import 'package:client_vpn/services/device_id.dart';
@@ -65,9 +66,10 @@ class _FakeAutostart implements Autostart {
 
 /// Заглушка API: сеть не поднимается, ответ или ошибка заданы тестом.
 class _FakeRegistrationApi implements RegistrationApi {
-  _FakeRegistrationApi({this.error});
+  _FakeRegistrationApi({this.error, this.subscriptionUrl});
 
   final Object? error;
+  final String? subscriptionUrl;
   String? lastLogin;
   DeviceData? lastDevice;
   int calls = 0;
@@ -82,7 +84,11 @@ class _FakeRegistrationApi implements RegistrationApi {
     lastDevice = device;
     final failure = error;
     if (failure != null) throw failure;
-    return const RegistrationResult(key: validKey, serviceName: 'Example');
+    return RegistrationResult(
+      key: validKey,
+      serviceName: 'Example',
+      subscriptionUrl: subscriptionUrl,
+    );
   }
 }
 
@@ -118,6 +124,7 @@ Future<void> pumpRegistration(
   required AppState state,
   RegistrationApi? api,
   DeviceId? deviceId,
+  SubscriptionFetcher? subscriptionFetch,
 }) async {
   // По умолчанию идентификатор берём из памяти: настоящий плагин защищённого
   // хранилища в тестовой среде не отвечает, и запрос бы завис.
@@ -140,6 +147,7 @@ Future<void> pumpRegistration(
                     state: state,
                     api: api,
                     deviceId: device,
+                    subscriptionFetch: subscriptionFetch,
                   ),
                 ),
               ),
@@ -238,13 +246,55 @@ void main() {
       expect(find.text('Подключено! Ключ добавлен.'), findsOneWidget);
     });
 
+    testWidgets('пробник добавляется подпиской: чат берётся из заголовков', (
+      tester,
+    ) async {
+      final state = await makeState(serviceConfig: trialConfig);
+      addTearDown(state.dispose);
+      final api = _FakeRegistrationApi(
+        subscriptionUrl: 'https://sub.example.com/sub/k-1',
+      );
+      var fetchedUrl = '';
+
+      await pumpRegistration(
+        tester,
+        state: state,
+        api: api,
+        subscriptionFetch: (url) async {
+          fetchedUrl = url;
+          return const SubscriptionResponse(
+            body: validKey,
+            headers: {
+              'chat-homeserver': 'https://rf1.example.com:8448',
+              'chat-room': '!abc:rf1.example.com',
+              'chat-user': '@client:rf1.example.com',
+              'chat-password': 'pw-from-sub',
+            },
+          );
+        },
+      );
+      await tester.tap(find.byType(Checkbox).first);
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'testuser');
+      await tester.tap(find.text('Подключить'));
+      await tester.pumpAndSettle();
+
+      expect(fetchedUrl, 'https://sub.example.com/sub/k-1');
+      expect(state.profiles, hasLength(1));
+      expect(state.profiles.single.kind, ProfileKind.subscription);
+      final provider = state.activeProvider;
+      expect(provider, isNotNull);
+      expect(provider!.chatUser, '@client:rf1.example.com');
+      expect(provider.chatHomeserver, 'https://rf1.example.com:8448');
+      expect(find.text('Подключено! Ключ добавлен.'), findsOneWidget);
+    });
+
     testWidgets('ошибка сервиса показывается пользователю', (tester) async {
       final state = await makeState(serviceConfig: trialConfig);
       addTearDown(state.dispose);
       final api = _FakeRegistrationApi(
         error: RegistrationException('Сервис недоступен'),
       );
-
       await pumpRegistration(tester, state: state, api: api);
       await tester.tap(find.byType(Checkbox).first);
       await tester.pumpAndSettle();

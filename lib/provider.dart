@@ -55,6 +55,8 @@ class Provider {
     this.supportUrl,
     this.chatHomeserver,
     this.chatRoomId,
+    this.chatUser,
+    this.chatPassword,
     this.lastUpdated,
     this.usage,
     this.cachedBody,
@@ -73,6 +75,12 @@ class Provider {
 
   /// Комната чата: если провайдер её прислал, клиент не ищет её сам.
   final String? chatRoomId;
+
+  /// Логин Matrix из подписки: авто-логин без ввода пароля.
+  final String? chatUser;
+
+  /// Пароль Matrix из подписки: не сохраняется в JSON (только в памяти сессии).
+  final String? chatPassword;
   final DateTime? lastUpdated;
   final SubscriptionUsage? usage;
   final String? cachedBody;
@@ -108,6 +116,8 @@ class Provider {
     String? supportUrl,
     String? chatHomeserver,
     String? chatRoomId,
+    String? chatUser,
+    String? chatPassword,
     DateTime? lastUpdated,
     SubscriptionUsage? usage,
     String? cachedBody,
@@ -117,6 +127,7 @@ class Provider {
     bool clearSupportUrl = false,
     bool clearChat = false,
     bool clearChatRoom = false,
+    bool clearChatCredentials = false,
     bool clearUsage = false,
   }) {
     return Provider(
@@ -129,6 +140,8 @@ class Provider {
       chatRoomId: clearChat || clearChatRoom
           ? null
           : (chatRoomId ?? this.chatRoomId),
+      chatUser: clearChatCredentials ? null : (chatUser ?? this.chatUser),
+      chatPassword: clearChatCredentials ? null : (chatPassword ?? this.chatPassword),
       lastUpdated: lastUpdated ?? this.lastUpdated,
       usage: clearUsage ? null : (usage ?? this.usage),
       cachedBody: cachedBody ?? this.cachedBody,
@@ -145,6 +158,8 @@ class Provider {
         'support': supportUrl,
         'chat': chatHomeserver,
         'chat_room': chatRoomId,
+        'chat_user': chatUser,
+        // chatPassword НЕ сохраняется: только в памяти сессии
         'updated': lastUpdated?.toIso8601String(),
         'usage': _usageToJson(usage),
         'cache': cachedBody,
@@ -172,6 +187,8 @@ class Provider {
       supportUrl: _text(json['support']),
       chatHomeserver: _text(json['chat']),
       chatRoomId: _text(json['chat_room']),
+      chatUser: _text(json['chat_user']),
+      // chatPassword не читается из JSON: только из заголовков подписки
       lastUpdated: updated == null ? null : DateTime.tryParse(updated),
       usage: usage is Map<String, dynamic> ? _usageFromJson(usage) : null,
       cachedBody: _text(json['cache']),
@@ -236,8 +253,11 @@ Future<RefreshResult> refreshProvider(
       clearSupportUrl: subscription.supportUrl == null,
       chatHomeserver: subscription.chatHomeserver,
       chatRoomId: subscription.chatRoomId,
+      chatUser: subscription.chatUser,
+      chatPassword: subscription.chatPassword,
       clearChat: subscription.chatHomeserver == null,
       clearChatRoom: subscription.chatRoomId == null,
+      clearChatCredentials: subscription.chatUser == null,
       usage: subscription.usage,
       clearUsage: subscription.usage == null,
       cachedBody: subscription.links.map((link) => link.source).join('\n'),

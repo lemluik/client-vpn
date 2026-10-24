@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:client_vpn/chat_service.dart';
 import 'package:client_vpn/chat_store.dart';
 import 'package:client_vpn/matrix_api.dart';
+import 'package:client_vpn/provider.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -23,8 +24,12 @@ class FakeNode {
   final List<Object?> sendFailures = [];
   final List<Duration> delays = [];
 
+  /// Комнаты, приглашение в которые клиент принял.
+  final List<String> joins = [];
+
   final List<Completer<MatrixReply>> _waiting = [];
   Object? syncFailure;
+  Object? joinFailure;
   Map<String, dynamic>? quickReplies;
 
   List<MatrixRequest> get syncs =>
@@ -51,6 +56,13 @@ class FakeNode {
     }
     if (path.endsWith('/logout')) {
       return _reply(200, {});
+    }
+    if (path.contains('/join/')) {
+      final failure = joinFailure;
+      if (failure != null) throw failure;
+      final joined = Uri.decodeComponent(path.split('/join/').last);
+      joins.add(joined);
+      return _reply(200, {'room_id': joined});
     }
     if (path.endsWith('/sync')) {
       final failure = syncFailure;
@@ -121,6 +133,14 @@ Map<String, dynamic> timeline(List<Map<String, Object?>> events) => {
       },
     };
 
+/// Ответ `/sync`, в котором комната уже наша: приглашение принимать не надо.
+Map<String, dynamic> joinedSync([String batch = 's0']) => {
+      'rooms': {
+        'join': {room: {}},
+      },
+      'next_batch': batch,
+    };
+
 Future<void> pump([int times = 4]) async {
   for (var i = 0; i < times; i++) {
     await Future<void>.delayed(Duration.zero);
@@ -148,14 +168,18 @@ void main() {
 
   Future<ChatService> opened() async {
     final chat = service();
-    final error = await chat.signIn(
+    final pending = chat.signIn(
       providerId: providerId,
       homeserver: home,
       user: '@demo:chat.example',
       password: 'пароль',
       roomId: room,
     );
-    expect(error, isNull);
+    await pump();
+    // Комната пришла из подписки: вход сверяет членство первым `/sync`.
+    node.answerSync(joinedSync());
+
+    expect(await pending, isNull);
     await pump();
     return chat;
   }
@@ -173,6 +197,80 @@ void main() {
       expect(store.sessionOf(providerId)!.toJson().containsValue('токен-Т'), isFalse);
       expect(jsonEncode(vault.values), isNot(contains('пароль')));
       expect(chat.status, ChatStatus.live);
+      // Комната уже была наша: приглашение принимать не пришлось.
+      expect(node.joins, isEmpty);
+    });
+
+    test('комната из подписки — приглашение принимается до сохранения сессии',
+        () async {
+      final chat = service();
+      addTearDown(chat.stop);
+      final pending = chat.signIn(
+        providerId: providerId,
+        homeserver: home,
+        user: '@demo:chat.example',
+        password: 'пароль',
+        roomId: room,
+      );
+      await pump();
+      // Узел положил учётку в приглашения: в `rooms.join` комнаты ещё нет.
+      node.answerSync({'rooms': {'join': {}}, 'next_batch': 's0'});
+      await pump();
+
+      expect(node.joins, [room]);
+      // Членство подтверждается вторым `/sync`, и только потом пишется сессия:
+      // сохранённая комната без входа в неё дала бы пустую ленту.
+      expect(store.sessionOf(providerId), isNull);
+      node.answerSync(joinedSync('s1'));
+
+      expect(await pending, isNull);
+      expect(store.sessionOf(providerId)!.roomId, room);
+      expect(chat.signedIn, isTrue);
+    });
+
+    test('узел не принял приглашение — ошибка входа, а не пустой чат',
+        () async {
+      final chat = service();
+      addTearDown(chat.stop);
+      node.joinFailure = const MatrixException(403, 'M_FORBIDDEN');
+      final pending = chat.signIn(
+        providerId: providerId,
+        homeserver: home,
+        user: '@demo:chat.example',
+        password: 'пароль',
+        roomId: room,
+      );
+      await pump();
+      node.answerSync({'rooms': {'join': {}}, 'next_batch': 's0'});
+
+      expect(await pending, 'Эта комната не доступна учётке');
+      expect(chat.session, isNull);
+      expect(store.sessionOf(providerId), isNull);
+    });
+
+    test('автологин по подписке: нечем входить — null, сбой — текст ошибки',
+        () async {
+      const bare = Provider(id: providerId, url: 'https://example.org/sub');
+      expect(chatCredentialsReady(bare), isFalse);
+      expect(chatCredentialsReady(null), isFalse);
+      // «Нечем входить» остаётся null: экран отличает его от сбоя сам.
+      expect(await service().signInWithProvider(bare), isNull);
+
+      const ready = Provider(
+        id: providerId,
+        url: 'https://example.org/sub',
+        chatHomeserver: home,
+        chatRoomId: room,
+        chatUser: '@demo:chat.example',
+        chatPassword: 'пароль',
+      );
+      expect(chatCredentialsReady(ready), isTrue);
+
+      node.syncFailure = const SocketException('нет связи');
+      final chat = service();
+      addTearDown(chat.stop);
+      expect(await chat.signInWithProvider(ready), 'Нет связи с узлом чата');
+      expect(chat.status, ChatStatus.retrying);
     });
 
     test('комнату можно не знать — первая из join берётся сама', () async {
@@ -393,15 +491,42 @@ void main() {
       chat.stop();
     });
 
+    test('экран закрыли и открыли снова: приём поднимается одним циклом', () async {
+      final chat = await opened();
+      final before = node.syncs.length;
+
+      chat.stop();
+      node.answerSync({...timeline([]), 'next_batch': 's43'});
+      await pump();
+      expect(node.syncs.length, before,
+          reason: 'остановленный цикл новых запросов не заводит');
+
+      chat.resumePolling();
+      await pump();
+      expect(node.syncs.length, before + 1,
+          reason: 'поднят ровно один новый запрос, старый цикл не воскрес');
+      node.answerSync({...timeline([]), 'next_batch': 's44'});
+      await pump();
+
+      expect(chat.status, ChatStatus.live);
+      expect(store.sessionOf(providerId)!.since, 's44');
+      expect(node.syncs.length, before + 2,
+          reason: 'на ответ цикл заводит следующий запрос, а не два');
+      chat.stop();
+    });
+
     test('сетевой сбой повторяется по 1/2/4/8/16 с, дальше очередь ждёт', () async {
       final chat = service();
-      await chat.signIn(
+      final pending = chat.signIn(
         providerId: providerId,
         homeserver: home,
         user: '@demo:chat.example',
         password: 'пароль',
         roomId: room,
       );
+      await pump();
+      node.answerSync(joinedSync());
+      expect(await pending, isNull);
       await pump();
       // Пять пауз по спецификации; шестой сбой цикл уже не продолжает.
       for (var i = 0; i < 6; i++) {
@@ -427,13 +552,16 @@ void main() {
 
     test('401 во время работы: доступ закончился, цикл остановлен', () async {
       final chat = await opened();
+      // Вход уже сделал `/sync` для проверки членства: считаем от него.
+      final before = node.syncs.length;
 
       node.failSync(const MatrixException(401, 'M_UNKNOWN_TOKEN'));
       await pump();
 
       expect(chat.status, ChatStatus.blocked);
       expect(chat.error, 'Доступ к чату закончился');
-      expect(node.syncs.length, 1);
+      // Цикл остановлен: нового `/sync` после 401 нет.
+      expect(node.syncs.length, before);
       chat.stop();
     });
   });
@@ -484,6 +612,23 @@ void main() {
       expect(await chat.resume(providerId), isFalse);
       expect(chat.status, ChatStatus.blocked);
       expect(chat.error, 'Доступ к чату закончился');
+    });
+
+    test('службу уничтожили раньше экрана: остановка и досчитанный sync молчат',
+        () async {
+      final chat = await opened();
+      final pending = node.syncs.length;
+
+      chat.dispose();
+      expect(chat.stop, returnsNormally);
+
+      // Долгий запрос досчитывает свой век после уничтожения службы: цикл
+      // обязан выйти сам, а не оповещать снятых слушателей.
+      node.answerSync({...timeline([]), 'next_batch': 's99'});
+      await pump();
+
+      expect(node.syncs.length, pending,
+          reason: 'новый запрос после уничтожения службы не заведён');
     });
   });
 }

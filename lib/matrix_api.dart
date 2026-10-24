@@ -206,6 +206,17 @@ class MatrixClient {
     return _get('GET', _url('$_api/sync', query), wait: _syncWait + matrixTimeout);
   }
 
+  /// Принимает приглашение в комнату. Личную комнату поддержки создаёт
+  /// служебная учётка узла, и свежий клиент в ней только приглашённый: без
+  /// `join` лента и история вернут пустоту или 403. Для уже состоящего в
+  /// комнате клиента запрос так же успешен — повторный вход не ошибка.
+  Future<String> joinRoom(String roomId) async {
+    final path = '$_api/join/${Uri.encodeComponent(roomId)}';
+    final reply = await _get('POST', _url(path), body: '{}');
+    final joined = reply.json['room_id'];
+    return joined is String && joined.isNotEmpty ? joined : roomId;
+  }
+
   /// Отправка сообщения. `txnId` повторного запроса остаётся прежним: узел по
   /// нему узнаёт дубль и не пишет сообщение второй раз.
   Future<String> send(String roomId, String body, String txnId) async {
