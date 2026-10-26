@@ -1,9 +1,9 @@
-// Транспорт авторецепта против локальной заглушки (Д2-22).
+// Key claim transport against a local stub (Д2-22).
 //
-// Отдельный файл без виджетных тестов обязателен: как только в сюите
-// поднимается TestWidgetsFlutterBinding, любой HttpClient в этом изоляте
-// начинает получать 400 и сеть не видна вовсе. Здесь binding не
-// инициализируется, и обмен идёт по-настоящему — но только с 127.0.0.1.
+// A separate file without widget tests is required: once a suite starts
+// TestWidgetsFlutterBinding, every HttpClient in that isolate gets 400 and the
+// network is not visible at all. Here the binding is not initialised and the
+// exchange is real, but only with 127.0.0.1.
 
 import 'dart:async';
 import 'dart:convert';
@@ -27,9 +27,9 @@ const keyTwoLink =
 
 void main() {
   group('реальный транспорт против локальной заглушки', () {
-    // Заглушка — HttpServer на 127.0.0.1 с эфемерным портом: проверяется
-    // сам обмен (метод, путь, состав тела, разбор списка и коды ошибок)
-    // без боевых адресов и без сети наружу.
+    // The stub is an HttpServer on 127.0.0.1 with an ephemeral port: it checks
+    // the exchange itself (method, path, body fields, list parsing and error
+    // codes) without live addresses and without outside network.
     Future<HttpServer> stub({
       void Function(HttpRequest request)? respond,
     }) async {
@@ -117,12 +117,12 @@ void main() {
         expect(seenMethod, 'POST');
         expect(seenPath, '/api/v1/keys');
         expect(seenBody!.keys.toSet(), {
-          'code',
+          'claim_code',
           'device_id',
           'platform',
           'app_version',
         });
-        expect(seenBody!['code'], 'ABC-123');
+        expect(seenBody!['claim_code'], 'ABC-123');
         expect(keys, hasLength(1));
         expect(keys.single.name, 'Первый');
         expect(keys.single.entryLabel, 'Вход А');
@@ -158,9 +158,9 @@ void main() {
         Future<KeyClaimException> expectError(int status) async {
           final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
           server.listen((request) {
-            // Тело запроса не читаем: клиент после статуса соединением сам
-            // закрывает, и подписка на поток тела сыпала бы на сервер
-            // необработанной HttpException. drain гасит это молча.
+            // The request body is not read: the client closes the connection
+            // after the status, and listening to the body stream would throw an
+            // unhandled HttpException on the server. drain swallows it.
             unawaited(request.drain<void>().catchError((_) {}));
             request.response.statusCode = status;
             request.response.close();
@@ -191,5 +191,30 @@ void main() {
         expect(notFound.connectionExpired, isTrue);
       },
     );
+  });
+
+  test('the control point answer shape: links, entry_labels, traffic_left_gb', () {
+    // The shape the control point actually returns: every cascade entry in
+    // `links`, one per line, labels as a list, the traffic left in gigabytes.
+    final key = ClaimedKey.fromJson({
+      'name': 'Ноутбук',
+      'entry_labels': ['Германия 1', 'Германия 2'],
+      'expires_at': null,
+      'expiry_label': 'без срока',
+      'is_trial': false,
+      'links': '$keyOneLink\n$keyTwoLink',
+      'traffic_left_gb': 1.5,
+    });
+
+    expect(key.link.split('\n'), [keyOneLink, keyTwoLink]);
+    expect(key.entryLabel, 'Германия 1, Германия 2');
+    expect(key.expiresAt, isNull);
+    expect(key.trafficLeftMb, 1536);
+
+    final listed = ClaimedKey.fromJson({
+      'name': 'Список',
+      'links': [keyOneLink, keyTwoLink],
+    });
+    expect(listed.link.split('\n'), hasLength(2));
   });
 }

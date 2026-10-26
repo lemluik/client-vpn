@@ -5,10 +5,10 @@ import 'dart:io';
 import '../app_proxy.dart';
 import 'registration_api.dart' show DeviceData;
 
-/// Ключ, выданный аккаунту сервиса и полученный по одноразовому коду.
+/// A key issued to the service account and received by a one-time code.
 ///
-/// Поля соответствуют сетке раздела 4 спецификации: имя, метка входа, срок,
-/// тип, остаток трафика (заполняется только там, где счётчик ведётся).
+/// The fields follow the grid in section 4 of the spec: name, entry label,
+/// expiry, type, traffic left (filled only where the counter is kept).
 class ClaimedKey {
   const ClaimedKey({
     required this.link,
@@ -19,73 +19,95 @@ class ClaimedKey {
     this.trafficLeftMb,
   });
 
-  /// Ссылка подключения (`vless://…`) — из неё создаётся профиль.
+  /// Connection link(s) (`vless://…`), one per line; the profile is built from them.
   final String link;
   final String name;
 
-  /// Метка входа или региона, как её знает сервер.
+  /// Entry or region label as the server knows it.
   final String entryLabel;
 
-  /// Окончание срока; null — «без срока» (бот-ключи).
+  /// Expiry; null means no expiry (bot keys).
   final DateTime? expiresAt;
 
-  /// Пробный ключ или обычный.
+  /// A trial key or a regular one.
   final bool trial;
   final int? trafficLeftMb;
 
-  /// Истёк ли ключ на момент [now].
+  /// Whether the key has expired at [now].
   bool isExpiredAt(DateTime now) =>
       expiresAt != null && !expiresAt!.isAfter(now);
 
+  /// Parses one key of the `POST api/v1/keys` answer.
+  ///
+  /// The control point sends `links` (every entry of the cascade, one per line
+  /// or as a list), `entry_labels` (a list) and `traffic_left_gb`. The older
+  /// field names `key`/`link`, `entry`/`entry_label` and `traffic_left_mb` are
+  /// still accepted. With only the old names the link stayed empty and a
+  /// claimed key could not be added.
   factory ClaimedKey.fromJson(Map<String, dynamic> json) {
     final at = json['expires_at'];
-    final left = json['traffic_left_mb'];
+    final links = json['links'];
+    final labels = json['entry_labels'];
+    final leftMb = json['traffic_left_mb'];
+    final leftGb = json['traffic_left_gb'];
     return ClaimedKey(
-      link: (json['key'] ?? json['link'] ?? '') as String,
+      link: (json['key'] ?? json['link'] ??
+              (links is List ? links.whereType<String>().join('\n') : links) ??
+              '')
+          as String,
       name: (json['name'] ?? '') as String,
-      entryLabel: (json['entry'] ?? json['entry_label'] ?? '') as String,
+      entryLabel: (json['entry'] ??
+              json['entry_label'] ??
+              (labels is List ? labels.whereType<String>().join(', ') : null) ??
+              '')
+          as String,
       expiresAt: at is String ? DateTime.tryParse(at) : null,
       trial: json['is_trial'] == true,
-      trafficLeftMb: left is num ? left.toInt() : null,
+      trafficLeftMb: leftMb is num
+          ? leftMb.toInt()
+          : leftGb is num
+          ? (leftGb * 1024).round()
+          : null,
     );
   }
 }
 
-/// Ошибка авторецепта: текст показывается пользователю.
+/// Key claim error: the text is shown to the user.
 class KeyClaimException implements Exception {
   KeyClaimException(this.message, {this.connectionExpired = false});
 
   final String message;
 
-  /// 404: ключ истёк между списком и подключением — экран показывает
-  /// «подключение закончилось» и предлагает новый код.
+  /// 404: the key expired between the list and connecting; the screen shows
+  /// "connection ended" and offers a new code.
   final bool connectionExpired;
 
   @override
   String toString() => message;
 }
 
-/// Транспорт авторецепта. Экран знает только этот интерфейс: смена варианта
-/// контракта (код → список ключей) — одна правка в реализации, не переписывание
-/// интерфейса. Приём — как с `TrayPort` и `FakeTrayPort` в тестах.
+/// Key claim transport. The screen knows only this interface: a change of the
+/// contract (code -> list of keys) is one edit in the implementation, not a
+/// rewrite of the interface. Same approach as `TrayPort` and `FakeTrayPort`.
 abstract class KeyClaimApi {
-  /// Отдаёт действующие ключи владельца кода. Логин Telegram не запрашивается
-  /// и не отправляется: аутентификатор — сам одноразовый код (§2, вариант а2).
+  /// Returns the active keys of the code owner. No Telegram login is asked for
+  /// or sent: the one-time code itself is the authenticator (§2, option a2).
   Future<List<ClaimedKey>> claim({
     required String code,
     required DeviceData device,
   });
 }
 
-/// Тело запроса собрано отдельно от обмена: тест фиксирует состав, и
-/// «код — единственный передаваемый секрет» проверяется числом полей.
+/// The request body is built apart from the exchange: a test pins its fields,
+/// so "the code is the only secret sent" is checked by the number of fields.
+/// The control point validates `claim_code`; with `code` it answered 422.
 Map<String, dynamic> keyClaimRequest(String code, DeviceData device) => {
-  'code': code,
+  'claim_code': code,
   ...device.toJson(),
 };
 
-/// Настоящий обмен с точкой контроля: HTTPS со строгой проверкой сертификата,
-/// адрес приходит из конфигурации внедрения, в коде не зашит.
+/// The real exchange with the control point: HTTPS with strict certificate
+/// checks; the address comes from the deployment config, not from the code.
 class HttpKeyClaimApi implements KeyClaimApi {
   HttpKeyClaimApi({
     required String controlPoint,
@@ -145,8 +167,8 @@ class HttpKeyClaimApi implements KeyClaimApi {
     }
   }
 
-  /// Короткая причина по коду ответа (§7.3: 401 — код не принят,
-  /// 429 — лимит попыток, 404 — ключ больше не действителен).
+  /// A short reason for the status code (§7.3: 401 code not accepted,
+  /// 429 too many attempts, 404 the key is no longer valid).
   static String reasonFor(int status) => switch (status) {
     HttpStatus.unauthorized => 'Код не принят — запросите новый в чате сервиса',
     HttpStatus.tooManyRequests => 'Слишком много попыток — попробуйте позже',

@@ -592,22 +592,28 @@ class AppState extends ChangeNotifier {
     return null;
   }
 
-  /// Добавляет ключ, полученный по одноразовому коду (Д2-22): профиль
-  /// создаётся существующим механизмом `addLinks`, новое хранилище не плодим —
-  /// регион, вход и наблюдатель работают над тем же профилем подписки.
-  /// Возвращает текст ошибки или null.
+  /// Adds a key received by a one-time code (Д2-22): the profile is created by
+  /// the existing `addLinks`, no new storage, so region, entry and the
+  /// observatory work on the same profile. [link] may hold several links, one
+  /// per line: the control point returns every entry of the cascade for one
+  /// key, and they go into one profile so the client can switch between them.
+  /// Returns an error text or null.
   Future<String?> addClaimedKey({
     required String name,
     required String link,
   }) async {
-    final ShareLink parsed;
+    final List<ShareLink> parsed;
     try {
-      parsed = parseShareLink(link);
+      parsed = [
+        for (final line in link.split('\n'))
+          if (line.trim().isNotEmpty) parseShareLink(line.trim()),
+      ];
     } on FormatException catch (error) {
-      // Ссылка держит ключ узла: причина уходит в журнал только через маску.
+      // The link holds the node key: the reason goes to the log masked only.
       return maskSecrets('Ключ не добавлен: ${error.message}');
     }
-    final profile = await _store.addLinks(name: name, links: [parsed]);
+    if (parsed.isEmpty) return 'Ключ не добавлен: сервис не прислал ссылку';
+    final profile = await _store.addLinks(name: name, links: parsed);
     await _store.setActive(profile.id);
     _addLog('Ключ добавлен по коду');
     notifyListeners();
