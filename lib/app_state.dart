@@ -14,6 +14,7 @@ import 'deep_link.dart';
 import 'failover.dart';
 import 'log_mask.dart';
 import 'manual_rules.dart';
+import 'path_probe.dart';
 import 'per_app_rules.dart';
 import 'profile_store.dart';
 import 'provider.dart';
@@ -91,6 +92,7 @@ class AppState extends ChangeNotifier {
     AppExclusionsWriter? appExclusions,
     ProbeStore? probes,
     ReconnectPlan? reconnect,
+    PathProbe? pathProbe,
     String languageCode = '',
     Stream<List<ConnectivityResult>>? networks,
     Stream<String>? deepLinks,
@@ -109,6 +111,7 @@ class AppState extends ChangeNotifier {
        _directApps = perApps?.load() ?? const [],
        _probes = probes,
        _reconnect = reconnect ?? ReconnectPlan(),
+       _pathProbe = pathProbe ?? PathProbe(),
        _probeEndpoint = probes?.load() ?? defaultProbeEndpoint,
        _languageCode = languageCode,
        _routingPreset =
@@ -116,6 +119,7 @@ class AppState extends ChangeNotifier {
        serviceConfig = serviceConfig ?? const ServiceConfig() {
     _logSubscription = _core.logs.listen(_onLog);
     _statusSubscription = _core.statusChanges.listen(_onStatus);
+    _pathSubscription = _pathProbe.changes.listen(_onPath);
     _networkSubscription = networks?.listen(_onNetworks);
     _deepLinkSubscription = deepLinks?.listen(_onDeepLink);
   }
@@ -186,6 +190,11 @@ class AppState extends ChangeNotifier {
   Timer? _probeTimer;
   Timer? _subscriptionTimer;
   final ReconnectPlan _reconnect;
+
+  /// Проверка пути до узла собственным трафиком приложения (Д2-25).
+  final PathProbe _pathProbe;
+  StreamSubscription<PathState>? _pathSubscription;
+  PathState _path = PathState.unknown;
   String? _networkKey;
   StreamSubscription<String>? _deepLinkSubscription;
 
@@ -229,6 +238,12 @@ class AppState extends ChangeNotifier {
   bool get isBusy => _busy;
 
   bool get isConnected => _state == TunnelState.on;
+
+  /// Путь до узла: подтверждён пробой, проверяется, не отвечает или проверке
+  /// недоступен. «Защищено» на экране показывается только при
+  /// [PathState.live] (Д2-25): поднятый туннель ещё не значит, что трафик
+  /// доходит до узла.
+  PathState get pathState => _path;
 
   String? get endpoint => _core.endpointLabel;
 
@@ -523,6 +538,7 @@ class AppState extends ChangeNotifier {
       _state = TunnelState.on;
       _reconnect.reset();
       _stopReconnectTimers();
+      _restartPathWatch();
       final profile = _store.active;
       if (profile != null) await _settings.rememberProfile(profile.id);
       _addLog('Подключено: ${_activeLabel()}');
@@ -539,6 +555,7 @@ class AppState extends ChangeNotifier {
     _userWantsTunnel = false;
     _reconnect.reset();
     _stopReconnectTimers();
+    _pathProbe.stop();
     _stopping = true;
     try {
       await _core.stop();
@@ -825,8 +842,10 @@ class AppState extends ChangeNotifier {
       _state = TunnelState.on;
       _failure = null;
       _startTrafficWatch();
+      _ensurePathWatch();
     } else if (_stopping || _state != TunnelState.on) {
       _stopTrafficWatch();
+      _pathProbe.stop();
       _state = TunnelState.off;
       if (status.byShell) _userWantsTunnel = false;
     } else if (status.byShell) {
@@ -835,6 +854,7 @@ class AppState extends ChangeNotifier {
       _stopping = true;
       _reconnect.reset();
       _stopReconnectTimers();
+      _pathProbe.stop();
       _userWantsTunnel = false;
       _state = TunnelState.off;
       _failure = null;
@@ -842,6 +862,7 @@ class AppState extends ChangeNotifier {
       _addLog('Отключено из шторки');
     } else {
       _stopTrafficWatch();
+      _pathProbe.stop();
       // Ядро остановилось само: для пользователя это сбой, а не отключение.
       _state = TunnelState.failure;
       _failure = const Failure(
@@ -869,6 +890,29 @@ class AppState extends ChangeNotifier {
       _log.removeRange(0, _log.length - logLimit);
     }
     notifyListeners();
+  }
+
+  /// Проверка пути до узла (Д2-25). Новое подключение проверяется с нуля, даже
+  /// если проба прежнего ещё шла.
+  void _restartPathWatch() => _pathProbe.start(Uri.parse(_probeEndpoint));
+
+  /// Туннель поднят не этим окном — плиткой шторки или восстановлением после
+  /// сбоя: идущую проверку не трогаем, отсутствующую начинаем.
+  void _ensurePathWatch() {
+    if (_pathProbe.isRunning) return;
+    _restartPathWatch();
+  }
+
+  void _onPath(PathState path) {
+    final previous = _path;
+    _path = path;
+    if (path == PathState.live && previous != PathState.live) {
+      _addLog('Путь до узла подтверждён');
+    } else if (path == PathState.dead && previous != PathState.dead) {
+      _addLog('[ERR] Узел не отвечает: трафик через туннель не идёт');
+    } else {
+      notifyListeners();
+    }
   }
 
   /// Секундный опрос счётчиков ядра — зеркало таймера TunnelService.kt.
@@ -899,6 +943,8 @@ class AppState extends ChangeNotifier {
   void dispose() {
     _logSubscription?.cancel();
     _statusSubscription?.cancel();
+    _pathSubscription?.cancel();
+    _pathProbe.dispose();
     _stopTrafficWatch();
     _networkTimer?.cancel();
     _networkSubscription?.cancel();

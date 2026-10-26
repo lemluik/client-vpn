@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'app_state.dart';
 import 'l10n/app_localizations.dart';
 import 'log_screen.dart';
+import 'path_probe.dart';
 import 'profile_store.dart';
 import 'provider.dart';
 import 'region.dart';
@@ -918,11 +919,32 @@ class _StatusLine extends StatelessWidget {
     final l = AppLocalizations.of(context);
     final traffic = state.traffic;
     final (text, color, icon) = switch (state.state) {
-      TunnelState.on => (
-        l.statusProtected,
-        Colors.green.shade700,
-        Icons.verified_user_outlined,
-      ),
+      // «Защищено» — только после подтверждения, что трафик доходит до узла
+      // (Д2-25): поднятый туннель сам по себе этого не значит.
+      TunnelState.on => switch (state.pathState) {
+        PathState.live => (
+          l.statusProtected,
+          Colors.green.shade700,
+          Icons.verified_user_outlined,
+        ),
+        PathState.checking => (
+          l.statusLinking,
+          Theme.of(context).colorScheme.primary,
+          Icons.hourglass_top,
+        ),
+        PathState.dead => (
+          l.statusUnreachable,
+          Theme.of(context).colorScheme.error,
+          Icons.cloud_off,
+        ),
+        // Путь проверить нельзя: собственный трафик приложения не идёт через
+        // ядро. Обещать защиту неверно, но и пугать сбоем тоже.
+        PathState.unknown => (
+          l.statusConnected,
+          Colors.green.shade700,
+          Icons.shield_outlined,
+        ),
+      },
       TunnelState.connecting => (
         l.statusConnecting,
         Theme.of(context).colorScheme.primary,

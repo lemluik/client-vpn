@@ -210,6 +210,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get statusProtected => 'Protected';
 
   @override
+  String get statusLinking => 'Verifying connection…';
+
+  @override
+  String get statusUnreachable => 'Server unreachable';
+
+  @override
+  String get statusConnected => 'Connected';
+
+  @override
   String get statusConnecting => 'Connecting…';
 
   @override

@@ -209,6 +209,15 @@ class AppLocalizationsRu extends AppLocalizations {
   String get statusProtected => 'Защищено';
 
   @override
+  String get statusLinking => 'Проверка соединения…';
+
+  @override
+  String get statusUnreachable => 'Нет доступа к узлу';
+
+  @override
+  String get statusConnected => 'Подключено';
+
+  @override
   String get statusConnecting => 'Подключение…';
 
   @override

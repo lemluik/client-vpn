@@ -7,6 +7,7 @@ import 'package:client_vpn/chat_store.dart';
 import 'package:client_vpn/failover.dart';
 import 'package:client_vpn/home_screen.dart';
 import 'package:client_vpn/main.dart';
+import 'package:client_vpn/path_probe.dart';
 import 'package:client_vpn/profile_store.dart';
 import 'package:client_vpn/services/service_config.dart';
 import 'package:client_vpn/settings_store.dart';
@@ -113,6 +114,7 @@ Future<AppState> makeState({
   FakeCore? core,
   Autostart? autostart,
   ServiceConfig? serviceConfig,
+  PathProbe? pathProbe,
 }) async {
   SharedPreferences.setMockInitialValues({});
   return AppState(
@@ -123,8 +125,21 @@ Future<AppState> makeState({
     // Запись служебного конфига проверена отдельно в temp_config_test.
     configWriter: (config) async => config,
     serviceConfig: serviceConfig ?? const ServiceConfig(),
+    pathProbe: pathProbe,
   );
 }
+
+/// Проба пути, которая отвечает сразу: экран проверяет надписи, а не сеть.
+PathProbe liveProbe() =>
+    PathProbe(attempt: (_) async => true, reachesCore: () => true);
+
+/// Проба пути, которая не получает ответа: узел недоступен или связи нет.
+PathProbe deadProbe() => PathProbe(
+  attempt: (_) async => false,
+  reachesCore: () => true,
+  retry: const Duration(milliseconds: 1),
+  deadRetry: const Duration(seconds: 1),
+);
 
 /// Автозапуск без реестра: экран настроек проверяет только чтение и запись флага.
 class FakeAutostart implements Autostart {
@@ -322,7 +337,7 @@ void main() {
 
     testWidgets('подключение и отключение одной кнопкой', (tester) async {
       final core = FakeCore();
-      final state = await makeState(core: core);
+      final state = await makeState(core: core, pathProbe: liveProbe());
       addTearDown(state.dispose);
       await state.addFromText('$linkOne\n$linkTwo');
 
@@ -365,6 +380,85 @@ void main() {
 
       expect(find.text('Отключено'), findsOneWidget);
       expect(core.startCalls, 1);
+    });
+
+    testWidgets('поднятый туннель без ответа узла защитой не называется', (
+      tester,
+    ) async {
+      // Первая проба ещё идёт: экран обязан показывать проверку, а не
+      // «Защищено» — иначе без интернета клиент обещает защиту (Д2-25).
+      final gate = Completer<bool>();
+      final state = await makeState(
+        pathProbe: PathProbe(
+          attempt: (_) => gate.future,
+          reachesCore: () => true,
+        ),
+      );
+      addTearDown(state.dispose);
+      await state.addFromText('$linkOne\n$linkTwo');
+
+      await pumpApp(tester, state);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Подключить'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Проверка соединения…'), findsOneWidget);
+      expect(find.text('Защищено'), findsNothing);
+
+      gate.complete(true);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Защищено'), findsOneWidget);
+
+      // Проверка снимается вместе с туннелем: после отключения таймеров нет.
+      await tester.tap(find.text('Отключить'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Отключено'), findsOneWidget);
+    });
+
+    testWidgets('мёртвый узел показан как отсутствие доступа', (tester) async {
+      final core = FakeCore();
+      final state = await makeState(core: core, pathProbe: deadProbe());
+      addTearDown(state.dispose);
+      await state.addFromText('$linkOne\n$linkTwo');
+
+      await pumpApp(tester, state);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Подключить'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Нет доступа к узлу'), findsOneWidget);
+      expect(find.text('Защищено'), findsNothing);
+      // Туннель при этом поднят: кнопка по-прежнему его выключает.
+      expect(find.text('Отключить'), findsOneWidget);
+      expect(core.startCalls, 1);
+
+      await tester.tap(find.text('Отключить'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Отключено'), findsOneWidget);
+    });
+
+    testWidgets('непроверяемый путь даёт «Подключено» без обещания защиты', (
+      tester,
+    ) async {
+      final state = await makeState(
+        pathProbe: PathProbe(
+          attempt: (_) async => true,
+          reachesCore: () => false,
+        ),
+      );
+      addTearDown(state.dispose);
+      await state.addFromText('$linkOne\n$linkTwo');
+
+      await pumpApp(tester, state);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Подключить'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Подключено'), findsOneWidget);
+      expect(find.text('Защищено'), findsNothing);
     });
 
     testWidgets('отказ ядра показывает причину и действие', (tester) async {

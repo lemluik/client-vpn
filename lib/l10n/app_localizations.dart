@@ -452,6 +452,24 @@ abstract class AppLocalizations {
   /// **'Защищено'**
   String get statusProtected;
 
+  /// No description provided for @statusLinking.
+  ///
+  /// In ru, this message translates to:
+  /// **'Проверка соединения…'**
+  String get statusLinking;
+
+  /// No description provided for @statusUnreachable.
+  ///
+  /// In ru, this message translates to:
+  /// **'Нет доступа к узлу'**
+  String get statusUnreachable;
+
+  /// No description provided for @statusConnected.
+  ///
+  /// In ru, this message translates to:
+  /// **'Подключено'**
+  String get statusConnected;
+
   /// No description provided for @statusConnecting.
   ///
   /// In ru, this message translates to:

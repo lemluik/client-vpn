@@ -11,6 +11,7 @@ import 'auto_update_checker.dart';
 import 'close_prompt.dart';
 import 'home_screen.dart';
 import 'l10n/app_localizations.dart';
+import 'path_probe.dart';
 import 'settings_store.dart';
 import 'traffic.dart';
 import 'tray_controller.dart';
@@ -232,7 +233,14 @@ class _ClientVpnAppState extends State<ClientVpnApp> with WindowListener {
   }
 
   String _statusText(AppLocalizations l10n) => switch (widget.state.state) {
-    TunnelState.on => l10n.statusProtected,
+    // Подсказка трея говорит то же, что строка статуса на экране: защита
+    // обещается только после подтверждения пути до узла (Д2-25).
+    TunnelState.on => switch (widget.state.pathState) {
+      PathState.live => l10n.statusProtected,
+      PathState.checking => l10n.statusLinking,
+      PathState.dead => l10n.statusUnreachable,
+      PathState.unknown => l10n.statusConnected,
+    },
     TunnelState.connecting => l10n.statusConnecting,
     TunnelState.failure => l10n.statusFailed,
     TunnelState.noLink => l10n.statusNoLink,
