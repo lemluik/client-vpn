@@ -1,0 +1,41 @@
+# Claude Code: ответы на @claude в комментариях к issue и PR.
+# GitHub App «Claude» установлен на репозиторий — он даёт автоматическое ревью PR;
+# этот workflow добавляет интерактивный режим: любой участник пишет @claude <задача>,
+# и агент читает код, делает изменения и открывает PR с фиксом.
+#
+# Секрет ANTHROPIC_API_KEY обязателен: без него джоба падает сразу.
+# Ключ берётся на https://claude.ai/settings/api (бесплатный лимит 500 запросов/день).
+name: Claude Code
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+
+# concurrency: каждый новый комментарий в том же issue/pr отменяет предыдущий прогон
+# Claude — это избавляет от гонки, когда два человека подряд пишут @claude.
+concurrency:
+  group: claude-${{ github.event.issue.number || github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  claude:
+    # срабатывает только когда в теле комментария есть упоминание @claude
+    if: contains(github.event.comment.body, '@claude')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
