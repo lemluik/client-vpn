@@ -16,7 +16,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Действительные ссылки-маски: example.org из документации, живых адресов нет.
+/// Valid placeholder links: example.org from the docs, no live addresses.
 const keyOneLink =
     'vless://2f6bd5a1-1e73-4b1a-9d3c-000000000001@example.org:443'
     '?encryption=none&security=reality'
@@ -45,7 +45,7 @@ ClaimedKey keyTwo({bool trial = true}) => ClaimedKey(
   trafficLeftMb: 512,
 );
 
-/// Ядро без процесса и сети: проверка, что автоподключение вызвано.
+/// A core without a process or network: checks that auto-connect is called.
 class _FakeCore implements VpnCore {
   final _logs = StreamController<String>.broadcast();
   final _status = StreamController<CoreStatus>.broadcast();
@@ -84,8 +84,8 @@ class _FakeAutostart implements Autostart {
   Future<void> set(bool value) async {}
 }
 
-/// Фейковый транспорт: сеть не поднимается, список или ошибка заданы тестом.
-/// Повторяет приём `FakeTrayPort` — экран зависит только от интерфейса.
+/// A fake transport: no network, the list or the error is set by the test.
+/// Same approach as `FakeTrayPort`: the screen depends on the interface only.
 class _FakeKeyClaimApi implements KeyClaimApi {
   _FakeKeyClaimApi({this.keys = const [], this.error});
 
@@ -155,7 +155,7 @@ Future<void> pumpClaim(
       home: KeyClaimScreen(
         state: state,
         api: api,
-        // Настоящий плагин защищённого хранилища в тестовой среде не отвечает.
+        // The real secure storage plugin does not answer in the test environment.
         deviceId: DeviceId(storage: _FakeIdStorage('test-device-id')),
         now: now,
       ),
@@ -182,15 +182,15 @@ void main() {
         ),
       );
 
-      // Логина, телефона и имени пользователя здесь нет и быть не может:
-      // состав тела зафиксирован ровно этими четырьмя полями (§3).
+      // No login, phone or user name here, and there must not be: the body is
+      // pinned to exactly these four fields (§3).
       expect(body.keys.toSet(), {
-        'code',
+        'claim_code',
         'device_id',
         'platform',
         'app_version',
       });
-      expect(body['code'], 'ODN-4417');
+      expect(body['claim_code'], 'ODN-4417');
     });
 
     testWidgets('фейковый транспорт видит только код и устройство', (
@@ -263,8 +263,8 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('key-claim-connect')));
       await tester.pumpAndSettle();
 
-      // Выбор создаёт профиль существующим механизмом; при нескольких ключах
-      // подключение остаётся ручным (предложение §8.2, ждёт подтверждения Р-90).
+      // The choice creates a profile with the existing mechanism; with several
+      // keys connecting stays manual (proposal §8.2, awaiting Р-90).
       expect(state.profiles, hasLength(1));
       expect(state.activeProfile?.name, 'Второй');
     });
@@ -276,7 +276,7 @@ void main() {
       addTearDown(state.dispose);
       await state.addFromText(
         keyTwoLink,
-      ); // сохранённый профиль должен остаться
+      ); // the saved profile must stay
       final api = _FakeKeyClaimApi(keys: const []);
 
       await pumpClaim(tester, state: state, api: api);
@@ -288,7 +288,7 @@ void main() {
       await tester.tap(find.text('Повторить'));
       await tester.pumpAndSettle();
       expect(find.byType(TextField), findsOneWidget);
-      expect(api.calls, 1); // «повторить» возвращает ввод, сам не запрашивает
+      expect(api.calls, 1); // "retry" returns to input and does not request by itself
     });
 
     testWidgets(

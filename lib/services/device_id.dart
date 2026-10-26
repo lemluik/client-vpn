@@ -2,18 +2,20 @@ import 'dart:math';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-/// Хранилище идентификатора: читает и пишет одно значение.
+import 'secure_storage.dart';
+
+/// Identifier storage: reads and writes a single value.
 ///
-/// Порт нужен, чтобы в испытаниях подменить защищённое хранилище заглушкой —
-/// плагин в тестовой среде не поднимается.
+/// The port lets tests replace the secure storage with a stub: the plugin does
+/// not start in the test environment.
 abstract class IdStorage {
   Future<String?> read();
   Future<void> write(String value);
 }
 
-/// Защищённое хранилище устройства (Keychain / Keystore / DPAPI).
+/// The device's secure storage (Keychain / Keystore / DPAPI).
 class SecureIdStorage implements IdStorage {
-  const SecureIdStorage([this._storage = const FlutterSecureStorage()]);
+  const SecureIdStorage([this._storage = appSecureStorage]);
 
   static const String _key = 'device_id';
   final FlutterSecureStorage _storage;
@@ -25,12 +27,12 @@ class SecureIdStorage implements IdStorage {
   Future<void> write(String value) => _storage.write(key: _key, value: value);
 }
 
-/// Идентификатор устройства для защиты от повторных пробных ключей.
+/// Device identifier that protects against repeated trial keys.
 ///
-/// Это случайный UUID, а не аппаратный номер (IMEI / Android ID): клиент не
-/// раскрывает железо и остаётся универсальным. Значение создаётся один раз и
-/// переживает перезапуск приложения. Сервер подписывает его своим секретом
-/// (§5.1) — на стороне клиента секретов нет, поэтому здесь только генерация.
+/// It is a random UUID, not a hardware number (IMEI / Android ID): the client
+/// does not disclose the hardware and stays universal. The value is created
+/// once and survives app restarts. The server signs it with its own secret
+/// (§5.1); the client holds no secrets, so this is generation only.
 class DeviceId {
   DeviceId({IdStorage? storage, Random? random})
     : _storage = storage ?? const SecureIdStorage(),
@@ -39,7 +41,7 @@ class DeviceId {
   final IdStorage _storage;
   final Random _random;
 
-  /// Текущий идентификатор: читает сохранённый или создаёт и сохраняет новый.
+  /// The current identifier: reads the saved one or creates and saves a new one.
   Future<String> get() async {
     final existing = await _storage.read();
     if (existing != null && existing.isNotEmpty) return existing;
@@ -48,11 +50,11 @@ class DeviceId {
     return created;
   }
 
-  /// Случайный UUID версии 4 (RFC 4122).
+  /// A random version 4 UUID (RFC 4122).
   String generate() {
     final bytes = List<int>.generate(16, (_) => _random.nextInt(256));
-    bytes[6] = (bytes[6] & 0x0f) | 0x40; // версия 4
-    bytes[8] = (bytes[8] & 0x3f) | 0x80; // вариант RFC 4122
+    bytes[6] = (bytes[6] & 0x0f) | 0x40; // version 4
+    bytes[8] = (bytes[8] & 0x3f) | 0x80; // RFC 4122 variant
     String hex(int b) => b.toRadixString(16).padLeft(2, '0');
     final s = bytes.map(hex).join();
     return '${s.substring(0, 8)}-${s.substring(8, 12)}-'
