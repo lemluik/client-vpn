@@ -4,9 +4,10 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'matrix_api.dart';
+import 'services/secure_storage.dart';
 
-/// Сессия чата одной записи провайдера: узел, комната, курсор синхронизации и
-/// исходящая очередь. Всё это привязано к провайдеру и удаляется вместе с ним.
+/// Chat session of one provider entry: homeserver, room, sync cursor and the
+/// outgoing queue. All of it belongs to the provider and is removed with it.
 class ChatSession {
   const ChatSession({
     required this.providerId,
@@ -20,14 +21,14 @@ class ChatSession {
 
   final String providerId;
 
-  /// Полный адрес узла с схемой и портом. Приходит от провайдера или вводится
-  /// пользователем — в код клиента такие адреса не вписываются.
+  /// Full homeserver address with scheme and port. Comes from the provider or
+  /// is entered by the user: such addresses are never written into the code.
   final String homeserver;
   final String userId;
   final String roomId;
 
-  /// Курсор `/sync`: с него восстановление после перезапуска идёт дальше,
-  /// а не с начала истории.
+  /// The `/sync` cursor: after a restart the sync continues from it rather than
+  /// from the start of the history.
   final String? since;
   final List<OutboxItem> outbox;
   final String? lastError;
@@ -64,7 +65,7 @@ class ChatSession {
         'error': lastError,
       };
 
-  /// Битая запись — [FormatException], хранилище пропустит её и оставит прочие.
+  /// A broken entry throws [FormatException]; the store skips it and keeps the rest.
   static ChatSession fromJson(String providerId, Map<String, dynamic> json) {
     final homeserver = _text(json['homeserver']);
     final room = _text(json['room']);
@@ -89,8 +90,8 @@ class ChatSession {
   }
 }
 
-/// Сообщение, которое не успело уйти. Повтор отправляется с прежним `txnId`,
-/// поэтому узел не пишет дубль.
+/// A message that has not been sent yet. A retry goes with the same `txnId`, so
+/// the homeserver does not write a duplicate.
 class OutboxItem {
   const OutboxItem({required this.txnId, required this.body, required this.at});
 
@@ -112,8 +113,9 @@ class OutboxItem {
   }
 }
 
-/// Хранилище токена. Реализация — защищённое хранилище ОС (Keystore на Android,
-/// Credential Manager на Windows); в испытаниях подменяется памятью.
+/// Token storage. The implementation is the OS secure storage (Keystore on
+/// Android, Credential Manager on Windows, Keychain on macOS); tests replace it
+/// with memory.
 abstract class TokenVault {
   Future<String?> read(String key);
 
@@ -122,11 +124,11 @@ abstract class TokenVault {
   Future<void> erase(String key);
 }
 
-/// Токен в `SharedPreferences` попасть не может — только сюда.
-/// По умолчанию: Keystore (AES-GCM + RSA OAEP) на Android и Credential Manager
-/// на Windows.
+/// The token can never go to `SharedPreferences`, only here.
+/// Keystore (AES-GCM + RSA OAEP) on Android, Credential Manager on Windows and
+/// the login keychain on macOS (see [appSecureStorage]).
 class SecureTokenVault implements TokenVault {
-  final FlutterSecureStorage _storage = const FlutterSecureStorage();
+  final FlutterSecureStorage _storage = appSecureStorage;
 
   @override
   Future<String?> read(String key) async {
@@ -145,12 +147,12 @@ class SecureTokenVault implements TokenVault {
     try {
       await _storage.delete(key: key);
     } on Exception {
-      // Уже удалено или недоступно: доступ к чату всё равно считается потерянным.
+      // Already deleted or unavailable: access to the chat is lost either way.
     }
   }
 }
 
-/// Память чата: сессии по провайдерам в `chat.v1`, токены отдельно.
+/// Chat memory: sessions per provider in `chat.v1`, tokens kept separately.
 class ChatStore {
   ChatStore(this._prefs, this._vault);
 
@@ -178,7 +180,7 @@ class ChatStore {
     }
   }
 
-  /// Сессия провайдера. Null, если чат ещё не открывали с этой записи.
+  /// The provider's session. Null if the chat was never opened from this entry.
   ChatSession? sessionOf(String providerId) {
     final raw = _readAll()[providerId];
     if (raw == null) return null;
@@ -194,7 +196,7 @@ class ChatStore {
     await _prefs.setString(_key, jsonEncode(all));
   }
 
-  /// Удаляет всё, что принадлежит провайдеру: сессию, курсор, очередь, токен.
+  /// Removes everything that belongs to the provider: session, cursor, queue, token.
   Future<void> drop(String providerId) async {
     final all = _readAll()..remove(providerId);
     await _prefs.setString(_key, jsonEncode(all));
@@ -209,14 +211,14 @@ class ChatStore {
   Future<void> eraseToken(String providerId) => _vault.erase(_tokenPrefix + providerId);
 }
 
-/// Идентификатор записи сообщения: уникальный для нового и тот же при повторе.
-/// Счётчик дописан к времени, чтобы два сообщения, отправленные в одну
-/// микросекунду, не получили один `txnId` и не слились на узле.
+/// Message transaction id: unique for a new message and the same on a retry.
+/// A counter is appended to the time so that two messages sent in the same
+/// microsecond do not get one `txnId` and merge on the homeserver.
 int _txnSequence = 0;
 
 String newTxnId() => 'c${DateTime.now().microsecondsSinceEpoch}${++_txnSequence}';
 
-/// Проверка адреса узла: только https, с хостом, без пути и без вкраплений.
+/// Homeserver address check: https only, with a host, no path and no extras.
 String? chatHomeserverError(String value) {
   final uri = Uri.tryParse(value.trim());
   if (uri == null || !uri.isAbsolute || uri.scheme != 'https' || uri.host.isEmpty) {
@@ -232,13 +234,13 @@ String? _text(Object? value) {
   return value.isEmpty ? null : value;
 }
 
-/// Тип для тестовой подмены обмена с узлом.
+/// Type for replacing the homeserver exchange in tests.
 typedef MatrixCallFactory = MatrixCaller Function(String homeserver);
 
-/// Собирает клиента по сессии.
+/// Builds a client for a session.
 MatrixClient clientFor(ChatSession session, {String? token, MatrixCaller? call}) =>
     MatrixClient(session.homeserver, token: token, call: call);
 
-/// Сообщения из ответа `/sync` для сессии.
+/// Messages from a `/sync` response for a session.
 List<ChatMessage> messagesFor(ChatSession session, Map<String, dynamic> payload) =>
     messagesFromSync(payload, session.roomId, selfUserId: session.userId);
