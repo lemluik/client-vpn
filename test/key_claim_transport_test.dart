@@ -34,12 +34,15 @@ void main() {
       void Function(HttpRequest request)? respond,
     }) async {
       final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-      server.listen((request) {
+      server.listen((request) async {
         if (respond != null) {
           respond(request);
           return;
         }
-        request.listen((_) {});
+        // Read the whole body before answering: answering first races the
+        // client closing the connection, and the unread body then throws
+        // "Connection closed while receiving data" on the server.
+        await request.drain<void>().catchError((_) {});
         request.response
           ..statusCode = HttpStatus.ok
           ..headers.contentType = ContentType.json
