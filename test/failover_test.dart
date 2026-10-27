@@ -26,8 +26,10 @@ List<ShareLink> parsed() => [
 
 void main() {
   group('точка проб', () {
-    test('значение по умолчанию нейтральное и рабочее', () {
-      expect(defaultProbeEndpoint, startsWith('https://'));
+    test('значение по умолчанию нейтральное и без TLS-рукопожатия', () {
+      // Живой туннель не должен выглядеть мёртвым из-за зависшего TLS: точка
+      // проб по умолчанию отвечает по HTTP (см. комментарий в failover.dart).
+      expect(defaultProbeEndpoint, startsWith('http://'));
       expect(probeEndpointError(defaultProbeEndpoint), isNull);
     });
 

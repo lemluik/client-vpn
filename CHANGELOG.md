@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- The "Node unreachable" banner could appear over a live tunnel. The connectivity probe used an
+  HTTPS endpoint by default, so it depended on a TLS handshake with a foreign site passing through
+  the tunnel; on some subscriber networks that handshake stalls after the certificate chain while
+  ordinary traffic keeps flowing, and two stalled probes were enough to mark the path dead. The
+  default probe endpoint is now a plain HTTP one (`http://connectivitycheck.gstatic.com/generate_204`):
+  what the probe has to prove is that bytes reach the node and come back, not that a foreign TLS
+  server completes a handshake. Measured 26.10.2026 on a controlled stall: the HTTPS probe turns
+  the banner red, the HTTP probe stays green over the same path.
+
 ## [0.4.2] - 2026-10-22
 
 ### Fixed
