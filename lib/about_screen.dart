@@ -5,7 +5,7 @@ import 'l10n/app_localizations.dart';
 
 /// Версия на экране «О программе». Тест `test/about_test.dart` сверяет строку с
 /// `pubspec.yaml`, чтобы экран не врал после релиза.
-const String clientVersion = '0.4.2';
+const String clientVersion = '0.4.3';
 
 /// Экран «О программе» (позиция 18, пункт У-6): лицензия клиента, файлы LICENSE и
 /// NOTICE и заявление об отсутствии телеметрии (позиция 16, пункт У-5).
