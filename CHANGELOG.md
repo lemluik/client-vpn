@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- macOS build in CI: tests with the real macOS core, a release build, and an ad-hoc
+  re-signed app packed as `ClientVPN-<version>-macOS.dmg` (drag to Applications) and
+  `ClientVPN-<version>-macOS.zip`, each with a `.sha256` companion, published with the
+  release next to Windows and Android. The update screen on macOS finds the `macos` asset.
+- README: macOS installation from either file, the first launch of the unsigned build,
+  and the limits of the system proxy mode.
+
 ## [0.4.3] - 2026-10-27
 
 ### Fixed
