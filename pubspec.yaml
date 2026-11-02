@@ -11,7 +11,7 @@ dependencies:
     sdk: flutter
   flutter_localizations:
     sdk: flutter
-  crypto: ^3.0.6
+  crypto: ^3.0.8
   # Direct dependency: the Win32 FFI wrappers (mutex, Job Object) use `calloc`
   # and `Utf16`. The package was already in the graph via flutter_secure_storage.
   ffi: ^2.2.0
