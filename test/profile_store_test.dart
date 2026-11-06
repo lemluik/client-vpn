@@ -348,6 +348,39 @@ void main() {
       expect(store.providers.single.lastUpdated, dueAt);
     });
 
+    test('принудительное обновление делает fetch и минуту спустя (Ф2)',
+        () async {
+      final store = await ProfileStore.open();
+      await store.addSubscription(
+        subscriptionUrl,
+        fetch: responds(headers: fullHeaders),
+        now: fixedNow,
+      );
+
+      var calls = 0;
+      Future<SubscriptionResponse> counted(String url) async {
+        calls++;
+        return const SubscriptionResponse(body: plainBody);
+      }
+
+      // Обычное обслуживание по интервалу ещё не пора — и оно не трогает сеть.
+      final moment = fixedNow.add(const Duration(minutes: 1));
+      expect(store.dueForUpdate(moment), isEmpty);
+      expect(await store.refreshDue(fetch: counted, now: moment), isEmpty);
+      expect(calls, 0);
+
+      // Аварийное перечитывание обязано выполнить fetch независимо от
+      // суточного интервала: лестница 1/5/30 минут не может ждать.
+      final result = await store.refresh(
+        store.providers.single.id,
+        fetch: counted,
+        now: moment,
+      );
+      expect(calls, 1);
+      expect(result.ok, isTrue);
+      expect(store.providers.single.lastUpdated, moment);
+    });
+
     test('удаление профиля убирает одинокого провайдера', () async {
       final store = await ProfileStore.open();
       final added = await store.addSubscription(

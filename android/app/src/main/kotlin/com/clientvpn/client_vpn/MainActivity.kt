@@ -9,6 +9,7 @@ import android.net.Uri
 import android.net.VpnService
 import android.os.Build
 import android.os.Bundle
+import android.os.SystemClock
 import android.widget.Toast
 import androidx.core.content.FileProvider
 import io.flutter.embedding.android.FlutterActivity
@@ -17,6 +18,7 @@ import io.flutter.plugin.common.MethodChannel
 import java.io.File
 import java.util.concurrent.Executor
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.function.Consumer
 
 class MainActivity : FlutterActivity() {
@@ -27,6 +29,16 @@ class MainActivity : FlutterActivity() {
         private const val APP_CHANNEL = "client_vpn/app"
         private const val USER_CONFIG = "user-config.json"
         private const val CONSENT_REQUEST = 4242
+
+        /** Предел проверки конфига дочерним процессом, секунд (Ф5). */
+        private const val VALIDATE_TIMEOUT_SECONDS = 30L
+
+        /** Предел ожидания подтверждения операции службой, мс. «Команда
+         *  отправлена» и «запуск/остановка завершились» — разные вещи: канал
+         *  отвечает только после фактического завершения либо по истечении
+         *  этого предела. */
+        private const val CONFIRM_TIMEOUT_MS = 15_000L
+        private const val CONFIRM_POLL_MS = 50L
 
         /** Тап по плитке, когда consent не дан или конфиг устарел: активность
          *  получает этот признак, а Dart забирает его одним чтением. */
@@ -190,15 +202,41 @@ class MainActivity : FlutterActivity() {
             .apply { environment()["XRAY_LOCATION_ASSET"] = GeoAssets.assetDir(this@MainActivity).absolutePath }
             .start()
 
-        val output = process.inputStream.bufferedReader().readText()
-        if (!process.waitFor(30, TimeUnit.SECONDS)) {
-            process.destroyForcibly()
-            return "проверка не завершилась за 30 секунд"
+        // Вывод читается параллельно с ожиданием выхода (Ф5): прежний
+        // readText() до waitFor зависал бы вместе с процессом, не дойдя до
+        // объявленного предела, если ядро не закрывает stdout.
+        val output = StringBuilder()
+        val reader = Thread {
+            try {
+                process.inputStream.bufferedReader().forEachLine { line ->
+                    synchronized(output) { output.appendLine(line) }
+                }
+            } catch (e: Exception) {
+                // Чтение прерывается принудительным завершением процесса.
+            }
+        }.apply { isDaemon = true }
+        reader.start()
+
+        val finished = process.waitFor(VALIDATE_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        if (!finished) process.destroyForcibly()
+        // Дать читателю выйти и освободить потоки процесса.
+        reader.join(2000)
+        try {
+            process.inputStream.close()
+            process.outputStream.close()
+            process.errorStream.close()
+        } catch (e: Exception) {
+            // Потоки убитого процесса могут быть уже закрыты.
         }
+        if (!finished) {
+            process.waitFor(5, TimeUnit.SECONDS)
+            return "проверка не завершилась за $VALIDATE_TIMEOUT_SECONDS секунд"
+        }
+        val text = synchronized(output) { output.toString() }
         return if (process.exitValue() == 0) {
             null
         } else {
-            output.trim().ifEmpty { "код ${process.exitValue()}" }
+            text.trim().ifEmpty { "код ${process.exitValue()}" }
         }
     }
 
@@ -323,8 +361,43 @@ class MainActivity : FlutterActivity() {
             return
         }
 
+        // Ответ только после фактического завершения запуска службой:
+        // прежний success(true) сразу после отправки команды не отличал
+        // поднятый туннель от отказа сервиса.
+        val since = TunnelBus.statusSeq
         launchTunnel()
-        result.success(true)
+        awaitStatus(expected = true, since = since, result = result)
+    }
+
+    /** Ждёт, пока сервис опубликует статус [expected] новым событием (счётчик
+     *  [TunnelBus.statusSeq] больше [since]) — защита от устаревших событий.
+     *  Callback завершается ровно один раз ([AtomicBoolean]) и на главном
+     *  потоке. Для запуска возвращает подтверждение, для остановки — null
+     *  после подтверждения или истечения предела: Dart не должен висеть. */
+    private fun awaitStatus(
+        expected: Boolean,
+        since: Long,
+        result: MethodChannel.Result,
+    ) {
+        val completed = AtomicBoolean(false)
+        Thread {
+            val deadline = SystemClock.elapsedRealtime() + CONFIRM_TIMEOUT_MS
+            var confirmed = false
+            while (SystemClock.elapsedRealtime() < deadline) {
+                if (TunnelBus.statusSeq != since) {
+                    confirmed = TunnelBus.lastStatus == expected
+                    // Новое событие не в нашу сторону (например, fail() при
+                    // запуске) — ждать дальше нечего.
+                    break
+                }
+                Thread.sleep(CONFIRM_POLL_MS)
+            }
+            if (completed.compareAndSet(false, true)) {
+                runOnUiThread {
+                    if (expected) result.success(confirmed) else result.success(null)
+                }
+            }
+        }.apply { isDaemon = true }.start()
     }
 
     /** Метка свежести: её ставит Dart после успешного подключения, она же
@@ -386,15 +459,29 @@ class MainActivity : FlutterActivity() {
         val pending = pendingConsent
         pendingConsent = null
         val granted = resultCode == Activity.RESULT_OK
-        if (granted) launchTunnel()
-        pending?.success(granted)
+        if (!granted) {
+            pending?.success(false)
+            return
+        }
+        if (pending == null) {
+            launchTunnel()
+            return
+        }
+        // Подтверждение ждём и после согласия: прежний код отвечал «успех»
+        // сразу после отправки команды сервису.
+        val since = TunnelBus.statusSeq
+        launchTunnel()
+        awaitStatus(expected = true, since = since, result = pending)
     }
 
     private fun stop(result: MethodChannel.Result) {
+        val since = TunnelBus.statusSeq
         startService(
             Intent(this, TunnelService::class.java).setAction(TunnelService.ACTION_STOP),
         )
-        result.success(null)
+        // Ответ после фактической остановки (или по пределу ожидания):
+        // Dart снимает свой трафик с ядра только когда сервис закончил.
+        awaitStatus(expected = false, since = since, result = result)
     }
 
     private fun launchTunnel() {

@@ -93,6 +93,7 @@ class AppState extends ChangeNotifier {
     ProbeStore? probes,
     ReconnectPlan? reconnect,
     PathProbe? pathProbe,
+    SubscriptionFetcher? subscriptionFetch,
     String languageCode = '',
     Stream<List<ConnectivityResult>>? networks,
     Stream<String>? deepLinks,
@@ -102,6 +103,7 @@ class AppState extends ChangeNotifier {
            (Platform.isAndroid ? _passThrough : ensureConfigOnDisk),
        _chat = chat,
        _settings = settings,
+       _subscriptionFetch = subscriptionFetch ?? fetchSubscription,
        _autostart = autostart ?? const UnsupportedAutostart(),
        _presets = presets,
        _ruleStore = ruleStore,
@@ -181,6 +183,10 @@ class AppState extends ChangeNotifier {
   final ProbeStore? _probes;
   String _probeEndpoint;
 
+  /// Получение подписки для аварийного перечитывания. В испытаниях
+  /// подменяется заглушкой: сеть не поднимается, ответ задаёт тест.
+  final SubscriptionFetcher _subscriptionFetch;
+
   StreamSubscription<String>? _logSubscription;
   StreamSubscription<CoreStatus>? _statusSubscription;
   StreamSubscription<TrafficSnapshot>? _trafficSubscription;
@@ -190,6 +196,15 @@ class AppState extends ChangeNotifier {
   Timer? _probeTimer;
   Timer? _subscriptionTimer;
   final ReconnectPlan _reconnect;
+
+  /// Поколение восстановления (Ф1): отключение пользователя и остановка
+  /// из шторки увеличивают его, и поздний результат отменённой аварийной
+  /// операции (fetch, перезапуск) уже не имеет права включать туннель.
+  int _recoveryGen = 0;
+
+  /// Идёт ли перезапуск туннеля при мёртвом пути: параллельные попытки
+  /// восстановления исключены.
+  bool _recoveryRestarting = false;
 
   /// Проверка пути до узла собственным трафиком приложения (Д2-25).
   final PathProbe _pathProbe;
@@ -536,9 +551,17 @@ class AppState extends ChangeNotifier {
       await _core.start(config);
       await markTunnelFresh();
       _state = TunnelState.on;
-      _reconnect.reset();
-      _stopReconnectTimers();
       _restartPathWatch();
+      // Ф1: успешный старт процесса ещё не значит, что трафик идёт. Пока
+      // сквозная проверка возможна, лестница гаснет только по её результату
+      // (_onPath → live); если проверки нет, старт остаётся пределом, как
+      // прежде.
+      if (_pathProbe.isRunning && _path != PathState.live) {
+        _armReconnect();
+      } else {
+        _reconnect.reset();
+        _stopReconnectTimers();
+      }
       final profile = _store.active;
       if (profile != null) await _settings.rememberProfile(profile.id);
       _addLog('Подключено: ${_activeLabel()}');
@@ -553,6 +576,9 @@ class AppState extends ChangeNotifier {
 
   Future<void> disconnect() async {
     _userWantsTunnel = false;
+    // Явное отключение отменяет все ожидающие восстановления: идущий fetch
+    // или перезапуск по возврате уже не должны включать туннель обратно.
+    _recoveryGen++;
     _reconnect.reset();
     _stopReconnectTimers();
     _pathProbe.stop();
@@ -801,20 +827,94 @@ class AppState extends ChangeNotifier {
       _armReconnect();
       return;
     }
-    if (_state == TunnelState.on) return;
+    if (_state == TunnelState.on) {
+      // Ядро живо: подъём здесь ничего не решает. Мёртвый путь лечит
+      // _rereadSubscription, а живой гасит очередь (см. _onPath).
+      return;
+    }
     _addLog('Проба связи: подключаемся снова');
     await connect();
   }
 
-  /// Пауза подписки: перечитать подписку и, если туннель ещё лежит, поднять
-  /// его. Успешный подъём сам гасит очередь (см. connect), поэтому повторное
-  /// вооружение здесь не нужно.
+  /// Пауза подписки: аварийно перечитать активную подписку и применить новый
+  /// конфиг. Перечитывание именно принудительное (Ф2): прежний refreshDue()
+  /// обновлял подписку только по суточному интервалу, и лестница 1/5/30 минут
+  /// каждый раз использовала прежние адреса.
+  ///
+  /// При живом ядре и мёртвом пути (Ф1) туннель перезапускается: ядро читает
+  /// конфиг только при старте, без перезапуска обновление осталось бы на
+  /// диске, а не в работе.
   Future<void> _rereadSubscription() async {
     if (!_userWantsTunnel || _busy || _stopping) return;
-    _addLog('Перечитываем подписку после сбоя');
-    await refreshDue();
+    if (_state == TunnelState.noLink) return;
+    final deadPath = _state == TunnelState.on && _path == PathState.dead;
+    if (_state == TunnelState.on && !deadPath) {
+      // Ядро живо, а путь не объявлен мёртвым: восстанавливать пока нечего,
+      // транзитный провал контрольного адреса не повод для рестарта.
+      return;
+    }
+    final gen = _recoveryGen;
+    _addLog(
+      deadPath
+          ? 'Выходы не передают трафик — аварийное обновление подписки'
+          : 'Перечитываем подписку после сбоя',
+    );
+    await _refreshActiveForced(gen);
+    // Отменённая операция не меняет ничего: пользователь мог отключиться,
+    // пока fetch был в пути.
+    if (gen != _recoveryGen || !_userWantsTunnel || _stopping) return;
+    if (deadPath) {
+      await _restartAfterDeadPath(gen);
+      return;
+    }
     if (_state == TunnelState.on || _state == TunnelState.noLink) return;
     await connect();
+  }
+
+  /// Принудительное обновление активного провайдера: сетевой запрос выполняется
+  /// всегда, независимо от обычного интервала (Ф2). Ошибка fetch рабочий кэш
+  /// не затирает — refreshProvider сохраняет последнюю хорошую конфигурацию,
+  /// а паузы между попытками задаёт лестница [ReconnectPlan].
+  Future<void> _refreshActiveForced(int gen) async {
+    final provider = activeProvider;
+    if (provider == null) return; // подключение не из подписки
+    final result = await _store.refresh(
+      provider.id,
+      fetch: _subscriptionFetch,
+    );
+    // Поздний ответ отменённой операции (пользователь отключился или окно
+    // закрыто) не попадает даже в журнал.
+    if (gen != _recoveryGen || !_userWantsTunnel) return;
+    if (result.ok) {
+      _addLog(
+        'Подписка обновлена аварийно: ${result.provider.links.length} профилей',
+      );
+    } else {
+      _addLog('[ERR] ${result.error}');
+    }
+  }
+
+  /// Перезапуск туннеля при живом ядре и мёртвом пути: новый конфиг
+  /// применяется только пересборкой процесса. Попытка одиночная —
+  /// параллельные восстановления исключены.
+  Future<void> _restartAfterDeadPath(int gen) async {
+    if (_recoveryRestarting) return;
+    _recoveryRestarting = true;
+    try {
+      _addLog('Перезапуск туннеля для применения нового конфига');
+      _stopping = true;
+      try {
+        await _core.stop();
+      } finally {
+        _stopping = false;
+      }
+      // Возврат отменённой операции туннель не поднимает.
+      if (gen != _recoveryGen || !_userWantsTunnel || _stopping) return;
+      _state = TunnelState.off;
+      await connect();
+    } finally {
+      _recoveryRestarting = false;
+    }
   }
 
   void _stopReconnectTimers() {
@@ -858,6 +958,7 @@ class AppState extends ChangeNotifier {
       // Снято плиткой: пользователь отключился сам, это не сбой, и лестница
       // переподключения не должна поднимать туннель обратно.
       _stopping = true;
+      _recoveryGen++;
       _reconnect.reset();
       _stopReconnectTimers();
       _pathProbe.stop();
@@ -914,8 +1015,19 @@ class AppState extends ChangeNotifier {
     _path = path;
     if (path == PathState.live && previous != PathState.live) {
       _addLog('Путь до узла подтверждён');
+      // Ф1: аварийная лестница гаснет только после сквозного подтверждения
+      // пути — успешный старт процесса трафик не доказывает.
+      _reconnect.reset();
+      _stopReconnectTimers();
     } else if (path == PathState.dead && previous != PathState.dead) {
       _addLog('[ERR] Узел не отвечает: трафик через туннель не идёт');
+      // Ф1: ядро может быть живо, но все выходы региона не передают данные —
+      // восстановление обязано запускаться и при поднятом туннеле. До этого
+      // места доводит PathProbe: он объявляет dead только после
+      // failuresBeforeDead провалов подряд, транзитный сбой адреса сюда не
+      // попадает. Диагностика пути здесь отделена от балансировщика: регион
+      // клиент сам не переключает.
+      _armReconnect();
     } else {
       notifyListeners();
     }
@@ -947,6 +1059,10 @@ class AppState extends ChangeNotifier {
 
   @override
   void dispose() {
+    // Идущее аварийное восстановление гасится вместе с окном: его поздний
+    // результат не должен трогать освобождённое состояние.
+    _recoveryGen++;
+    _userWantsTunnel = false;
     _logSubscription?.cancel();
     _statusSubscription?.cancel();
     _pathSubscription?.cancel();

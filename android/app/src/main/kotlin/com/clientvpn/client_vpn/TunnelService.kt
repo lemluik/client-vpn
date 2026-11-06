@@ -71,6 +71,12 @@ class TunnelService : VpnService() {
     private var tunnel: ParcelFileDescriptor? = null
     private var logReader: Thread? = null
 
+    /** Сериализация start/stop/cleanup и поколение сессии (Ф8): поток выхода
+     *  старого ядра, проснувшийся после ручной остановки и нового запуска,
+     *  не имеет права останавливать новое ядро. */
+    private val sessionLock = Any()
+    private var session = 0L
+
     /** Замер трафика туннеля: счётчики `/proc/net/dev` на старте сессии
      *  (база) и на прошлом тике (для скорости). */
     private var trafficTimer: ScheduledExecutorService? = null
@@ -109,14 +115,20 @@ class TunnelService : VpnService() {
     }
 
     private fun startTunnel(byShell: Boolean = false) {
-        if (process != null) {
-            TunnelBus.log("Туннель уже поднят")
-            // Статус публикуется и здесь: интерфейс мог открыться заново и
-            // спросить разрешение именно этим вызовом.
-            TunnelBus.status(true, byShell, this)
-            return
+        synchronized(sessionLock) {
+            if (process != null) {
+                TunnelBus.log("Туннель уже поднят")
+                // Статус публикуется и здесь: интерфейс мог открыться заново и
+                // спросить разрешение именно этим вызовом.
+                TunnelBus.status(true, byShell, this)
+                return
+            }
+            startTunnelLocked(byShell)
         }
+    }
 
+    /** Тело запуска: вызывается только под [sessionLock]. */
+    private fun startTunnelLocked(byShell: Boolean) {
         // Уведомление обязано появиться раньше любых проверок: сервис
         // запущен через startForegroundService и на это есть пять секунд.
         showNotification()
@@ -220,6 +232,9 @@ class TunnelService : VpnService() {
 
         val started = launch.start()
         process = started
+        // Поколение сессии этого запуска: поток выхода привязан к нему и к
+        // конкретному процессу (Ф8).
+        val generation = ++session
         readLogs(started)
 
         Thread({
@@ -228,9 +243,17 @@ class TunnelService : VpnService() {
             } catch (e: InterruptedException) {
                 return@Thread
             }
-            if (!stopping) {
+            synchronized(sessionLock) {
+                // Старый поток выхода не имеет права остановить новое ядро:
+                // после ручной остановки и нового запуска и процесс, и
+                // поколение уже другие. Общий флаг `stopping` для этого
+                // недостаточен — он возвращается в false до пробуждения.
+                if (process !== started || generation != session) {
+                    TunnelBus.log("Пропущен устаревший выход ядра (код $code)")
+                    return@synchronized
+                }
                 TunnelBus.log("Ядро завершилось (код $code)")
-                stopTunnel()
+                stopTunnelLocked()
             }
         }, "xray-exit").apply { isDaemon = true }.start()
 
@@ -256,7 +279,18 @@ class TunnelService : VpnService() {
     }
 
     private fun stopTunnel(byShell: Boolean = false) {
+        synchronized(sessionLock) {
+            stopTunnelLocked(byShell)
+        }
+    }
+
+    /** Тело остановки: вызывается только под [sessionLock] — старт, стоп и
+     *  cleanup сериализованы, публикация статуса тоже идёт под замком. */
+    private fun stopTunnelLocked(byShell: Boolean = false) {
         stopping = true
+        // Новое поколение: даже если этот процесс добьётся позже положенного,
+        // его поток выхода увидит смену поколения и промолчит (Ф8).
+        session++
         stopTrafficMonitor()
         logReader?.interrupt()
         logReader = null

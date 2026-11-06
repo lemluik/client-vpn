@@ -111,10 +111,18 @@ class AndroidCore implements VpnCore {
     final tunJson = _tunJson ??= buildTunConfig(config.json);
     final started = await _channel.invokeMethod<bool>('start', tunJson);
     if (started != true) {
-      throw Exception(
-        'Android не разрешил поднять туннель. '
-        'Подтвердите запрос системы и повторите подключение.',
+      // Подтверждение могло не успеть прийти в отведённый срок на медленном
+      // устройстве, хотя служба туннель подняла. Спрашиваем фактический статус,
+      // прежде чем объявлять отказ: иначе экран расходится с действительностью.
+      final status = CoreStatus.fromPayload(
+        await _channel.invokeMethod<Object>('status'),
       );
+      if (!status.running) {
+        throw Exception(
+          'Android не разрешил поднять туннель. '
+          'Подтвердите запрос системы и повторите подключение.',
+        );
+      }
     }
     _ownTraffic(true);
   }
