@@ -29,7 +29,7 @@ dependencies:
   dynamic_color: 1.9.0
   # 0.8.0: since 0.7.0 the package is built on the native API (nativeapi); the
   # legacy trayManager singleton moved to legacy.dart and is marked for removal.
-  tray_manager: 0.7.0
+  tray_manager: 0.8.3
   # gRPC client for the core's StatsService: on desktop the tunnel traffic is
   # visible only in Xray counters (the access log has no bytes). QueryStats
   # messages are encoded by hand, so protoc and the protobuf package are not needed.
