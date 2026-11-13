@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.4.5] - 2026-11-13
+
+### Changed
+
+- Bounded connection recovery (Ф1): reconnect attempts follow a fixed ladder (1 / 5 / 30 min pauses)
+  and stop after the last step instead of restarting forever. Disconnecting by the user immediately
+  cancels any pending recovery and an in-flight connect, so the tunnel never comes back up against
+  the user's will. Unified release: combines the 0.4.4 diagnostics with this recovery fix.
+  versionCode raised to 3 so the package updates over the installed 0.4.4 (versionCode 2) without
+  uninstalling; same project signing key, profiles preserved.
+
 ## [0.4.4] - 2026-11-13
 
 ### Added
