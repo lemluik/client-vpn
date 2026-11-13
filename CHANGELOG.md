@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.4.4] - 2026-11-13
+
+### Added
+
+- "Check connection" mode (Settings → Check connection). It reports one of three verdicts — works,
+  failure confirmed, or unknown — and only counts a path as working after bytes actually pass through
+  the real tunnel, not after a direct probe. Background probes stay rare and bounded; the active
+  "Check all entries" test runs only on press, warns that the tunnel briefly drops, and restores the
+  original entry afterwards. The shareable report carries the app and core versions, platform, network
+  type, start time, the selected entry and the failing stage, with node addresses, keys, tokens and
+  subscription links masked out. Nothing is sent automatically — the file leaves the device only when
+  the user saves and shares it.
+
+### Fixed
+
+- Saving the diagnostics report on Android no longer shows a false "save failed" error. The file picker
+  writes the bytes itself through the Storage Access Framework and returns a document path that
+  `dart:io File` cannot open; the screen now treats a returned path as a successful save instead of
+  trying to rewrite it.
+- Android `versionCode` is raised so the build installs as an in-place update over the previous release
+  without uninstalling (the prior APK had the same `versionCode` as the installed one, which blocks a
+  user-tap update).
+
 ## [0.4.3] - 2026-10-27
 
 ### Fixed

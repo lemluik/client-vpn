@@ -151,11 +151,19 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
         allowedExtensions: ['txt'],
       );
       if (target == null) return;
-      final file = File.fromUri(target);
-      if (!await file.exists() || await file.length() == 0) {
-        await file.writeAsBytes(bytes);
+      if (Platform.isAndroid) {
+        // Плагин сам записывает байты через SAF и возвращает путь документа
+        // (content://), который dart:io File открыть не может. Файл уже лежит
+        // в выбранной пользователем папку — повторно не пишем, иначе получили
+        // бы ложную ошибку при успешно сохранённом отчёте.
+        message = 'Отчёт сохранён: $name. Отправьте файл через мессенджер или почту.';
+      } else {
+        final file = File.fromUri(target);
+        if (!await file.exists() || await file.length() == 0) {
+          await file.writeAsBytes(bytes);
+        }
+        message = 'Сохранено: ${file.path}';
       }
-      message = 'Сохранено: ${file.path}';
     } catch (error) {
       message = 'Сохранить не удалось: $error';
     }
