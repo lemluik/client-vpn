@@ -74,6 +74,116 @@ class KillableCore implements VpnCore {
   Future<void> recoverAfterCrash() async {}
 }
 
+/// Ядро, которое не поднимается: каждый старт бросает ошибку. Нужно, чтобы
+/// довести лестницу до исчерпания и увидеть, что проба остановилась, а не
+/// перезапускает ядро бесконечно.
+class FailingCore implements VpnCore {
+  final StreamController<String> _logs = StreamController<String>.broadcast();
+  final StreamController<CoreStatus> _status =
+      StreamController<CoreStatus>.broadcast();
+
+  int startCalls = 0;
+
+  @override
+  Stream<String> get logs => _logs.stream;
+
+  @override
+  Stream<CoreStatus> get statusChanges => _status.stream;
+
+  @override
+  Future<void> markTunnelFresh() async {}
+
+  @override
+  Future<bool> takePendingConnect() async => false;
+
+  @override
+  bool get isRunning => false;
+
+  @override
+  String? get endpointLabel => null;
+
+  @override
+  Future<void> validate(VpnConfig config) async {}
+
+  @override
+  Future<void> start(VpnConfig config) async {
+    startCalls++;
+    throw Exception('ядро не поднимается');
+  }
+
+  @override
+  Future<void> stop() async {}
+
+  @override
+  Future<void> dispose() async {}
+
+  @override
+  Future<void> recoverAfterCrash() async {}
+}
+
+/// Ядро, чей старт зависает, пока его не отпустят: окно, в котором пользователь
+/// отключается во время подъёма, а поздний старт завершается уже после.
+class GatedCore implements VpnCore {
+  final StreamController<String> _logs = StreamController<String>.broadcast();
+  final StreamController<CoreStatus> _status =
+      StreamController<CoreStatus>.broadcast();
+
+  final List<Completer<void>> _gates = [];
+  int startCalls = 0;
+  int stopCalls = 0;
+  bool _running = false;
+
+  @override
+  Stream<String> get logs => _logs.stream;
+
+  @override
+  Stream<CoreStatus> get statusChanges => _status.stream;
+
+  @override
+  Future<void> markTunnelFresh() async {}
+
+  @override
+  Future<bool> takePendingConnect() async => false;
+
+  @override
+  bool get isRunning => _running;
+
+  @override
+  String? get endpointLabel => null;
+
+  @override
+  Future<void> validate(VpnConfig config) async {}
+
+  @override
+  Future<void> start(VpnConfig config) {
+    startCalls++;
+    final gate = Completer<void>();
+    _gates.add(gate);
+    return gate.future.then((_) {
+      _running = true;
+      _status.add(const CoreStatus(true));
+    });
+  }
+
+  /// Отпускает ближайший зависший старт.
+  void release() {
+    if (_gates.isNotEmpty) _gates.removeAt(0).complete();
+  }
+
+  @override
+  Future<void> stop() async {
+    stopCalls++;
+    _running = false;
+    _status.add(const CoreStatus(false));
+  }
+
+  @override
+  Future<void> dispose() async {}
+
+  @override
+  Future<void> recoverAfterCrash() async {}
+}
+
 /// Состояние с короткой лестницей: испытание не ждёт реальные минуты.
 /// [probeInterval] задаёт отдельно: когда по сценарию пауза подписки или
 /// возврат сети должны сработать раньше пробы, проба не должна их перебрать.
@@ -225,6 +335,86 @@ void main() {
       expect(core.stopCalls, 1);
       expect(state.state, TunnelState.on);
       expect(state.log, contains('Сеть появилась — туннель поднимается заново'));
+    });
+  });
+
+  group('ограниченное восстановление (Ф1)', () {
+    test('лестница исчерпана — проба перестаёт перезапускать ядро', () async {
+      SharedPreferences.setMockInitialValues({});
+      final store = await ProfileStore.open();
+      final profile = await store.addLinks(
+        name: 'Европа',
+        links: parseLinks(linkOne).links,
+      );
+      await store.setActive(profile.id);
+      final core = FailingCore();
+      final networks = StreamController<List<ConnectivityResult>>();
+      final state = AppState(
+        store,
+        core,
+        settings: await SettingsStore.open(),
+        configWriter: (config) async => config,
+        reconnect: ReconnectPlan(
+          pauses: const [
+            Duration(milliseconds: 40),
+            Duration(milliseconds: 80),
+            Duration(milliseconds: 120),
+          ],
+          probeInterval: const Duration(milliseconds: 30),
+        ),
+        networks: networks.stream,
+      );
+      addTearDown(state.dispose);
+      addTearDown(networks.close);
+      networks.add([ConnectivityResult.wifi]);
+
+      await state.connect();
+      expect(state.state, TunnelState.failure);
+      // Лестница дорабатывает три шага, проба в это время перезапускает ядро.
+      await settle(600);
+      expect(core.startCalls, greaterThan(1), reason: 'попытки действительно были');
+      final afterLadder = core.startCalls;
+      // После исчерпания новых попыток нет: проба не крутится вечно.
+      await settle(300);
+      expect(core.startCalls, afterLadder, reason: 'бесконечных перезапусков нет');
+      expect(state.isReconnecting, isFalse);
+    });
+
+    test('отключение во время подъёма отменяет восстановление', () async {
+      SharedPreferences.setMockInitialValues({});
+      final store = await ProfileStore.open();
+      final profile = await store.addLinks(
+        name: 'Европа',
+        links: parseLinks(linkOne).links,
+      );
+      await store.setActive(profile.id);
+      final core = GatedCore();
+      final networks = StreamController<List<ConnectivityResult>>();
+      final state = AppState(
+        store,
+        core,
+        settings: await SettingsStore.open(),
+        configWriter: (config) async => config,
+        networks: networks.stream,
+      );
+      addTearDown(state.dispose);
+      addTearDown(networks.close);
+      networks.add([ConnectivityResult.wifi]);
+
+      // Подъём завис в старте ядра.
+      final connecting = state.connect();
+      await settle();
+      expect(core.startCalls, 1);
+      expect(state.state, TunnelState.connecting);
+
+      // Пользователь отключился, пока старт ещё в пути.
+      await state.disconnect();
+      core.release();
+      await connecting;
+      await settle();
+
+      expect(state.state, TunnelState.off, reason: 'туннель обратно не включился');
+      expect(state.isReconnecting, isFalse);
     });
   });
 }

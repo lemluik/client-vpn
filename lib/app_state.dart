@@ -675,6 +675,7 @@ class AppState extends ChangeNotifier {
   Future<void> connect() async {
     if (_state == TunnelState.connecting) return;
 
+    final gen = _recoveryGen;
     _failure = null;
     _state = TunnelState.connecting;
     _userWantsTunnel = true;
@@ -694,6 +695,24 @@ class AppState extends ChangeNotifier {
       // требует, чтобы пользователь помнил про сохранение заранее.
       await _appExclusions?.call(_directApps);
       await _core.start(config);
+      // Отключение пользователя во время подъёма отменяет восстановление:
+      // поздний старт не включает туннель обратно (Ф1). Поколение сверяется
+      // после старта — именно он занимает время, и отключение приходится на
+      // это окно. Сверка до старта уже есть у вызывающего восстановления.
+      if (gen != _recoveryGen) {
+        // Поздний статус ядра «поднят» не должен оставить туннель включённым:
+        // останавливаем под тем же флагом, что и disconnect(), иначе _onStatus
+        // принял бы остановку за сбой и снова запустил восстановление.
+        _stopping = true;
+        try {
+          await _core.stop();
+        } finally {
+          _stopping = false;
+        }
+        _userWantsTunnel = false;
+        _state = TunnelState.off;
+        return;
+      }
       await markTunnelFresh();
       _state = TunnelState.on;
       _restartPathWatch();
@@ -957,9 +976,18 @@ class AppState extends ChangeNotifier {
   /// плюс перечитывание подписки по паузам 1–5–30 минут.
   void _armReconnect() {
     if (!_userWantsTunnel || _stopping) return;
+    // Лестница исчерпана: пробу больше не перевзводим, иначе каждые 30 секунд
+    // ядро перезапускалось бы бесконечно (Ф1). Уже назначенное перечитывание
+    // подписки дорабатывает свой шаг, новых попыток не ставим. Дальше туннель
+    // поднимает только пользователь или возврат сети (_raiseAfterOutage).
+    if (_reconnect.exhausted) {
+      _probeTimer?.cancel();
+      _probeTimer = null;
+      return;
+    }
     _probeTimer?.cancel();
     _probeTimer = Timer(_reconnect.probeInterval, _probeLink);
-    if (_reconnect.exhausted || (_subscriptionTimer?.isActive ?? false)) return;
+    if (_subscriptionTimer?.isActive ?? false) return;
     _subscriptionTimer?.cancel();
     _subscriptionTimer = Timer(_reconnect.takePause(), _rereadSubscription);
   }
