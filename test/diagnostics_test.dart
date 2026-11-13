@@ -41,6 +41,7 @@ class FakeEnv {
     this.coreStateFn,
     this.fingerprintFn,
     this.networkTypeFn,
+    this.observeRoute,
   }) : entries = entries ?? [const EntryCandidate('alpha', 'Alpha')],
        current = current ?? const EntryCandidate('alpha', 'Alpha'),
        activeKey = (current ?? const EntryCandidate('alpha', 'Alpha')).key,
@@ -59,6 +60,7 @@ class FakeEnv {
   final String Function()? coreStateFn;
   final String? Function()? fingerprintFn;
   final String Function()? networkTypeFn;
+  final RouteObservation Function(EntryCandidate entry)? observeRoute;
 
   final List<String> switches = [];
   bool restoreCalled = false;
@@ -110,6 +112,7 @@ class FakeEnv {
     cancelReason: cancelReasonFn,
     coreState: coreStateFn,
     configFingerprint: fingerprintFn,
+    observeRoute: observeRoute,
   );
 
   ConnectionDiagnostics runner() =>
@@ -398,6 +401,101 @@ void main() {
       expect(fake.restoreCalled, isTrue);
       // Возврат исходного входа пропущен: пользователь отключился сам.
       expect(fake.switches, isNot(contains('beta')));
+    });
+  });
+
+  group('достоверность входа: настроенный против фактического', () {
+    test('выбран второй вход — настроенный вход второй, не первый', () async {
+      final fake = FakeEnv(
+        entries: const [
+          EntryCandidate('alpha', 'Alpha'),
+          EntryCandidate('beta', 'Beta'),
+        ],
+        current: const EntryCandidate('beta', 'Beta'),
+        observeRoute: (entry) => (
+          actual: null,
+          candidates: entry.key == 'beta'
+              ? const ['cvpn-proxy', 'cvpn-proxy-2']
+              : const ['cvpn-proxy'],
+        ),
+      );
+      final report = await fake.runner().checkCurrent();
+
+      final result = report.entries.single;
+      expect(result.entry.key, 'beta', reason: 'настроенный вход — выбранный второй');
+      expect(result.actualRoute, isNull, reason: 'фактический узел не установлен');
+      final text = report.toShareText();
+      expect(text, contains('Настроенный вход «Beta»'));
+      expect(text, contains('фактический маршрут: не установлен'));
+      expect(text, contains('cvpn-proxy-2'), reason: 'метки региона для сопоставления');
+    });
+
+    test('автоматическое переключение — фактический маршрут не первый outbound',
+        () async {
+      final fake = FakeEnv(
+        current: const EntryCandidate('alpha', 'Alpha'),
+        observeRoute: (entry) => const (
+          actual: 'cvpn-proxy-2',
+          candidates: ['cvpn-proxy', 'cvpn-proxy-2', 'cvpn-proxy-3'],
+        ),
+      );
+      final report = await fake.runner().checkCurrent();
+
+      final result = report.entries.single;
+      expect(result.actualRoute, 'cvpn-proxy-2');
+      expect(result.actualRoute, isNot('cvpn-proxy'),
+          reason: 'балансировщик ушёл на второй узел, первый не подставляется');
+      expect(report.toShareText(), contains('фактический маршрут: cvpn-proxy-2'));
+    });
+
+    test('смена входа во время диагностики — маршрут снимается для каждого входа',
+        () async {
+      final fake = FakeEnv(
+        entries: const [
+          EntryCandidate('alpha', 'Alpha'),
+          EntryCandidate('beta', 'Beta'),
+        ],
+        current: const EntryCandidate('alpha', 'Alpha'),
+        observeRoute: (entry) => (
+          actual: entry.key == 'beta' ? 'cvpn-proxy-2' : null,
+          candidates: const ['cvpn-proxy', 'cvpn-proxy-2'],
+        ),
+      );
+      final report = await fake.runner().checkAllEntries();
+
+      expect(report.entries, hasLength(2));
+      expect(report.entries[0].entry.key, 'alpha');
+      expect(report.entries[0].actualRoute, isNull);
+      expect(report.entries[1].entry.key, 'beta');
+      expect(report.entries[1].actualRoute, 'cvpn-proxy-2',
+          reason: 'после переключения маршрут снят для нового входа, не для первого');
+    });
+
+    test('неизвестный маршрут — «не установлен», первый outbound не подставляется',
+        () async {
+      final fake = FakeEnv(
+        current: const EntryCandidate('alpha', 'Alpha'),
+        observeRoute: (entry) => const (
+          actual: null,
+          candidates: ['cvpn-proxy', 'cvpn-proxy-2'],
+        ),
+      );
+      final report = await fake.runner().checkCurrent();
+
+      expect(report.entries.single.actualRoute, isNull);
+      final text = report.toShareText();
+      expect(text, contains('фактический маршрут: не установлен'));
+      expect(text, contains('метки маршрутов региона: cvpn-proxy, cvpn-proxy-2'));
+      expect(text, isNot(contains('фактический маршрут: cvpn-proxy')));
+    });
+
+    test('без наблюдателя фактический маршрут не установлен', () async {
+      final fake = FakeEnv(current: const EntryCandidate('alpha', 'Alpha'));
+      final report = await fake.runner().checkCurrent();
+
+      expect(report.entries.single.actualRoute, isNull);
+      expect(report.entries.single.routeCandidates, isEmpty);
+      expect(report.toShareText(), contains('фактический маршрут: не установлен'));
     });
   });
 

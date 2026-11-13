@@ -22,6 +22,7 @@ import 'log_mask.dart';
 import 'manual_rules.dart';
 import 'path_probe.dart';
 import 'per_app_rules.dart';
+import 'profile_config.dart';
 import 'profile_store.dart';
 import 'provider.dart';
 import 'reconnect.dart';
@@ -573,6 +574,23 @@ class AppState extends ChangeNotifier {
             ? 'поднимается'
             : 'остановлено',
     configFingerprint: () => _configFingerprint,
+    // Фактический узел пробы клиент не знает: балансировщик региона выбирает
+    // outbound на ходу, а обратной связи о выборе нет — CoreStats читает только
+    // счётчики входов, журнал доступа ядра не ведётся. Поэтому actual всегда
+    // null («не установлен»), первый outbound не подставляется. Для сопоставления
+    // с серверным журналом отдаём порядковые метки региона — без адресов и ключей.
+    observeRoute: (entry) {
+      final profile = _store.active;
+      if (profile == null) {
+        return const (actual: null, candidates: <String>[]);
+      }
+      final region = regionByKey(regionsOf(profile.links), entry.key);
+      final links = region?.links ?? const <ShareLink>[];
+      return (
+        actual: null,
+        candidates: [for (final (i, _) in links.indexed) tagForProfile(i)],
+      );
+    },
   );
 
   /// Переключение входа для активного теста: меняет регион и перезапускает

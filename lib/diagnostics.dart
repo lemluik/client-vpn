@@ -517,6 +517,11 @@ class EntryCandidate {
   final String label;
 }
 
+/// Наблюдение маршрута для входа: фактическая метка исходящего соединения,
+/// которое ядро использовало для обмена (null — определить нельзя), и метки
+/// настроенного региона. Внедряется через [DiagnosticsEnv.observeRoute].
+typedef RouteObservation = ({String? actual, List<String> candidates});
+
 /// Результат проверки одного входа через реальный туннель.
 class EntryResult {
   const EntryResult({
@@ -529,8 +534,13 @@ class EntryResult {
     this.note = '',
     this.attempts = const [],
     this.networkChanged = false,
+    this.actualRoute,
+    this.routeCandidates = const [],
   });
 
+  /// Настроенный вход — регион, который выбрал пользователь. Это не обязательно
+  /// тот узел, через который прошла проба: внутри региона узел выбирает
+  /// балансировщик ядра на ходу.
   final EntryCandidate entry;
   final DiagVerdict verdict;
   final DiagStage stage;
@@ -548,6 +558,15 @@ class EntryResult {
 
   /// Тип сети менялся между попытками: отказ может быть следствием смены сети.
   final bool networkChanged;
+  /// Фактический маршрут этой пробы: метка исходящего соединения, которое ядро
+  /// выбрало для обмена. null — «не установлен»: клиент не имеет обратной связи
+  /// о выбранном балансировщиком узле, и подставлять первый outbound нельзя.
+  final String? actualRoute;
+
+  /// Метки исходящих соединений настроенного региона (cvpn-proxy, cvpn-proxy-2…).
+  /// Порядковые, без адресов и ключей: по ним поддержка сопоставляет пробу с
+  /// серверным журналом, не раскрывая адрес узла в отчёте.
+  final List<String> routeCandidates;
 }
 
 /// Бюджет фоновой диагностики: общий срок, предел проб и тело ответа ограничены.
@@ -650,9 +669,19 @@ class DiagnosticsReport {
     }
     for (final entry in entries) {
       buffer.writeln(
-        'Вход «${entry.entry.label}»: ${verdictName(entry.verdict)} '
+        'Настроенный вход «${entry.entry.label}»: ${verdictName(entry.verdict)} '
         '(${entry.elapsed.inMilliseconds} мс)',
       );
+      // Фактический маршрут отделён от настроенного: если ядро не сообщило,
+      // какой узел выбрал балансировщик, пишем «не установлен», а не первый.
+      buffer.writeln(
+        '  фактический маршрут: ${entry.actualRoute ?? 'не установлен'}',
+      );
+      if (entry.routeCandidates.isNotEmpty) {
+        buffer.writeln(
+          '  метки маршрутов региона: ${entry.routeCandidates.join(', ')}',
+        );
+      }
       entry.controls.forEach((label, code) {
         buffer.writeln(
           '  контрольный адрес $label: ${code ?? 'нет ответа'}',
@@ -735,6 +764,7 @@ class DiagnosticsEnv {
     this.configFingerprint,
     this.clock = DateTime.now,
     this.controlEndpoints,
+    this.observeRoute,
   });
 
   final DiagFacts Function() facts;
@@ -769,6 +799,11 @@ class DiagnosticsEnv {
   final String? Function()? configFingerprint;
   final DateTime Function() clock;
   final List<ControlEndpoint>? controlEndpoints;
+
+  /// Маршрут входа на момент пробы: фактическая метка исходящего соединения
+  /// (null — не установлена) и метки-кандидаты настроенного региона. Null —
+  /// наблюдателя нет, фактический маршрут остаётся «не установлен».
+  final RouteObservation Function(EntryCandidate entry)? observeRoute;
 }
 
 /// Оркестратор диагностики. Проверка пути идёт только через реальный туннель
@@ -898,6 +933,8 @@ class ConnectionDiagnostics {
             note: result.note,
             attempts: result.attempts,
             networkChanged: result.networkChanged,
+            actualRoute: result.actualRoute,
+            routeCandidates: result.routeCandidates,
           ),
         );
       }
@@ -943,6 +980,10 @@ class ConnectionDiagnostics {
       attempts.add(attempt);
       return attempt;
     }
+    // Маршрут снимается для этого входа на момент пробы. Без наблюдателя
+    // фактический путь не установлен — первый outbound не подставляется.
+    final route = env.observeRoute?.call(entry) ??
+        const (actual: null, candidates: <String>[]);
 
     // Нет входа через ядро (например, локальный вход socks): честно проверить
     // туннель нельзя — «не удалось проверить», прямой обход не подменяет туннель.
@@ -954,6 +995,8 @@ class ConnectionDiagnostics {
         controls: controls,
         elapsed: entryWatch.elapsed,
         note: 'нет входа через ядро: проверить туннель нельзя',
+        actualRoute: route.actual,
+        routeCandidates: route.candidates,
       );
     }
 
@@ -979,6 +1022,8 @@ class ConnectionDiagnostics {
             : 'проверка прервана: ${cancelReasonName(reason)}',
         attempts: attempts,
         networkChanged: networks.length > 1,
+        actualRoute: route.actual,
+        routeCandidates: route.candidates,
       );
     }
 
@@ -994,6 +1039,8 @@ class ConnectionDiagnostics {
         note: passed < _controls.length ? 'один контрольный адрес не ответил' : '',
         attempts: attempts,
         networkChanged: networks.length > 1,
+        actualRoute: route.actual,
+        routeCandidates: route.candidates,
       );
     }
 
@@ -1021,6 +1068,8 @@ class ConnectionDiagnostics {
         note: 'контрольный адрес доступен напрямую, через туннель — нет',
         attempts: attempts,
         networkChanged: networks.length > 1,
+        actualRoute: route.actual,
+        routeCandidates: route.candidates,
       );
     }
     return EntryResult(
@@ -1032,6 +1081,8 @@ class ConnectionDiagnostics {
       note: 'контрольные адреса недоступны и напрямую: отказ туннеля не доказан',
       attempts: attempts,
       networkChanged: networks.length > 1,
+      actualRoute: route.actual,
+      routeCandidates: route.candidates,
     );
   }
 

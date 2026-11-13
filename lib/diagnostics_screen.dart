@@ -303,7 +303,11 @@ class _Details extends StatelessWidget {
         for (final entry in report.entries) ...[
           const SizedBox(height: 4),
           Text(
-            'Вход «${entry.entry.label}»: ${verdictName(entry.verdict)}',
+            'Настроенный вход «${entry.entry.label}»: ${verdictName(entry.verdict)}',
+            style: style,
+          ),
+          Text(
+            '  фактический маршрут: ${entry.actualRoute ?? 'не установлен'}',
             style: style,
           ),
           for (final control in entry.controls.entries)
