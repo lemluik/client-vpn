@@ -14,6 +14,9 @@ class ServiceConfig {
     this.serviceName = defaultServiceName,
     this.controlPoint,
     this.trialEnabled = false,
+    this.updateFeed,
+    this.updateChannel,
+    this.updatePublicKey,
   });
 
   /// Нейтральное имя, когда бренд не задан: кнопка читается «Подключить сервис».
@@ -33,6 +36,20 @@ class ServiceConfig {
   /// Показывать ли подключение пробного ключа. Признак из `deployment.json`
   /// (`trial.enabled`): в открытом клиенте выключен, меню остаётся универсальным.
   final bool trialEnabled;
+
+  /// Точка раздачи обновлений (Р-92): адрес манифеста. Приходит из приватного
+  /// слоя сборки, в открытом клиенте отсутствует — там источником остаётся
+  /// публичный репозиторий релизов.
+  final String? updateFeed;
+
+  /// Канал обновлений: `closed` у закрытой сборки. Канал задаёт конфигурация
+  /// сборки, а не введённый пользователем адрес: иначе ссылка на публичный
+  /// репозиторий молча переводила бы закрытую сборку на открытый пакет.
+  final String? updateChannel;
+
+  /// Публичный ключ Ed25519 (32 байта, base64) для проверки подписи манифеста.
+  /// Публичный ключ — не секрет; приватный ключ подписи в сборку не попадает.
+  final String? updatePublicKey;
 
   /// Загрузка из ассета сборки. Отсутствие файла или битый JSON — не ошибка:
   /// возвращаем нейтральные значения по умолчанию, клиент остаётся рабочим.
@@ -58,10 +75,14 @@ class ServiceConfig {
     final brand = json['brand'];
     final product = brand is Map ? brand['productName'] : null;
     final trial = json['trial'];
+    final update = json['update'];
     return ServiceConfig(
       serviceName: _nonEmpty(product) ?? defaultServiceName,
       controlPoint: _nonEmpty(json['controlPoint']),
       trialEnabled: trial is Map && trial['enabled'] == true,
+      updateFeed: update is Map ? _nonEmpty(update['feed']) : null,
+      updateChannel: update is Map ? _nonEmpty(update['channel']) : null,
+      updatePublicKey: update is Map ? _nonEmpty(update['publicKey']) : null,
     );
   }
 

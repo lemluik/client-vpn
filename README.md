@@ -105,7 +105,7 @@
 
 **Windows**
 
-1. Скачайте `ClientVPN-v0.4.3-Windows-x64.zip` из [Releases](https://github.com/lemluik/client-vpn/releases)
+1. Скачайте `ClientVPN-v0.4.8-Windows-x64.zip` из [Releases](https://github.com/lemluik/client-vpn/releases)
 2. Распакуйте в любую папку
 3. Запустите `client_vpn.exe`
 
@@ -114,7 +114,7 @@
 
 **Android**
 
-1. Скачайте `ClientVPN-v0.4.3-Android.apk` из [Releases](https://github.com/lemluik/client-vpn/releases)
+1. Скачайте `ClientVPN-v0.4.8-Android.apk` из [Releases](https://github.com/lemluik/client-vpn/releases)
 2. Установите файл (Android запросит разрешение на установку из неизвестных источников)
 3. Откройте приложение и добавьте подключение — ядро уже внутри APK
 

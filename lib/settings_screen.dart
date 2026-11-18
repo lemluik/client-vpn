@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 
 import 'about_screen.dart';
 import 'app_state.dart';
+import 'diagnostics_screen.dart';
 import 'failover.dart';
 import 'l10n/app_localizations.dart';
 import 'profile_store.dart';
@@ -160,6 +161,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _fragmentTile(l),
             const _SectionDivider(),
             _SectionTitle(l.settingsServiceSection),
+            ListTile(
+              key: const ValueKey('diagnostics'),
+              leading: const Icon(Icons.troubleshoot_outlined),
+              title: const Text('Проверить соединение'),
+              subtitle: const Text('Диагностика пути и отчёт без секретов'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => DiagnosticsScreen(state: _state),
+                ),
+              ),
+            ),
             ListTile(
               key: const ValueKey('probe-target'),
               leading: const Icon(Icons.network_check),

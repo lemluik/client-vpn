@@ -215,6 +215,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get statusUnreachable => 'Нет доступа к узлу';
 
   @override
+  String get routeUnknown => 'Маршрут неизвестен';
+
+  @override
   String get statusConnected => 'Подключено';
 
   @override
@@ -319,6 +322,9 @@ class AppLocalizationsRu extends AppLocalizations {
       'Исходный код и релизы: github.com/lemluik/client-vpn';
 
   @override
+  String get aboutVersionUnknown => 'Версия не определена';
+
+  @override
   String get aboutLicense => 'Лицензия';
 
   @override
@@ -349,6 +355,10 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get updateSourceSaved => 'Источник обновлений сохранён';
+
+  @override
+  String get updateChannelClosed =>
+      'Канал сборки задан приложением: проверяется только своя точка раздачи, публичный репозиторий не используется';
 
   @override
   String get updateCheck => 'Проверить обновление';
@@ -396,6 +406,10 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get updateHashMismatch => 'Контрольная сумма не совпадает';
+
+  @override
+  String get updateNoChecksum =>
+      'Источник не указал контрольную сумму — обновление не устанавливается';
 
   @override
   String get updateDownloadFailed => 'Не удалось скачать обновление';

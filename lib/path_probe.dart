@@ -28,25 +28,42 @@ bool appReachesCore() => AppProxy.reachesCore;
 /// Код ответа не важен: наши входы отвечают 403 на проверку адреса, и это
 /// живой путь. Важен сам факт, что ответ пришёл.
 ///
+/// Весь обмен ограничен общим сроком [timeout] (Ф5): прежде были ограничены
+/// только открытие запроса и ожидание заголовков, а сервер, приславший
+/// заголовки и не завершающий тело, вешал `drain()` навсегда — следующая
+/// проба не ставилась, и мёртвый путь никогда не становился видим.
+///
 /// Проба следует правилам маршрутизации пользователя: если точка проб попала
 /// в правило «напрямую», проверяется не туннель, а связь устройства. Точка по
 /// умолчанию (`generate_204`) под такие правила не попадает.
-Future<bool> httpAttempt(Uri endpoint) async {
+Future<bool> httpAttempt(
+  Uri endpoint, {
+  Duration timeout = probeTimeout,
+}) async {
   final client = HttpClient()
     ..findProxy = AppProxy.findProxy
-    ..connectionTimeout = probeTimeout;
+    ..connectionTimeout = timeout;
+  final exchange = _exchange(client, endpoint);
   try {
-    final request = await client.getUrl(endpoint).timeout(probeTimeout);
-    final response = await request.close().timeout(probeTimeout);
-    await response.drain<void>();
+    await exchange.timeout(timeout);
     return true;
   } on Object {
     // Проба работает фоном всю сессию: ни отказ узла, ни битый адрес точки
     // проб не должны ронять приложение.
     return false;
   } finally {
+    // Принудительное закрытие обрывает зависшее тело и освобождает сокет.
     client.close(force: true);
+    // Обмен, отменённый общим сроком, может завершиться ошибкой позже —
+    // она обязана остаться здесь, а не всплыть необработанной в зону.
+    unawaited(exchange.catchError((Object _) {}));
   }
+}
+
+Future<void> _exchange(HttpClient client, Uri endpoint) async {
+  final request = await client.getUrl(endpoint);
+  final response = await request.close();
+  await response.drain<void>();
 }
 
 /// Проверка пути до узла, пока туннель поднят (Д2-25).

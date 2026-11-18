@@ -1,7 +1,7 @@
 name: client_vpn
 description: КлиентВПН — VPN-клиент на Xray-core (VLESS+Reality)
 publish_to: 'none'
-version: 0.4.3
+version: 0.4.8+6
 
 environment:
   sdk: ^3.8.0
@@ -12,6 +12,9 @@ dependencies:
   flutter_localizations:
     sdk: flutter
   crypto: ^3.0.6
+  # Подпись манифеста обновлений (Р-92): Ed25519, чистый Dart, без нативных
+  # библиотек. Своей криптографии не пишем — проверка идёт готовым пакетом.
+  ed25519_edwards: ^0.3.2
   # Direct dependency: the Win32 FFI wrappers (mutex, Job Object) use `calloc`
   # and `Utf16`. The package was already in the graph via flutter_secure_storage.
   ffi: ^2.2.0
@@ -50,6 +53,7 @@ flutter:
     # icon for Windows; tray_macos.png is the monochrome menu bar template.
     - assets/tray/tray.ico
     - assets/tray/tray_macos.png
+    - assets/service_config.json
     # The About screen shows the license files in full, so they ship in the
     # bundle (item U-6: the user must receive LICENSE and NOTICE).
     - LICENSE

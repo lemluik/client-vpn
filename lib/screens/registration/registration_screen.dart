@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
-import '../../about_screen.dart' show clientVersion;
+import '../../app_metadata.dart';
 import '../../app_state.dart';
 import '../../l10n/app_localizations.dart';
 import '../../provider.dart';
@@ -113,7 +113,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       final device = DeviceData(
         deviceId: await (widget._deviceId ?? DeviceId()).get(),
         platform: Platform.operatingSystem,
-        appVersion: clientVersion,
+        appVersion: (AppMetadata.cached ?? await AppMetadata.load()).versionName,
       );
       final result = await _resolveApi().register(
         telegramLogin: '@$login',

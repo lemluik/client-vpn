@@ -216,6 +216,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get statusUnreachable => 'Server unreachable';
 
   @override
+  String get routeUnknown => 'Route unknown';
+
+  @override
   String get statusConnected => 'Connected';
 
   @override
@@ -320,6 +323,9 @@ class AppLocalizationsEn extends AppLocalizations {
       'Source code and releases: github.com/lemluik/client-vpn';
 
   @override
+  String get aboutVersionUnknown => 'Version unknown';
+
+  @override
   String get aboutLicense => 'License';
 
   @override
@@ -350,6 +356,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get updateSourceSaved => 'Update source saved';
+
+  @override
+  String get updateChannelClosed =>
+      'The build fixes the channel: only its own distribution point is checked, the public repository is not used';
 
   @override
   String get updateCheck => 'Check for update';
@@ -398,6 +408,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get updateHashMismatch => 'Checksum mismatch';
+
+  @override
+  String get updateNoChecksum =>
+      'The source published no checksum — the update will not be installed';
 
   @override
   String get updateDownloadFailed => 'Failed to download update';

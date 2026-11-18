@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:client_vpn/path_probe.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -225,6 +226,78 @@ void main() {
       await settle();
 
       expect(seen, [PathState.checking, PathState.dead, PathState.live]);
+    });
+  });
+
+  group('общий срок пробы (Ф5)', () {
+    /// Сервер, который присылает заголовки и не завершает тело: прежняя проба
+    /// ограничивала только открытие запроса и ожидание заголовков, и `drain()`
+    /// такого ответа висел навсегда — следующая проба не ставилась.
+    Future<HttpServer> hangingServer() async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      server.listen((request) async {
+        request.response.headers.contentType = ContentType.text;
+        request.response.write('заголовки пришли, тело не закончено');
+        await request.response.flush();
+        // Ответ намеренно не закрывается.
+      });
+      addTearDown(() => server.close(force: true));
+      return server;
+    }
+
+    test('зависшее тело обрывается общим deadline, проба провалена', () async {
+      final server = await hangingServer();
+      final uri = Uri.parse('http://127.0.0.1:${server.port}/generate_204');
+
+      final watch = Stopwatch()..start();
+      final alive = await httpAttempt(
+        uri,
+        timeout: const Duration(milliseconds: 300),
+      );
+      watch.stop();
+
+      expect(alive, isFalse);
+      expect(watch.elapsedMilliseconds, greaterThanOrEqualTo(250));
+      expect(watch.elapsedMilliseconds, lessThan(5000));
+    });
+
+    test('обычный короткий ответ проходит пробу', () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      server.listen((request) async {
+        request.response.statusCode = HttpStatus.noContent;
+        await request.response.close();
+      });
+
+      final alive = await httpAttempt(
+        Uri.parse('http://127.0.0.1:${server.port}/generate_204'),
+        timeout: const Duration(seconds: 5),
+      );
+
+      expect(alive, isTrue);
+    });
+
+    test('после зависшей пробы следующая проба состоится', () async {
+      final server = await hangingServer();
+      final uri = Uri.parse('http://127.0.0.1:${server.port}/generate_204');
+      var calls = 0;
+
+      final watching = PathProbe(
+        attempt: (endpoint) async {
+          calls++;
+          return httpAttempt(endpoint, timeout: const Duration(milliseconds: 150));
+        },
+        reachesCore: () => true,
+        retry: const Duration(milliseconds: 10),
+        deadRetry: const Duration(milliseconds: 10),
+      )..start(uri);
+      addTearDown(watching.dispose);
+
+      await Future<void>.delayed(const Duration(milliseconds: 900));
+
+      // Без общего deadline первый же заход висел бы вечно и calls остался 1.
+      expect(calls, greaterThanOrEqualTo(3));
+      expect(watching.state, PathState.dead);
     });
   });
 }

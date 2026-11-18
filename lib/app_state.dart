@@ -1,21 +1,28 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show MissingPluginException;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'app_metadata.dart';
+import 'app_proxy.dart';
 import 'autostart.dart';
 import 'chat_service.dart';
 import 'chat_store.dart';
 import 'core_stats.dart';
 import 'deep_link.dart';
+import 'desktop_core.dart';
+import 'diagnostics.dart';
 import 'failover.dart';
 import 'log_mask.dart';
 import 'manual_rules.dart';
 import 'path_probe.dart';
 import 'per_app_rules.dart';
+import 'profile_config.dart';
 import 'profile_store.dart';
 import 'provider.dart';
 import 'reconnect.dart';
@@ -93,6 +100,9 @@ class AppState extends ChangeNotifier {
     ProbeStore? probes,
     ReconnectPlan? reconnect,
     PathProbe? pathProbe,
+    SubscriptionFetcher? subscriptionFetch,
+    ControlProbe? diagnosticsProbe,
+    DiagnosticsBudget? diagnosticsBudget,
     String languageCode = '',
     Stream<List<ConnectivityResult>>? networks,
     Stream<String>? deepLinks,
@@ -102,6 +112,9 @@ class AppState extends ChangeNotifier {
            (Platform.isAndroid ? _passThrough : ensureConfigOnDisk),
        _chat = chat,
        _settings = settings,
+       _subscriptionFetch = subscriptionFetch ?? fetchSubscription,
+       _diagnosticsProbe = diagnosticsProbe ?? tunnelControlProbe,
+       _diagnosticsBudget = diagnosticsBudget ?? const DiagnosticsBudget(),
        _autostart = autostart ?? const UnsupportedAutostart(),
        _presets = presets,
        _ruleStore = ruleStore,
@@ -181,6 +194,15 @@ class AppState extends ChangeNotifier {
   final ProbeStore? _probes;
   String _probeEndpoint;
 
+  /// Получение подписки для аварийного перечитывания. В испытаниях
+  /// подменяется заглушкой: сеть не поднимается, ответ задаёт тест.
+  final SubscriptionFetcher _subscriptionFetch;
+
+  /// Проба контрольных адресов для диагностики. В испытаниях подменяется
+  /// заглушкой: сеть не поднимается, ответ задаёт тест.
+  final ControlProbe _diagnosticsProbe;
+  final DiagnosticsBudget _diagnosticsBudget;
+
   StreamSubscription<String>? _logSubscription;
   StreamSubscription<CoreStatus>? _statusSubscription;
   StreamSubscription<TrafficSnapshot>? _trafficSubscription;
@@ -191,12 +213,39 @@ class AppState extends ChangeNotifier {
   Timer? _subscriptionTimer;
   final ReconnectPlan _reconnect;
 
+  /// Поколение восстановления (Ф1): отключение пользователя и остановка
+  /// из шторки увеличивают его, и поздний результат отменённой аварийной
+  /// операции (fetch, перезапуск) уже не имеет права включать туннель.
+  int _recoveryGen = 0;
+
+  /// Кто повысил поколение восстановления последним: пользователь (кнопка,
+  /// шторка) или автоматика (смена сети). Диагностика по этому различает
+  /// «пользователь отключил» и «шло переподключение» в причине отмены.
+  bool _genBumpByUser = true;
+
+  /// Идёт ли перезапуск туннеля при мёртвом пути: параллельные попытки
+  /// восстановления исключены.
+  bool _recoveryRestarting = false;
+
   /// Проверка пути до узла собственным трафиком приложения (Д2-25).
   final PathProbe _pathProbe;
   StreamSubscription<PathState>? _pathSubscription;
   PathState _path = PathState.unknown;
   String? _networkKey;
   StreamSubscription<String>? _deepLinkSubscription;
+
+  /// Последний отчёт режима «Проверить соединение». Живёт до следующей проверки;
+  /// автоматическая диагностика при устойчивом отказе кладёт сюда же результат.
+  DiagnosticsReport? _diagnostics;
+  bool _diagnosticsRunning = false;
+
+  /// Обезличенный отпечаток последнего записанного конфига (префикс SHA-256):
+  /// диагностика сверяет конфигурации между отчётами, не раскрывая содержимое.
+  String? _configFingerprint;
+
+  /// Автодиагностика запускается один раз на эпизод мёртвого пути, а не в цикле:
+  /// взводится заново, когда путь подтверждён живым.
+  bool _autoDiagArmed = true;
 
   final List<String> _log = [];
   TunnelState _state = TunnelState.off;
@@ -244,6 +293,12 @@ class AppState extends ChangeNotifier {
   /// [PathState.live] (Д2-25): поднятый туннель ещё не значит, что трафик
   /// доходит до узла.
   PathState get pathState => _path;
+
+  /// Отчёт последней диагностики соединения (режим «Проверить соединение»).
+  DiagnosticsReport? get diagnostics => _diagnostics;
+
+  /// Идёт ли проверка соединения: кнопки на время проверки гаснут.
+  bool get isDiagnosticsRunning => _diagnosticsRunning;
 
   String? get endpoint => _core.endpointLabel;
 
@@ -393,6 +448,174 @@ class AppState extends ChangeNotifier {
   /// Журнал в виде, пригодном для публичного обращения: без адресов и ключей.
   String exportLog() => maskLog(_log);
 
+  /// Режим «Проверить соединение»: сеть, подписка, ядро и путь через реальный
+  /// туннель по двум независимым контрольным адресам.
+  ///
+  /// [switchEntries] — активный тест каждого входа отдельно: только по нажатию
+  /// пользователя (экран предупреждает о кратком перерыве), исходный вход
+  /// возвращается в конце. Без флага проверяется текущий вход без переключения —
+  /// этим же путём идёт редкая автодиагностика при устойчивом отказе.
+  /// Отчёт никуда не отправляется: он сохраняется для экрана и кнопки «Поделиться».
+  Future<void> runDiagnostics({bool switchEntries = false}) async {
+    if (_diagnosticsRunning) return;
+    // Выключенный VPN: замерять нечего — отчёт за 0 мс бесполезен. Экран
+    // вместо проверки показывает предложение подключиться.
+    if (_state == TunnelState.off && !_core.isRunning) return;
+    _diagnosticsRunning = true;
+    notifyListeners();
+    final gen = _recoveryGen;
+    try {
+      final runner = ConnectionDiagnostics(
+        env: _diagnosticsEnv(gen),
+        budget: _diagnosticsBudget,
+      );
+      final report = switchEntries
+          ? await runner.checkAllEntries()
+          : await runner.checkCurrent();
+      _diagnostics = report;
+      _addLog('Диагностика: ${report.summary()}');
+    } finally {
+      _diagnosticsRunning = false;
+      notifyListeners();
+    }
+  }
+
+  /// Автодиагностика при устойчивом отказе: один раз на эпизод мёртвого пути,
+  /// без переключения входа и без отправки. Поздний результат отменённой проверки
+  /// (пользователь отключился) состояние не меняет — поколение сверяет env.
+  void _maybeAutoDiagnostics() {
+    if (!_autoDiagArmed || _diagnosticsRunning) return;
+    _autoDiagArmed = false;
+    unawaited(runDiagnostics());
+  }
+
+  /// Реальное окружение диагностики. Всё, что ходит в сеть или трогает ядро,
+  /// внедряется через [DiagnosticsEnv]; здесь оно связано с состоянием клиента.
+  DiagnosticsEnv _diagnosticsEnv(int gen) => DiagnosticsEnv(
+    facts: () => DiagFacts(
+      appVersion: AppMetadata.cached?.versionName ?? '',
+      coreVersion: DesktopCore.version,
+      platform: Platform.operatingSystem,
+      osVersion: Platform.operatingSystemVersion,
+      networkType: (_networkKey == null || _networkKey!.isEmpty)
+          ? 'none'
+          : _networkKey!,
+    ),
+    reachesCore: () => AppProxy.reachesCore,
+    probe: _diagnosticsProbe,
+    checkNetwork: () async {
+      final key = _networkKey;
+      // Отсутствие сети объявляем только когда её точно нет (наблюдали пустой
+      // ключ): до первого события сеть неизвестна, и отказ не выдумываем.
+      final ok = key == null || key.isNotEmpty;
+      return StageResult(DiagStage.network, ok, ok ? 'сеть доступна' : 'нет сети');
+    },
+    checkSubscription: () async {
+      final profile = _store.active;
+      if (profile == null || !profile.canStart) {
+        return const StageResult(
+          DiagStage.subscription,
+          false,
+          'нет загруженного подключения',
+        );
+      }
+      return StageResult(
+        DiagStage.subscription,
+        true,
+        'подписка загружена: ${profile.links.length} узлов',
+      );
+    },
+    checkCore: () async {
+      if (_core.isRunning) {
+        return const StageResult(DiagStage.core, true, 'ядро запущено');
+      }
+      if (_state == TunnelState.off) {
+        // Туннель не поднят пользователем: ядро не запускалось, это не отказ.
+        return const StageResult(
+          DiagStage.core,
+          true,
+          'туннель не поднят: ядро не запускалось',
+        );
+      }
+      return const StageResult(DiagStage.core, false, 'ядро не работает');
+    },
+    entries: () => [
+      for (final region in regions) EntryCandidate(region.key, region.name),
+    ],
+    currentEntry: () {
+      final region = activeRegion;
+      return region == null ? null : EntryCandidate(region.key, region.name);
+    },
+    switchTo: (target) => _diagSwitchTo(target.key, gen),
+    restore: () async => notifyListeners(),
+    // Отмена — не только отключение пользователя: остановка ядра и
+    // автоматическое переподключение тоже прерывают замер, и причина обязана
+    // быть названа. Подъём (connecting) остановкой не считается.
+    cancelled: () =>
+        gen != _recoveryGen ||
+        !_userWantsTunnel ||
+        (!_core.isRunning && _state != TunnelState.connecting),
+    cancelReason: () {
+      if (gen != _recoveryGen) {
+        return _genBumpByUser
+            ? DiagCancelReason.user
+            : DiagCancelReason.recovery;
+      }
+      if (!_userWantsTunnel) return DiagCancelReason.user;
+      if (_recoveryRestarting || _state == TunnelState.connecting) {
+        return DiagCancelReason.recovery;
+      }
+      if (!_core.isRunning) return DiagCancelReason.coreStopped;
+      return null;
+    },
+    coreState: () => _core.isRunning
+        ? 'работает'
+        : _state == TunnelState.connecting
+            ? 'поднимается'
+            : 'остановлено',
+    configFingerprint: () => _configFingerprint,
+    // Фактический узел пробы клиент не знает: балансировщик региона выбирает
+    // outbound на ходу, а обратной связи о выборе нет — CoreStats читает только
+    // счётчики входов, журнал доступа ядра не ведётся. Поэтому actual всегда
+    // null («не установлен»), первый outbound не подставляется. Для сопоставления
+    // с серверным журналом отдаём порядковые метки региона — без адресов и ключей.
+    observeRoute: (entry) {
+      final profile = _store.active;
+      if (profile == null) {
+        return const (actual: null, candidates: <String>[]);
+      }
+      final region = regionByKey(regionsOf(profile.links), entry.key);
+      final links = region?.links ?? const <ShareLink>[];
+      return (
+        actual: null,
+        candidates: [for (final (i, _) in links.indexed) tagForProfile(i)],
+      );
+    },
+  );
+
+  /// Переключение входа для активного теста: меняет регион и перезапускает
+  /// туннель, не трогая поколение восстановления — это не отключение пользователя.
+  /// Отключение пользователя во время теста повышает поколение, и подъём отменяется.
+  Future<void> _diagSwitchTo(String key, int gen) async {
+    final profile = _store.active;
+    if (profile == null) return;
+    if (activeRegion?.key == key && _core.isRunning) return;
+    if (activeRegion?.key != key) {
+      await _store.setRegion(profile.id, key);
+    }
+    if (_core.isRunning) {
+      _stopping = true;
+      try {
+        await _core.stop();
+      } finally {
+        _stopping = false;
+      }
+    }
+    if (gen != _recoveryGen || !_userWantsTunnel) return;
+    _state = TunnelState.off;
+    await connect();
+  }
+
   /// Откатывает состояние после аварийного завершения и подтягивает подписки,
   /// которым пора обновиться.
   ///
@@ -515,6 +738,7 @@ class AppState extends ChangeNotifier {
   Future<void> connect() async {
     if (_state == TunnelState.connecting) return;
 
+    final gen = _recoveryGen;
     _failure = null;
     _state = TunnelState.connecting;
     _userWantsTunnel = true;
@@ -528,17 +752,45 @@ class AppState extends ChangeNotifier {
           fragmentHandshake: _settings.fragmentHandshake,
         ),
       );
+      _configFingerprint =
+          sha256.convert(utf8.encode(config.json)).toString().substring(0, 8);
       await _core.validate(config);
       // Список приложений «напрямую» пишется перед каждым поднятием туннеля:
       // VpnService читает файл при старте, и правка после подключения не
       // требует, чтобы пользователь помнил про сохранение заранее.
       await _appExclusions?.call(_directApps);
       await _core.start(config);
+      // Отключение пользователя во время подъёма отменяет восстановление:
+      // поздний старт не включает туннель обратно (Ф1). Поколение сверяется
+      // после старта — именно он занимает время, и отключение приходится на
+      // это окно. Сверка до старта уже есть у вызывающего восстановления.
+      if (gen != _recoveryGen) {
+        // Поздний статус ядра «поднят» не должен оставить туннель включённым:
+        // останавливаем под тем же флагом, что и disconnect(), иначе _onStatus
+        // принял бы остановку за сбой и снова запустил восстановление.
+        _stopping = true;
+        try {
+          await _core.stop();
+        } finally {
+          _stopping = false;
+        }
+        _userWantsTunnel = false;
+        _state = TunnelState.off;
+        return;
+      }
       await markTunnelFresh();
       _state = TunnelState.on;
-      _reconnect.reset();
-      _stopReconnectTimers();
       _restartPathWatch();
+      // Ф1: успешный старт процесса ещё не значит, что трафик идёт. Пока
+      // сквозная проверка возможна, лестница гаснет только по её результату
+      // (_onPath → live); если проверки нет, старт остаётся пределом, как
+      // прежде.
+      if (_pathProbe.isRunning && _path != PathState.live) {
+        _armReconnect();
+      } else {
+        _reconnect.reset();
+        _stopReconnectTimers();
+      }
       final profile = _store.active;
       if (profile != null) await _settings.rememberProfile(profile.id);
       _addLog('Подключено: ${_activeLabel()}');
@@ -551,8 +803,14 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> disconnect() async {
+  /// [byUser] — false, когда отключение выполняет автоматика (смена сети):
+  /// причина отмены диагностики тогда «переподключение», а не «пользователь».
+  Future<void> disconnect({bool byUser = true}) async {
     _userWantsTunnel = false;
+    // Явное отключение отменяет все ожидающие восстановления: идущий fetch
+    // или перезапуск по возврате уже не должны включать туннель обратно.
+    _genBumpByUser = byUser;
+    _recoveryGen++;
     _reconnect.reset();
     _stopReconnectTimers();
     _pathProbe.stop();
@@ -763,14 +1021,14 @@ class AppState extends ChangeNotifier {
       return;
     }
     _addLog('Сеть появилась — туннель поднимается заново');
-    await disconnect();
+    await disconnect(byUser: false);
     await connect();
   }
 
   Future<void> _raiseTunnelOnNewNetwork() async {
     if (_state != TunnelState.on || _busy || _stopping) return;
     _addLog('Сеть сменилась — туннель поднимается заново');
-    await disconnect();
+    await disconnect(byUser: false);
     await connect();
   }
 
@@ -786,35 +1044,132 @@ class AppState extends ChangeNotifier {
   /// плюс перечитывание подписки по паузам 1–5–30 минут.
   void _armReconnect() {
     if (!_userWantsTunnel || _stopping) return;
+    // Лестница исчерпана: пробу больше не перевзводим, иначе каждые 30 секунд
+    // ядро перезапускалось бы бесконечно (Ф1). Уже назначенное перечитывание
+    // подписки дорабатывает свой шаг, новых попыток не ставим. Дальше туннель
+    // поднимает только пользователь или возврат сети (_raiseAfterOutage).
+    if (_reconnect.exhausted) {
+      _probeTimer?.cancel();
+      _probeTimer = null;
+      return;
+    }
     _probeTimer?.cancel();
     _probeTimer = Timer(_reconnect.probeInterval, _probeLink);
-    if (_reconnect.exhausted || (_subscriptionTimer?.isActive ?? false)) return;
+    if (_subscriptionTimer?.isActive ?? false) return;
     _subscriptionTimer?.cancel();
     _subscriptionTimer = Timer(_reconnect.takePause(), _rereadSubscription);
   }
 
   Future<void> _probeLink() async {
     if (!_userWantsTunnel || _busy || _stopping) return;
+    // Идёт замер диагностики: переподключение сейчас сорвало бы его пробы.
+    // Проба переносится на следующий интервал, шаг лестницы не тратится.
+    if (_diagnosticsRunning) {
+      _armReconnect();
+      return;
+    }
     if (_state == TunnelState.noLink) {
       // Сети нет совсем: туннель поднимает возврат связи, а не проба.
       // Очередь держим на случай, если поток сети смолчит.
       _armReconnect();
       return;
     }
-    if (_state == TunnelState.on) return;
+    if (_state == TunnelState.on) {
+      // Ядро живо: подъём здесь ничего не решает. Мёртвый путь лечит
+      // _rereadSubscription, а живой гасит очередь (см. _onPath).
+      return;
+    }
     _addLog('Проба связи: подключаемся снова');
     await connect();
   }
 
-  /// Пауза подписки: перечитать подписку и, если туннель ещё лежит, поднять
-  /// его. Успешный подъём сам гасит очередь (см. connect), поэтому повторное
-  /// вооружение здесь не нужно.
+  /// Пауза подписки: аварийно перечитать активную подписку и применить новый
+  /// конфиг. Перечитывание именно принудительное (Ф2): прежний refreshDue()
+  /// обновлял подписку только по суточному интервалу, и лестница 1/5/30 минут
+  /// каждый раз использовала прежние адреса.
+  ///
+  /// При живом ядре и мёртвом пути (Ф1) туннель перезапускается: ядро читает
+  /// конфиг только при старте, без перезапуска обновление осталось бы на
+  /// диске, а не в работе.
   Future<void> _rereadSubscription() async {
     if (!_userWantsTunnel || _busy || _stopping) return;
-    _addLog('Перечитываем подписку после сбоя');
-    await refreshDue();
+    // Идёт замер диагностики: остановка ядра для перезапуска убила бы пробы
+    // и дала ложный отказ. Перечитывание ждёт конца замера; шаг лестницы
+    // не тратится, пауза не съедается.
+    if (_diagnosticsRunning) {
+      _subscriptionTimer?.cancel();
+      _subscriptionTimer = Timer(const Duration(seconds: 2), _rereadSubscription);
+      return;
+    }
+    if (_state == TunnelState.noLink) return;
+    final deadPath = _state == TunnelState.on && _path == PathState.dead;
+    if (_state == TunnelState.on && !deadPath) {
+      // Ядро живо, а путь не объявлен мёртвым: восстанавливать пока нечего,
+      // транзитный провал контрольного адреса не повод для рестарта.
+      return;
+    }
+    final gen = _recoveryGen;
+    _addLog(
+      deadPath
+          ? 'Выходы не передают трафик — аварийное обновление подписки'
+          : 'Перечитываем подписку после сбоя',
+    );
+    await _refreshActiveForced(gen);
+    // Отменённая операция не меняет ничего: пользователь мог отключиться,
+    // пока fetch был в пути.
+    if (gen != _recoveryGen || !_userWantsTunnel || _stopping) return;
+    if (deadPath) {
+      await _restartAfterDeadPath(gen);
+      return;
+    }
     if (_state == TunnelState.on || _state == TunnelState.noLink) return;
     await connect();
+  }
+
+  /// Принудительное обновление активного провайдера: сетевой запрос выполняется
+  /// всегда, независимо от обычного интервала (Ф2). Ошибка fetch рабочий кэш
+  /// не затирает — refreshProvider сохраняет последнюю хорошую конфигурацию,
+  /// а паузы между попытками задаёт лестница [ReconnectPlan].
+  Future<void> _refreshActiveForced(int gen) async {
+    final provider = activeProvider;
+    if (provider == null) return; // подключение не из подписки
+    final result = await _store.refresh(
+      provider.id,
+      fetch: _subscriptionFetch,
+    );
+    // Поздний ответ отменённой операции (пользователь отключился или окно
+    // закрыто) не попадает даже в журнал.
+    if (gen != _recoveryGen || !_userWantsTunnel) return;
+    if (result.ok) {
+      _addLog(
+        'Подписка обновлена аварийно: ${result.provider.links.length} профилей',
+      );
+    } else {
+      _addLog('[ERR] ${result.error}');
+    }
+  }
+
+  /// Перезапуск туннеля при живом ядре и мёртвом пути: новый конфиг
+  /// применяется только пересборкой процесса. Попытка одиночная —
+  /// параллельные восстановления исключены.
+  Future<void> _restartAfterDeadPath(int gen) async {
+    if (_recoveryRestarting) return;
+    _recoveryRestarting = true;
+    try {
+      _addLog('Перезапуск туннеля для применения нового конфига');
+      _stopping = true;
+      try {
+        await _core.stop();
+      } finally {
+        _stopping = false;
+      }
+      // Возврат отменённой операции туннель не поднимает.
+      if (gen != _recoveryGen || !_userWantsTunnel || _stopping) return;
+      _state = TunnelState.off;
+      await connect();
+    } finally {
+      _recoveryRestarting = false;
+    }
   }
 
   void _stopReconnectTimers() {
@@ -858,6 +1213,8 @@ class AppState extends ChangeNotifier {
       // Снято плиткой: пользователь отключился сам, это не сбой, и лестница
       // переподключения не должна поднимать туннель обратно.
       _stopping = true;
+      _genBumpByUser = true;
+      _recoveryGen++;
       _reconnect.reset();
       _stopReconnectTimers();
       _pathProbe.stop();
@@ -914,8 +1271,25 @@ class AppState extends ChangeNotifier {
     _path = path;
     if (path == PathState.live && previous != PathState.live) {
       _addLog('Путь до узла подтверждён');
+      // Ф1: аварийная лестница гаснет только после сквозного подтверждения
+      // пути — успешный старт процесса трафик не доказывает.
+      _reconnect.reset();
+      _stopReconnectTimers();
+      // Путь ожил: следующий эпизод мёртвого пути снова вправе запустить
+      // автодиагностику (один раз на эпизод).
+      _autoDiagArmed = true;
     } else if (path == PathState.dead && previous != PathState.dead) {
       _addLog('[ERR] Узел не отвечает: трафик через туннель не идёт');
+      // Ф1: ядро может быть живо, но все выходы региона не передают данные —
+      // восстановление обязано запускаться и при поднятом туннеле. До этого
+      // места доводит PathProbe: он объявляет dead только после
+      // failuresBeforeDead провалов подряд, транзитный сбой адреса сюда не
+      // попадает. Диагностика пути здесь отделена от балансировщика: регион
+      // клиент сам не переключает.
+      _armReconnect();
+      // Устойчивый отказ: один раз за эпизод собираем отчёт диагностики
+      // (без переключения входа и без отправки) — он ляжет на экран проверки.
+      _maybeAutoDiagnostics();
     } else {
       notifyListeners();
     }
@@ -947,6 +1321,11 @@ class AppState extends ChangeNotifier {
 
   @override
   void dispose() {
+    // Идущее аварийное восстановление гасится вместе с окном: его поздний
+    // результат не должен трогать освобождённое состояние.
+    _genBumpByUser = false;
+    _recoveryGen++;
+    _userWantsTunnel = false;
     _logSubscription?.cancel();
     _statusSubscription?.cancel();
     _pathSubscription?.cancel();
