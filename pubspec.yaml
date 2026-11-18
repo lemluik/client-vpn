@@ -53,7 +53,9 @@ flutter:
     # icon for Windows; tray_macos.png is the monochrome menu bar template.
     - assets/tray/tray.ico
     - assets/tray/tray_macos.png
-    - assets/service_config.json
+    # assets/service_config.json намеренно не объявлен: в открытом дереве файла
+    # нет, объявление без файла роняет сборку. Закрытая сборка добавляет строку
+    # локально вместе с приватным ассетом (рецепт в 03_Клиент).
     # The About screen shows the license files in full, so they ship in the
     # bundle (item U-6: the user must receive LICENSE and NOTICE).
     - LICENSE
