@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.4.8] - 2026-11-19
+
+### Changed
+
+- Unified closed build: combines the 0.4.5 bounded recovery (Ф1) and 0.4.4 diagnostics with the
+  0.4.6–0.4.7 diagnostic fixes — connect-and-check offer, named cancel reasons (user / core stop /
+  automatic reconnect), per-attempt proxy/TCP/TLS/HTTP stages with durations, core state, network
+  type and an anonymised config fingerprint, a total diagnostics deadline that clamps every probe
+  and guarantees the recovery lock is released, and the trusted update feed (Р-92).
+- Diagnostics now separates the configured entry from the actual probe route (#125): the report
+  says «Настроенный вход» and «фактический маршрут: не установлен» instead of naming the first
+  outbound as if the balancer had confirmed it; ordinal region labels are included for matching
+  against the server access journal without exposing node addresses.
+- versionCode raised to 6 (> 3 of the installed 0.4.5 and > 5 of 0.4.7) so the package updates in
+  place with the same project signing key; the on-screen version comes from build metadata.
+
 ## [0.4.5] - 2026-11-13
 
 ### Changed
