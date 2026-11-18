@@ -11,7 +11,7 @@ dependencies:
     sdk: flutter
   flutter_localizations:
     sdk: flutter
-  crypto: ^3.0.6
+  crypto: ^3.0.8
   # Подпись манифеста обновлений (Р-92): Ed25519, чистый Dart, без нативных
   # библиотек. Своей криптографии не пишем — проверка идёт готовым пакетом.
   ed25519_edwards: ^0.3.2
