@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show MissingPluginException;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -99,6 +101,7 @@ class AppState extends ChangeNotifier {
     PathProbe? pathProbe,
     SubscriptionFetcher? subscriptionFetch,
     ControlProbe? diagnosticsProbe,
+    DiagnosticsBudget? diagnosticsBudget,
     String languageCode = '',
     Stream<List<ConnectivityResult>>? networks,
     Stream<String>? deepLinks,
@@ -110,6 +113,7 @@ class AppState extends ChangeNotifier {
        _settings = settings,
        _subscriptionFetch = subscriptionFetch ?? fetchSubscription,
        _diagnosticsProbe = diagnosticsProbe ?? tunnelControlProbe,
+       _diagnosticsBudget = diagnosticsBudget ?? const DiagnosticsBudget(),
        _autostart = autostart ?? const UnsupportedAutostart(),
        _presets = presets,
        _ruleStore = ruleStore,
@@ -196,6 +200,7 @@ class AppState extends ChangeNotifier {
   /// Проба контрольных адресов для диагностики. В испытаниях подменяется
   /// заглушкой: сеть не поднимается, ответ задаёт тест.
   final ControlProbe _diagnosticsProbe;
+  final DiagnosticsBudget _diagnosticsBudget;
 
   StreamSubscription<String>? _logSubscription;
   StreamSubscription<CoreStatus>? _statusSubscription;
@@ -232,6 +237,10 @@ class AppState extends ChangeNotifier {
   /// автоматическая диагностика при устойчивом отказе кладёт сюда же результат.
   DiagnosticsReport? _diagnostics;
   bool _diagnosticsRunning = false;
+
+  /// Обезличенный отпечаток последнего записанного конфига (префикс SHA-256):
+  /// диагностика сверяет конфигурации между отчётами, не раскрывая содержимое.
+  String? _configFingerprint;
 
   /// Автодиагностика запускается один раз на эпизод мёртвого пути, а не в цикле:
   /// взводится заново, когда путь подтверждён живым.
@@ -455,7 +464,10 @@ class AppState extends ChangeNotifier {
     notifyListeners();
     final gen = _recoveryGen;
     try {
-      final runner = ConnectionDiagnostics(env: _diagnosticsEnv(gen));
+      final runner = ConnectionDiagnostics(
+        env: _diagnosticsEnv(gen),
+        budget: _diagnosticsBudget,
+      );
       final report = switchEntries
           ? await runner.checkAllEntries()
           : await runner.checkCurrent();
@@ -555,6 +567,12 @@ class AppState extends ChangeNotifier {
       if (!_core.isRunning) return DiagCancelReason.coreStopped;
       return null;
     },
+    coreState: () => _core.isRunning
+        ? 'работает'
+        : _state == TunnelState.connecting
+            ? 'поднимается'
+            : 'остановлено',
+    configFingerprint: () => _configFingerprint,
   );
 
   /// Переключение входа для активного теста: меняет регион и перезапускает
@@ -716,6 +734,8 @@ class AppState extends ChangeNotifier {
           fragmentHandshake: _settings.fragmentHandshake,
         ),
       );
+      _configFingerprint =
+          sha256.convert(utf8.encode(config.json)).toString().substring(0, 8);
       await _core.validate(config);
       // Список приложений «напрямую» пишется перед каждым поднятием туннеля:
       // VpnService читает файл при старте, и правка после подключения не

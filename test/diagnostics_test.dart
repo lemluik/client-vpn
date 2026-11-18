@@ -35,9 +35,12 @@ class FakeEnv {
     this.coreOk = true,
     List<EntryCandidate>? entries,
     EntryCandidate? current,
-    ProbeOutcome Function(Uri uri, bool viaTunnel, String key)? probe,
+    FutureOr<ProbeOutcome> Function(Uri uri, bool viaTunnel, String key)? probe,
     this.budget = const DiagnosticsBudget(),
     this.cancelReasonFn,
+    this.coreStateFn,
+    this.fingerprintFn,
+    this.networkTypeFn,
   }) : entries = entries ?? [const EntryCandidate('alpha', 'Alpha')],
        current = current ?? const EntryCandidate('alpha', 'Alpha'),
        activeKey = (current ?? const EntryCandidate('alpha', 'Alpha')).key,
@@ -50,20 +53,35 @@ class FakeEnv {
   final List<EntryCandidate> entries;
   EntryCandidate? current;
   String activeKey;
-  final ProbeOutcome Function(Uri, bool, String) probeFn;
+  final FutureOr<ProbeOutcome> Function(Uri, bool, String) probeFn;
   final DiagnosticsBudget budget;
   final DiagCancelReason? Function()? cancelReasonFn;
+  final String Function()? coreStateFn;
+  final String? Function()? fingerprintFn;
+  final String Function()? networkTypeFn;
 
   final List<String> switches = [];
   bool restoreCalled = false;
   bool cancelledFlag = false;
   int probeCalls = 0;
 
+  /// Последний срок, с которым окружение позвало пробу (проверка зажима).
+  Duration? lastTimeout;
+
   DiagnosticsEnv env() => DiagnosticsEnv(
-    facts: () => _facts,
+    facts: () => networkTypeFn == null
+        ? _facts
+        : DiagFacts(
+            appVersion: _facts.appVersion,
+            coreVersion: _facts.coreVersion,
+            platform: _facts.platform,
+            osVersion: _facts.osVersion,
+            networkType: networkTypeFn!(),
+          ),
     reachesCore: () => reachesCore,
     probe: (uri, {required viaTunnel, timeout = const Duration(seconds: 6)}) async {
       probeCalls++;
+      lastTimeout = timeout;
       return probeFn(uri, viaTunnel, activeKey);
     },
     checkNetwork: () async => StageResult(
@@ -90,6 +108,8 @@ class FakeEnv {
     restore: () async => restoreCalled = true,
     cancelled: () => cancelledFlag,
     cancelReason: cancelReasonFn,
+    coreState: coreStateFn,
+    configFingerprint: fingerprintFn,
   );
 
   ConnectionDiagnostics runner() =>
@@ -723,6 +743,268 @@ void main() {
       expect(h.core.stopCalls, 0);
     });
   });
+
+  group('этапы одной попытки', () {
+    test('успешная проба расписана по этапам: прокси, TCP, TLS, HTTP', () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      server.listen((request) async {
+        request.response.statusCode = HttpStatus.noContent;
+        await request.response.close();
+      });
+
+      final outcome = await tunnelControlProbe(
+        Uri.parse('http://127.0.0.1:${server.port}/generate_204'),
+        viaTunnel: false,
+      );
+
+      expect(outcome.statusCode, 204);
+      expect(outcome.trace.map((s) => s.name).toList(),
+          ['proxy', 'tcp', 'tls', 'http']);
+      expect(outcome.trace.every((s) => s.ok), isTrue);
+      expect(outcome.trace.first.note, 'напрямую, мимо ядра');
+      expect(outcome.trace[2].note, 'не требуется: схема http');
+      expect(outcome.trace.last.note, 'код ответа 204');
+    });
+
+    test('закрытый порт: этап TCP провален, код ошибки записан', () async {
+      final server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+      final port = server.port;
+      await server.close();
+
+      final outcome = await tunnelControlProbe(
+        Uri.parse('http://127.0.0.1:$port/generate_204'),
+        viaTunnel: false,
+        timeout: const Duration(seconds: 6),
+      );
+
+      expect(outcome.failure, ProbeFailure.refused);
+      expect(outcome.trace.map((s) => s.name).toList(), ['proxy', 'tcp']);
+      final tcp = outcome.trace.last;
+      expect(tcp.ok, isFalse);
+      expect(tcp.errorCode, isNotNull);
+      expect(tcp.note, 'соединение не установлено');
+    });
+
+    test('TCP принят, обмен сорвался: провален именно этап HTTP', () async {
+      final server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close());
+      server.listen((socket) => socket.destroy());
+
+      final outcome = await tunnelControlProbe(
+        Uri.parse('http://127.0.0.1:${server.port}/generate_204'),
+        viaTunnel: false,
+        timeout: const Duration(seconds: 2),
+      );
+
+      final tcp = outcome.trace.firstWhere((s) => s.name == 'tcp');
+      expect(tcp.ok, isTrue, reason: 'соединение было принято');
+      final http = outcome.trace.last;
+      expect(http.name, 'http');
+      expect(http.ok, isFalse);
+      expect(outcome.failure, isNot(ProbeFailure.refused));
+    });
+
+    test('зависшее тело: последний этап — общий срок, а не вечное ожидание',
+        () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      server.listen((request) async {
+        request.response.headers.contentType = ContentType.text;
+        request.response.write('заголовки пришли, тело не закончено');
+        await request.response.flush();
+      });
+
+      final outcome = await tunnelControlProbe(
+        Uri.parse('http://127.0.0.1:${server.port}/generate_204'),
+        viaTunnel: false,
+        timeout: const Duration(milliseconds: 300),
+      );
+
+      expect(outcome.failure, ProbeFailure.timeout);
+      expect(outcome.trace.last.name, 'deadline');
+      expect(outcome.trace.last.ok, isFalse);
+      expect(outcome.trace.last.note, 'общий срок пробы истёк');
+    });
+
+    test('через туннель: обмен идёт через локальный вход ядра абсолютным запросом',
+        () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      String? seenTarget;
+      server.listen((request) async {
+        seenTarget = request.uri.toString();
+        request.response.statusCode = HttpStatus.noContent;
+        await request.response.close();
+      });
+      AppProxy.attach((protocol: 'http', port: server.port));
+      addTearDown(() => AppProxy.attach(null));
+
+      final outcome = await tunnelControlProbe(
+        Uri.parse('http://example.test/generate_204'),
+        viaTunnel: true,
+      );
+
+      expect(outcome.statusCode, 204);
+      expect(seenTarget, 'http://example.test/generate_204',
+          reason: 'прокси получает абсолютную форму запроса');
+      expect(outcome.trace.first.note, 'локальный http-вход, порт ${server.port}');
+      expect(outcome.trace[1].note, 'соединение с локальным прокси');
+    });
+  });
+
+  group('контекст попыток в отчёте', () {
+    test('попытка несёт состояние ядра, сеть и отпечаток конфига', () async {
+      final fake = FakeEnv(
+        coreStateFn: () => 'работает',
+        fingerprintFn: () => 'ab12cd34',
+        probe: (uri, viaTunnel, key) => const ProbeOutcome(
+          statusCode: 204,
+          elapsed: Duration(milliseconds: 9),
+          trace: [
+            ProbeStage(name: 'tcp', ok: true, elapsed: Duration(milliseconds: 7)),
+          ],
+        ),
+      );
+      final report = await fake.runner().checkCurrent();
+
+      final attempts = report.entries.single.attempts;
+      expect(attempts.length, 2);
+      expect(attempts.first.coreState, 'работает');
+      expect(attempts.first.networkType, 'wifi');
+      expect(attempts.first.configFingerprint, 'ab12cd34');
+      final text = report.toShareText();
+      expect(text, contains('ядро: работает; сеть: wifi; конфиг: ab12cd34'));
+      expect(text, contains('tcp: ок (7 мс)'));
+      expect(text, contains('попытка A (через туннель): 204'));
+    });
+
+    test('смена сети между попытками видна в отчёте', () async {
+      var network = 'wifi';
+      final fake = FakeEnv(
+        networkTypeFn: () => network,
+        probe: (uri, viaTunnel, key) {
+          if (!viaTunnel) network = 'mobile';
+          return viaTunnel
+              ? const ProbeOutcome(failure: ProbeFailure.timeout)
+              : const ProbeOutcome(statusCode: 204);
+        },
+      );
+      final report = await fake.runner().checkCurrent();
+
+      expect(report.verdict, DiagVerdict.failureConfirmed);
+      final entry = report.entries.single;
+      expect(entry.networkChanged, isTrue);
+      expect(entry.attempts.first.networkType, 'wifi');
+      expect(entry.attempts.last.networkType, 'mobile');
+      expect(entry.attempts.last.label, 'A напрямую');
+      expect(report.toShareText(), contains('сеть менялась во время проверки'));
+    });
+  });
+
+  group('общий срок диагностики', () {
+    test('зависшая проба обрывается бюджетом, отчёт неполный, проверка завершена',
+        () async {
+      final gate = Completer<ProbeOutcome>();
+      addTearDown(() {
+        if (!gate.isCompleted) gate.complete(const ProbeOutcome());
+      });
+      final fake = FakeEnv(
+        probe: (uri, viaTunnel, key) => gate.future,
+        budget: const DiagnosticsBudget(
+          total: Duration(milliseconds: 150),
+          probeTimeout: Duration(milliseconds: 80),
+        ),
+      );
+
+      final watch = Stopwatch()..start();
+      final report = await fake.runner().checkCurrent().timeout(
+            const Duration(seconds: 5),
+          );
+      watch.stop();
+
+      expect(watch.elapsedMilliseconds, lessThan(3000));
+      expect(report.budgetExceeded, isTrue);
+      expect(report.verdict, DiagVerdict.unknown);
+      expect(fake.probeCalls, 1,
+          reason: 'после исчерпания срока новые пробы не начинаются');
+      expect(report.toShareText(), contains('Срок проверки исчерпан'));
+    });
+
+    test('срок одной пробы зажат остатком бюджета и её собственным пределом',
+        () async {
+      final tight = FakeEnv(
+        budget: const DiagnosticsBudget(total: Duration(milliseconds: 200)),
+      );
+      await tight.runner().checkCurrent();
+      expect(tight.lastTimeout, isNotNull);
+      expect(tight.lastTimeout!, lessThanOrEqualTo(const Duration(milliseconds: 200)));
+
+      final normal = FakeEnv();
+      await normal.runner().checkCurrent();
+      expect(normal.lastTimeout, const Duration(seconds: 6));
+    });
+
+    test('AppState: зависшая диагностика завершается и снимает блокировку',
+        () async {
+      final gate = Completer<ProbeOutcome>();
+      addTearDown(() {
+        if (!gate.isCompleted) gate.complete(const ProbeOutcome());
+      });
+      final h = await _harness(
+        probe: (uri, {required viaTunnel, timeout = const Duration(seconds: 6)}) =>
+            gate.future,
+        diagnosticsBudget: const DiagnosticsBudget(
+          total: Duration(milliseconds: 150),
+          probeTimeout: Duration(milliseconds: 80),
+        ),
+      );
+      addTearDown(h.state.dispose);
+      AppProxy.attach((protocol: 'http', port: 10809));
+      addTearDown(() => AppProxy.attach(null));
+      h.networks.add([ConnectivityResult.wifi]);
+      await h.state.connect();
+
+      await h.state.runDiagnostics().timeout(const Duration(seconds: 5));
+
+      expect(h.state.isDiagnosticsRunning, isFalse,
+          reason: 'блокировка снята после завершения');
+      expect(h.state.diagnostics!.budgetExceeded, isTrue);
+
+      // Отключение пользователя после проверки выполняется сразу.
+      await h.state.disconnect().timeout(const Duration(seconds: 2));
+      expect(h.state.state, TunnelState.off);
+    });
+
+    test('AppState: отключение во время зависшей пробы не ждёт диагностику',
+        () async {
+      final gate = Completer<ProbeOutcome>();
+      final h = await _harness(
+        probe: (uri, {required viaTunnel, timeout = const Duration(seconds: 6)}) =>
+            gate.future,
+      );
+      addTearDown(h.state.dispose);
+      AppProxy.attach((protocol: 'http', port: 10809));
+      addTearDown(() => AppProxy.attach(null));
+      h.networks.add([ConnectivityResult.wifi]);
+      await h.state.connect();
+
+      final run = h.state.runDiagnostics();
+      await _settle(60);
+      expect(h.state.isDiagnosticsRunning, isTrue);
+
+      // Пользователь отключается: действие не заблокировано идущим замером.
+      await h.state.disconnect().timeout(const Duration(seconds: 2));
+      expect(h.state.state, TunnelState.off);
+
+      gate.complete(const ProbeOutcome(statusCode: 204));
+      await run;
+      expect(h.state.isDiagnosticsRunning, isFalse);
+      final report = h.state.diagnostics!;
+      expect(report.cancelled, isTrue);
+      expect(report.cancelReason, DiagCancelReason.user);
+    });
+  });
 }
 
 /// Вымышленный узел: адрес тестовый, ключи не боевые.
@@ -786,6 +1068,7 @@ class _Harness {
 Future<_Harness> _harness({
   required ControlProbe probe,
   bool pathAlive = true,
+  DiagnosticsBudget? diagnosticsBudget,
 }) async {
   SharedPreferences.setMockInitialValues({});
   final store = await ProfileStore.open();
@@ -814,6 +1097,7 @@ Future<_Harness> _harness({
     ),
     subscriptionFetch: fetch,
     diagnosticsProbe: probe,
+    diagnosticsBudget: diagnosticsBudget,
     networks: networks.stream,
   );
   return _Harness(state, core, networks);
