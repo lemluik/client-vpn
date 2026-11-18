@@ -464,6 +464,12 @@ abstract class AppLocalizations {
   /// **'Нет доступа к узлу'**
   String get statusUnreachable;
 
+  /// No description provided for @routeUnknown.
+  ///
+  /// In ru, this message translates to:
+  /// **'Маршрут неизвестен'**
+  String get routeUnknown;
+
   /// No description provided for @statusConnected.
   ///
   /// In ru, this message translates to:
@@ -650,6 +656,12 @@ abstract class AppLocalizations {
   /// **'Исходный код и релизы: github.com/lemluik/client-vpn'**
   String get aboutRepository;
 
+  /// No description provided for @aboutVersionUnknown.
+  ///
+  /// In ru, this message translates to:
+  /// **'Версия не определена'**
+  String get aboutVersionUnknown;
+
   /// No description provided for @aboutLicense.
   ///
   /// In ru, this message translates to:
@@ -709,6 +721,12 @@ abstract class AppLocalizations {
   /// In ru, this message translates to:
   /// **'Источник обновлений сохранён'**
   String get updateSourceSaved;
+
+  /// No description provided for @updateChannelClosed.
+  ///
+  /// In ru, this message translates to:
+  /// **'Канал сборки задан приложением: проверяется только своя точка раздачи, публичный репозиторий не используется'**
+  String get updateChannelClosed;
 
   /// No description provided for @updateCheck.
   ///
@@ -799,6 +817,12 @@ abstract class AppLocalizations {
   /// In ru, this message translates to:
   /// **'Контрольная сумма не совпадает'**
   String get updateHashMismatch;
+
+  /// No description provided for @updateNoChecksum.
+  ///
+  /// In ru, this message translates to:
+  /// **'Источник не указал контрольную сумму — обновление не устанавливается'**
+  String get updateNoChecksum;
 
   /// No description provided for @updateDownloadFailed.
   ///

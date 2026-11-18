@@ -73,6 +73,26 @@ class DesktopCore implements VpnCore {
   /// иначе проверка и запуск разошлись бы по разным конфигам.
   int? _apiPort;
 
+  /// Поколение сессии ядра (Ф8): старт и стоп увеличивают его, и обработчик
+  /// выхода старого процесса не имеет права глушить новое ядро.
+  int _session = 0;
+
+  /// Выход процесса устарел (Ф8): пока старое ядро добивалось, приложение
+  /// успело остановить его или запустить новое — общее состояние трогать
+  /// нельзя. Чистая функция: проверяется испытанием без живого процесса.
+  static bool exitIsStale({
+    required Object? current,
+    required Object exited,
+    required int session,
+    required int currentSession,
+  }) =>
+      session != currentSession ||
+      (current != null && !identical(current, exited));
+
+  /// Предел проверки конфига (Ф5): тот же, что на Android. Без него зависшее
+  /// `run -test` держало бы подключение вечно.
+  static const validateTimeout = Duration(seconds: 30);
+
   @override
   Stream<String> get logs => _logController.stream;
 
@@ -165,18 +185,35 @@ class DesktopCore implements VpnCore {
     final derivedPath = await _writeDerivedConfig(config.json, _apiPort!);
     _derivedPath = derivedPath;
 
-    final result = await Process.run(
+    // Вывод читается параллельно с ожиданием выхода, а само ожидание
+    // ограничено (Ф5): прежний Process.run без срока завис бы вместе с
+    // ядром, не дойдя ни до предела, ни до сообщения об ошибке.
+    final process = await Process.start(
       xrayPath,
       ['run', '-test', '-config', derivedPath],
       workingDirectory: p.dirname(xrayPath),
       environment: _coreEnvironment(xrayPath),
     );
-
-    if (result.exitCode != 0) {
-      final out = '${result.stdout}'.trim();
-      final err = '${result.stderr}'.trim();
+    final stdoutText = process.stdout.transform(utf8.decoder).join();
+    final stderrText = process.stderr.transform(utf8.decoder).join();
+    final int exitCode;
+    try {
+      exitCode = await process.exitCode.timeout(validateTimeout);
+    } on TimeoutException {
+      process.kill(ProcessSignal.sigkill);
+      // Убитый процесс завершится позже: его выход не должен стать
+      // необработанной ошибкой зоны.
+      unawaited(process.exitCode.catchError((Object _) => 0));
       throw Exception(
-        'Валидация не пройдена (код ${result.exitCode}):\n$out\n$err'
+        'Проверка конфига не завершилась за ${validateTimeout.inSeconds} с',
+      );
+    }
+    final out = (await stdoutText).trim();
+    final err = (await stderrText).trim();
+
+    if (exitCode != 0) {
+      throw Exception(
+        'Валидация не пройдена (код $exitCode):\n$out\n$err'
         '${_geoHint('$out$err')}',
       );
     }
@@ -313,13 +350,25 @@ class DesktopCore implements VpnCore {
           : 'Свой трафик приложения идёт мимо канала: локальный вход не http',
     );
 
+    // Обработчик выхода привязан к своему процессу и поколению (Ф8).
+    final spawned = _process!;
+    final generation = ++_session;
     unawaited(
-      _process!.exitCode.then((code) async {
+      spawned.exitCode.then((code) async {
+        // Выход старого процесса не должен глушить новое ядро: пока старое
+        // добивалось, приложение могло остановить его и запустить новое.
+        if (_staleExit(spawned, generation)) {
+          _logController.add('Пропущен устаревший выход ядра (код: $code)');
+          return;
+        }
         _logController.add('Xray остановлен (код: $code)');
         _process = null;
         CoreStats.apiPort = null;
         _closeJob();
         if (Platform.isMacOS) await _macGuard.detach();
+        // За время ожидания открепления сторожа приложение могло поднять
+        // новое ядро: поздний ответ не снимает прокси и статус новой сессии.
+        if (_staleExit(spawned, generation)) return;
         AppProxy.attach(null);
         final intentional = _intentionalStop;
         _intentionalStop = false;
@@ -369,6 +418,14 @@ class DesktopCore implements VpnCore {
     _job = null;
   }
 
+  bool _staleExit(Process exited, int generation) =>
+      exitIsStale(
+        current: _process,
+        exited: exited,
+        session: generation,
+        currentSession: _session,
+      );
+
   @override
   Future<void> stop() async {
     if (_process == null) {
@@ -382,6 +439,9 @@ class DesktopCore implements VpnCore {
     // Ручку jobs закрываем после выхода процесса: закрытая раньше, она убила
     // бы ядро сразу, не дав ему освободить порт.
     _intentionalStop = true;
+    // Новое поколение: обработчик выхода останавливаемого процесса гаснет и
+    // не соревнуется с этой остановкой (Ф8).
+    _session++;
     _process!.kill(ProcessSignal.sigterm);
 
     try {
@@ -399,6 +459,10 @@ class DesktopCore implements VpnCore {
     }
 
     _process = null;
+    // Флаг намеренной остановки больше не читает обработчик выхода (он
+    // погашен поколением) — снимаем его здесь, иначе следующая авария ядра
+    // была бы принята за намеренную остановку и осталась бы без килл-свитча.
+    _intentionalStop = false;
     _closeJob();
     if (Platform.isMacOS) await _macGuard.detach();
     AppProxy.attach(null);

@@ -7,8 +7,6 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'update_check.dart';
-
 /// Сервис автоматического обновления.
 ///
 /// Проверяет наличие новой версии, скачивает APK, проверяет SHA-256
@@ -65,19 +63,6 @@ class UpdateService {
     await prefs.setInt(_lastDismissedKey, DateTime.now().millisecondsSinceEpoch ~/ 1000);
   }
 
-  /// Проверить наличие обновления.
-  ///
-  /// Возвращает [UpdateResult] с информацией о релизе или ошибке.
-  Future<UpdateResult> checkForUpdate({
-    required String feed,
-    required String currentVersion,
-  }) {
-    return checkForUpdate(
-      feed: feed,
-      currentVersion: currentVersion,
-    );
-  }
-
   /// Скачать пакет обновления и проверить целостность.
   ///
   /// APK для Android, zip-раскладка для Windows — различается только способ
@@ -89,14 +74,22 @@ class UpdateService {
   /// скачанный пакет остаётся непроверенным: это допустимо только для тестовых
   /// релизов, реальный канал раздачи обязан отдавать сумму (см. спецификацию
   /// автообновления, требование «SHA-256 обязателен»).
+  ///
+  /// [requireChecksum] = true (закрытый канал) запрещает скачивание без суммы:
+  /// непроверенный пакет своей раздачи не устанавливается.
   Future<DownloadResult> downloadPackage({
     required String url,
     String? expectedSha256,
     String? checksumUrl,
+    bool requireChecksum = false,
     void Function(double)? onProgress,
   }) async {
     final expected = expectedSha256 ?? await _fetchChecksum(checksumUrl);
     if (expected == null) {
+      if (requireChecksum) {
+        debugPrint('UpdateService: сумма обязательна, скачивание отклонено');
+        return const DownloadResult.failed(DownloadFailure.noChecksum);
+      }
       debugPrint('UpdateService: сумма не получена, проверка пропущена');
     }
     try {
@@ -193,8 +186,8 @@ class UpdateService {
   ///
   /// Нужен только Windows: там установка происходит после нашего выхода, и
   /// следующее открытие может быть как «обновление применено», так и «обновитель
-  /// упал, мы прежние». Отличить одно от другого можно, сверив `clientVersion`
-  /// с этой записью.
+  /// упал, мы прежние». Отличить одно от другого можно, сверив версию из
+  /// метаданных установленной сборки с этой записью.
   Future<void> markPending(String version) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_pendingKey, version);
@@ -219,7 +212,7 @@ class UpdateService {
 }
 
 /// Чем закончилось скачивание пакета обновления.
-enum DownloadFailure { unavailable, hashMismatch }
+enum DownloadFailure { unavailable, hashMismatch, noChecksum }
 
 /// Результат [UpdateService.downloadPackage].
 ///

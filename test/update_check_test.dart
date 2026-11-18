@@ -1,10 +1,20 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:client_vpn/about_screen.dart' show clientVersion;
+import 'package:client_vpn/app_metadata.dart';
+import 'package:client_vpn/services/service_config.dart';
 import 'package:client_vpn/update_check.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+/// Установленная сборка для проверок: закрытая 0.4.5, код 3, проектная подпись.
+const AppMetadata _installed = AppMetadata(
+  versionName: '0.4.5',
+  versionCode: 3,
+  applicationId: 'com.clientvpn.client_vpn',
+  signerSha256:
+      'f579799b71032b9b8bde11cb7d81e0eca7af4b01b0a43be674c319baffb7be4b',
+);
 
 /// Кормит манифест с петлевого адреса: `AppProxy` для петлевой цели всегда
 /// отдаёт `DIRECT`, поэтому проверка идёт через настоящий стек `HttpClient`,
@@ -165,22 +175,44 @@ void main() {
     addTearDown(feed.stop);
     final result = await checkForUpdate(
       feed: feed.url,
-      currentVersion: clientVersion,
+      installed: _installed,
+      platform: 'windows',
     );
     expect(result.hasUpdate, isTrue);
     expect(result.release?.version, '9.9.9');
     expect(result.error, isNull);
   });
 
-  test('равная и более старая версия обновлением не считаются', () async {
-    final feed = await _jsonFeed({'version': clientVersion, 'files': {}});
+  test('равная версия обновлением не считается', () async {
+    final feed = await _jsonFeed({
+      'version': '0.4.5',
+      'versionCode': 3,
+      'files': {'windows': 'https://example.test/win.zip'},
+    });
     addTearDown(feed.stop);
     final result = await checkForUpdate(
       feed: feed.url,
-      currentVersion: clientVersion,
+      installed: _installed,
+      platform: 'windows',
     );
     expect(result.hasUpdate, isFalse);
     expect(result.error, 'Обновлений нет');
+  });
+
+  test('более старая версия не предлагается', () async {
+    final feed = await _jsonFeed({
+      'version': '0.4.4',
+      'versionCode': 2,
+      'files': {'windows': 'https://example.test/win.zip'},
+    });
+    addTearDown(feed.stop);
+    final result = await checkForUpdate(
+      feed: feed.url,
+      installed: _installed,
+      platform: 'windows',
+    );
+    expect(result.hasUpdate, isFalse);
+    expect(result.error, contains('понижение версии не предлагается'));
   });
 
   test('плохой ответ источника превращается в нейтральное сообщение', () async {
@@ -188,7 +220,8 @@ void main() {
     addTearDown(notFound.stop);
     final code = await checkForUpdate(
       feed: notFound.url,
-      currentVersion: clientVersion,
+      installed: _installed,
+      platform: 'windows',
     );
     expect(code.error, contains('404'));
 
@@ -196,7 +229,8 @@ void main() {
     addTearDown(garbage.stop);
     final broken = await checkForUpdate(
       feed: garbage.url,
-      currentVersion: clientVersion,
+      installed: _installed,
+      platform: 'windows',
     );
     expect(broken.error, 'Источник вернул не JSON');
 
@@ -204,7 +238,8 @@ void main() {
     addTearDown(big.stop);
     final oversize = await checkForUpdate(
       feed: big.url,
-      currentVersion: clientVersion,
+      installed: _installed,
+      platform: 'windows',
     );
     expect(oversize.error, contains('слишком большой'));
   });
@@ -213,7 +248,11 @@ void main() {
     final feed = await _feed(utf8.encode('{}'));
     final url = feed.url;
     await feed.stop();
-    final result = await checkForUpdate(feed: url, currentVersion: clientVersion);
+    final result = await checkForUpdate(
+      feed: url,
+      installed: _installed,
+      platform: 'windows',
+    );
     expect(result.hasUpdate, isFalse);
     expect(result.error, 'Нет связи с источником обновлений');
   });
@@ -221,7 +260,8 @@ void main() {
   test('адрес источника проверяется до запроса', () async {
     final result = await checkForUpdate(
       feed: 'ftp://example.test/manifest',
-      currentVersion: clientVersion,
+      installed: _installed,
+      platform: 'windows',
     );
     expect(result.hasUpdate, isFalse);
     expect(result.error, contains('http://'));
@@ -238,5 +278,106 @@ void main() {
 
     await prefs.setString('update.feed.v1', 'не адрес');
     expect(store.load(), defaultUpdateFeed);
+  });
+
+  test('точка сборки подставляется вместо публичного адреса по умолчанию',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    final prefs = await SharedPreferences.getInstance();
+    const own = 'https://sub.example.test/u/closed/manifest.json';
+    final store = UpdateFeedStore(prefs, configuredFeed: own);
+    expect(store.load(), own);
+
+    await store.save('https://other.example.test/manifest.json');
+    expect(store.load(), 'https://other.example.test/manifest.json');
+  });
+
+  test('канал и ключ берутся от сборки, а не от введённого адреса', () {
+    const config = ServiceConfig(
+      updateFeed: 'https://sub.example.test/u/closed/manifest.json',
+      updateChannel: 'closed',
+      updatePublicKey: 'ключ',
+    );
+    // Пользователь вставил адрес публичного репозитория: адрес меняется,
+    // канал и ключ остаются закрытыми — молчаливого перехода нет.
+    final pasted = resolveUpdateSource(
+      userFeed: defaultUpdateFeed,
+      config: config,
+    );
+    expect(pasted.feed, defaultUpdateFeed);
+    expect(pasted.channel, 'closed');
+    expect(pasted.isOwn, isTrue);
+    expect(pasted.publicKey, 'ключ');
+
+    final own = resolveUpdateSource(config: config);
+    expect(own.feed, config.updateFeed);
+
+    // Открытая сборка: приватного слоя нет, канал публичный.
+    final open = resolveUpdateSource();
+    expect(open.channel, 'public');
+    expect(open.isOwn, isFalse);
+    expect(open.feed, defaultUpdateFeed);
+  });
+
+  test('сырая разметка площадки не попадает на экран', () {
+    const raw = "## What's Changed\n"
+        '\n'
+        '* Д2-20: фрагментация рукопожатия\n'
+        '* **Исправлено** восстановление соединения\n'
+        '\n'
+        '**Full Changelog**: https://github.com/lemluik/client-vpn/compare/v0.4.2...v0.4.3\n';
+    final notes = plainReleaseNotes(raw);
+    expect(notes, isNot(contains('#')));
+    expect(notes, isNot(contains('*')));
+    expect(notes, isNot(contains('http')));
+    expect(notes, isNot(contains("What's Changed")));
+    expect(notes, contains('Д2-20: фрагментация рукопожатия'));
+    expect(notes, contains('Исправлено восстановление соединения'));
+    expect(notes.split('\n').length, 2);
+  });
+
+  test('описание изменений ограничено по длине и числу строк', () {
+    final long = List.generate(30, (i) => '* пункт $i').join('\n');
+    final notes = plainReleaseNotes(long);
+    expect(notes.split('\n').length, lessThanOrEqualTo(8));
+    final veryLong = plainReleaseNotes('слово ' * 400);
+    expect(veryLong.length, lessThanOrEqualTo(601));
+    expect(plainReleaseNotes('   '), '');
+  });
+
+  test('сумма берётся по платформе, а не одна на весь манифест', () {
+    final release = parseRelease({
+      'version': '0.4.6',
+      'files': {
+        'android': {'url': 'https://example.test/a.apk', 'sha256': 'aa' * 32},
+        'windows': {'url': 'https://example.test/w.zip', 'sha256': 'bb' * 32},
+      },
+    });
+    expect(release?.sha256For('android'), 'aa' * 32);
+    expect(release?.sha256For('windows'), 'bb' * 32);
+    expect(release?.sha256For('macos'), isNull);
+    // Плоская сумма допустима только когда файл в манифесте один.
+    expect(release?.sha256, isNotNull);
+    final single = parseRelease({
+      'version': '0.4.6',
+      'sha256': 'cc' * 32,
+      'files': {'android': 'https://example.test/a.apk'},
+    });
+    expect(single?.sha256For('android'), 'cc' * 32);
+    expect(single?.sha256For('windows'), isNull);
+  });
+
+  test('закрытый канал не получает установщик другой платформы', () {
+    final release = parseRelease({
+      'version': '0.4.6',
+      'files': {
+        'windows': {'url': 'https://example.test/w.zip', 'sha256': 'bb' * 32},
+      },
+    });
+    expect(release?.downloadUrlFor('android', strict: true), isNull);
+    expect(
+      release?.downloadUrlFor('windows', strict: true),
+      'https://example.test/w.zip',
+    );
   });
 }

@@ -1,27 +1,52 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
 
+import 'app_metadata.dart';
 import 'l10n/app_localizations.dart';
-
-/// Версия на экране «О программе». Тест `test/about_test.dart` сверяет строку с
-/// `pubspec.yaml`, чтобы экран не врал после релиза.
-const String clientVersion = '0.4.3';
 
 /// Экран «О программе» (позиция 18, пункт У-6): лицензия клиента, файлы LICENSE и
 /// NOTICE и заявление об отсутствии телеметрии (позиция 16, пункт У-5).
-class AboutScreen extends StatelessWidget {
+///
+/// Версия читается из метаданных установленной сборки, а не из константы в коде:
+/// константа расходилась с pubspec и экран показывал не ту версию, что стоит у
+/// пользователя.
+class AboutScreen extends StatefulWidget {
   const AboutScreen({super.key});
+
+  @override
+  State<AboutScreen> createState() => _AboutScreenState();
+}
+
+class _AboutScreenState extends State<AboutScreen> {
+  AppMetadata? _meta = AppMetadata.cached;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_meta == null) unawaited(_load());
+  }
+
+  Future<void> _load() async {
+    final meta = await AppMetadata.load();
+    if (mounted) setState(() => _meta = meta);
+  }
 
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
+    final meta = _meta;
+    final version = (meta == null || !meta.isKnown)
+        ? l.aboutVersionUnknown
+        : l.aboutVersion(meta.versionName);
     return Scaffold(
       appBar: AppBar(title: Text(l.aboutTitle)),
       body: ListView(
         padding: const EdgeInsets.symmetric(vertical: 8),
         children: [
           ListTile(
-            title: Text(l.aboutVersion(clientVersion)),
+            title: Text(version),
             subtitle: Text(l.aboutRepository),
           ),
           ListTile(

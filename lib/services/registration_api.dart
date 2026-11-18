@@ -80,6 +80,10 @@ abstract class RegistrationApi {
   });
 }
 
+/// Предел размера ответа точки контроля: ключ и метаданные — это килобайты,
+/// а огромный ответ означает, что адрес отдаёт не результат регистрации.
+const int maxRegistrationBytes = 256 * 1024;
+
 /// Настоящий обмен с точкой контроля: HTTPS со строгой проверкой сертификата.
 /// Никаких `badCertificateCallback` и обходов — как в `matrix_api.dart`. Адрес
 /// приходит из конфигурации, в коде не зашит (гейт нейтральности У-8).
@@ -112,6 +116,7 @@ class HttpRegistrationApi implements RegistrationApi {
 
     // Запрос идёт через ядро, когда подключение поднято (ТД-15); до подключения
     // findProxy возвращает прямой путь.
+    final owned = _client == null;
     final client =
         _client ??
         (HttpClient()
@@ -122,7 +127,10 @@ class HttpRegistrationApi implements RegistrationApi {
       request.headers.contentType = ContentType.json;
       request.write(body);
       final response = await request.close().timeout(_timeout);
-      final text = await response.transform(utf8.decoder).join();
+      // Чтение ответа ограничено и по времени, и по размеру: сервер может
+      // прислать заголовки и не завершить тело — без предела ожидание
+      // зависло бы навсегда.
+      final text = await _readBody(response).timeout(_timeout);
       if (response.statusCode != HttpStatus.ok) {
         throw RegistrationException(_reason(response.statusCode));
       }
@@ -137,7 +145,22 @@ class HttpRegistrationApi implements RegistrationApi {
       throw RegistrationException('Сервис не отвечает — попробуйте позже');
     } catch (_) {
       throw RegistrationException('Не удалось связаться с сервисом');
+    } finally {
+      // Клиент, созданный внутри, закрываем; переданный извне остаётся
+      // вызывающему: без явного контракта владения закрывать его нельзя.
+      if (owned) client.close(force: true);
     }
+  }
+
+  Future<String> _readBody(HttpClientResponse response) async {
+    final bytes = <int>[];
+    await for (final chunk in response) {
+      bytes.addAll(chunk);
+      if (bytes.length > maxRegistrationBytes) {
+        throw RegistrationException('Ответ сервиса слишком большой');
+      }
+    }
+    return utf8.decode(bytes, allowMalformed: true);
   }
 
   /// Короткая причина по коду ответа: её показывает строка ошибки на экране.

@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.4.8] - 2026-11-18
 
 ### Added
 
@@ -15,6 +15,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   release next to Windows and Android. The update screen on macOS finds the `macos` asset.
 - README: macOS installation from either file, the first launch of the unsigned build,
   and the limits of the system proxy mode.
+
+### Changed
+
+- Unified closed build: combines the 0.4.5 bounded recovery (Ф1) and 0.4.4 diagnostics with the
+  0.4.6–0.4.7 diagnostic fixes — connect-and-check offer, named cancel reasons (user / core stop /
+  automatic reconnect), per-attempt proxy/TCP/TLS/HTTP stages with durations, core state, network
+  type and an anonymised config fingerprint, a total diagnostics deadline that clamps every probe
+  and guarantees the recovery lock is released, and the trusted update feed (Р-92).
+- Diagnostics now separates the configured entry from the actual probe route (#125): the report
+  says «Настроенный вход» and «фактический маршрут: не установлен» instead of naming the first
+  outbound as if the balancer had confirmed it; ordinal region labels are included for matching
+  against the server access journal without exposing node addresses.
+- versionCode raised to 6 (> 3 of the installed 0.4.5 and > 5 of 0.4.7) so the package updates in
+  place with the same project signing key; the on-screen version comes from build metadata.
+
+## [0.4.5] - 2026-11-13
+
+### Changed
+
+- Bounded connection recovery (Ф1): reconnect attempts follow a fixed ladder (1 / 5 / 30 min pauses)
+  and stop after the last step instead of restarting forever. Disconnecting by the user immediately
+  cancels any pending recovery and an in-flight connect, so the tunnel never comes back up against
+  the user's will. Unified release: combines the 0.4.4 diagnostics with this recovery fix.
+  versionCode raised to 3 so the package updates over the installed 0.4.4 (versionCode 2) without
+  uninstalling; same project signing key, profiles preserved.
+
+## [0.4.4] - 2026-11-13
+
+### Added
+
+- "Check connection" mode (Settings → Check connection). It reports one of three verdicts — works,
+  failure confirmed, or unknown — and only counts a path as working after bytes actually pass through
+  the real tunnel, not after a direct probe. Background probes stay rare and bounded; the active
+  "Check all entries" test runs only on press, warns that the tunnel briefly drops, and restores the
+  original entry afterwards. The shareable report carries the app and core versions, platform, network
+  type, start time, the selected entry and the failing stage, with node addresses, keys, tokens and
+  subscription links masked out. Nothing is sent automatically — the file leaves the device only when
+  the user saves and shares it.
+
+### Fixed
+
+- Saving the diagnostics report on Android no longer shows a false "save failed" error. The file picker
+  writes the bytes itself through the Storage Access Framework and returns a document path that
+  `dart:io File` cannot open; the screen now treats a returned path as a successful save instead of
+  trying to rewrite it.
+- Android `versionCode` is raised so the build installs as an in-place update over the previous release
+  without uninstalling (the prior APK had the same `versionCode` as the installed one, which blocks a
+  user-tap update).
 
 ## [0.4.3] - 2026-10-27
 

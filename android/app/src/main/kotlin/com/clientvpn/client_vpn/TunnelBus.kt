@@ -29,6 +29,12 @@ object TunnelBus {
     var lastByShell = false
         private set
 
+    /** Счётчик публикаций статуса: по нему ожидающий подтверждения отличает
+     *  новое событие от устаревшего состояния, опубликованного до команды. */
+    @Volatile
+    var statusSeq = 0L
+        private set
+
     private var attachedOnce = false
 
     fun subscribe(sink: (method: String, argument: Any) -> Unit) {
@@ -51,6 +57,7 @@ object TunnelBus {
     fun status(running: Boolean, byShell: Boolean = false, context: Context? = null) {
         lastStatus = running
         lastByShell = byShell
+        statusSeq++
         sink?.invoke("status", payload(running, byShell))
         context?.let { refreshTile(it) }
     }

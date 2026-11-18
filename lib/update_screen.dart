@@ -4,10 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'about_screen.dart' show clientVersion;
+import 'app_metadata.dart';
 import 'failover.dart' show probeEndpointError;
 import 'l10n/app_localizations.dart';
 import 'open_link.dart';
+import 'services/service_config.dart';
 import 'update_check.dart';
 
 /// Экран ручной проверки обновления (этап R2.5, позиция 31 перечня §20.1).
@@ -17,6 +18,10 @@ import 'update_check.dart';
 /// автообновление с диалогом и подменой файлов — `auto_update_checker.dart`, а
 /// сюда приходят за ссылкой вручную, в том числе когда автоматическая установка
 /// невозможна (каталог только для чтения).
+///
+/// Канал и ключ проверки подписи берутся из конфигурации сборки, а не из
+/// введённого адреса: вставленная ссылка на публичный репозиторий не переводит
+/// закрытую сборку на открытый пакет.
 class UpdateScreen extends StatefulWidget {
   const UpdateScreen({super.key});
 
@@ -29,6 +34,8 @@ class _UpdateScreenState extends State<UpdateScreen> {
     text: defaultUpdateFeed,
   );
   UpdateFeedStore? _store;
+  ServiceConfig? _config;
+  AppMetadata? _installed;
   bool _checking = false;
   UpdateResult? _result;
 
@@ -46,13 +53,23 @@ class _UpdateScreenState extends State<UpdateScreen> {
 
   Future<void> _restore() async {
     final prefs = await SharedPreferences.getInstance();
+    final config = await ServiceConfig.load();
+    final installed = AppMetadata.cached ?? await AppMetadata.load();
     if (!mounted) return;
-    setState(() => _store = UpdateFeedStore(prefs));
-    _source.text = _store!.load();
+    setState(() {
+      _config = config;
+      _installed = installed;
+      _store = UpdateFeedStore(prefs, configuredFeed: config.updateFeed);
+      _source.text = _store!.load();
+    });
   }
 
+  UpdateSource _resolve(String feed) =>
+      resolveUpdateSource(userFeed: feed, config: _config);
+
   Future<void> _check() async {
-    final error = probeEndpointError(_source.text);
+    final typed = _source.text.trim();
+    final error = probeEndpointError(typed);
     if (error != null) {
       setState(() => _result = UpdateResult.message(error));
       return;
@@ -62,10 +79,14 @@ class _UpdateScreenState extends State<UpdateScreen> {
       _checking = true;
       _result = null;
     });
-    await _store?.save(_source.text);
+    await _store?.save(typed);
+    final source = _resolve(typed);
+    final installed = _installed ?? await AppMetadata.load();
     final result = await checkForUpdate(
-      feed: _source.text,
-      currentVersion: clientVersion,
+      feed: source.feed,
+      installed: installed,
+      channel: source.channel,
+      publicKey: source.publicKey,
     );
     if (!mounted) return;
     setState(() {
@@ -77,6 +98,11 @@ class _UpdateScreenState extends State<UpdateScreen> {
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
+    final installed = _installed;
+    final own = _resolve(_source.text).isOwn;
+    final version = (installed == null || !installed.isKnown)
+        ? l.aboutVersionUnknown
+        : l.aboutVersion(installed.versionName);
 
     return Scaffold(
       appBar: AppBar(title: Text(l.updateTitle)),
@@ -84,7 +110,7 @@ class _UpdateScreenState extends State<UpdateScreen> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
           children: [
-            Text(l.aboutVersion(clientVersion)),
+            Text(version),
             const SizedBox(height: 20),
             TextField(
               controller: _source,
@@ -92,7 +118,7 @@ class _UpdateScreenState extends State<UpdateScreen> {
               keyboardType: TextInputType.url,
               decoration: InputDecoration(
                 labelText: l.updateTitle,
-                helperText: l.updateSourceSubtitle,
+                helperText: own ? l.updateChannelClosed : l.updateSourceSubtitle,
                 helperMaxLines: 3,
                 hintText: defaultUpdateFeed,
                 border: const OutlineInputBorder(),
@@ -120,9 +146,12 @@ class _UpdateScreenState extends State<UpdateScreen> {
     final release = result.release;
     if (release == null) return Text(result.error!);
 
-    final url = Platform.isMacOS
-        ? release.downloadUrlFor('macos', anyAsLast: false)
-        : release.downloadUrlFor(Platform.isAndroid ? 'android' : 'windows');
+    final own = _resolve(_source.text).isOwn;
+    final url = release.downloadUrlFor(
+      currentPlatformName(),
+      anyAsLast: !own && !Platform.isMacOS,
+      strict: own,
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

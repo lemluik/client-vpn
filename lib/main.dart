@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show MethodChannel, SystemNavigator;
 import 'package:window_manager/window_manager.dart';
 
+import 'app_metadata.dart';
 import 'app_state.dart';
 import 'auto_update_checker.dart';
 import 'close_prompt.dart';
@@ -32,6 +33,10 @@ const MethodChannel _appChannel = MethodChannel('client_vpn/app');
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Версия и подпись установленной сборки читаются один раз до первого кадра:
+  // экраны и проверка обновления берут их отсюда, а не из константы в коде.
+  await AppMetadata.load();
 
   // Второй экземпляр не поднимается: два процесса спорят из-за системного
   // прокси и порта локального входа, и подключение рвётся у обоих.
