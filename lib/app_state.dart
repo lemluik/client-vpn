@@ -6,7 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show MissingPluginException;
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'about_screen.dart';
+import 'app_metadata.dart';
 import 'app_proxy.dart';
 import 'autostart.dart';
 import 'chat_service.dart';
@@ -472,7 +472,7 @@ class AppState extends ChangeNotifier {
   /// внедряется через [DiagnosticsEnv]; здесь оно связано с состоянием клиента.
   DiagnosticsEnv _diagnosticsEnv(int gen) => DiagnosticsEnv(
     facts: () => DiagFacts(
-      appVersion: clientVersion,
+      appVersion: AppMetadata.cached?.versionName ?? '',
       coreVersion: DesktopCore.version,
       platform: Platform.operatingSystem,
       osVersion: Platform.operatingSystemVersion,

@@ -6,9 +6,10 @@ import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'about_screen.dart';
+import 'app_metadata.dart';
 import 'l10n/app_localizations.dart';
 import 'open_link.dart';
+import 'services/service_config.dart';
 import 'update_check.dart';
 import 'update_dialog.dart';
 import 'update_service.dart';
@@ -57,8 +58,9 @@ class _AutoUpdateCheckerState extends State<AutoUpdateChecker> {
   /// перезапуска сверяем версию с отметкой, поставленной перед выходом.
   Future<void> _announceAppliedUpdate() async {
     if (!Platform.isWindows) return;
+    final installed = AppMetadata.cached ?? await AppMetadata.load();
     final applied =
-        await UpdateService.instance.takePending(clientVersion);
+        await UpdateService.instance.takePending(installed.versionName);
     if (applied == null || !mounted) return;
     _notify(AppLocalizations.of(context).updateApplied(applied));
   }
@@ -79,9 +81,17 @@ class _AutoUpdateCheckerState extends State<AutoUpdateChecker> {
     setState(() => _checked = true);
 
     final prefs = await SharedPreferences.getInstance();
+    final config = await ServiceConfig.load();
+    final source = resolveUpdateSource(
+      userFeed: UpdateFeedStore(prefs, configuredFeed: config.updateFeed).load(),
+      config: config,
+    );
+    final installed = AppMetadata.cached ?? await AppMetadata.load();
     final result = await checkForUpdate(
-      feed: UpdateFeedStore(prefs).load(),
-      currentVersion: clientVersion,
+      feed: source.feed,
+      installed: installed,
+      channel: source.channel,
+      publicKey: source.publicKey,
     );
 
     if (!mounted) return;
@@ -89,7 +99,7 @@ class _AutoUpdateCheckerState extends State<AutoUpdateChecker> {
     if (release == null) return;
 
     await service.markChecked();
-    const isCritical = false; // TODO: читать из манифеста, когда появится поле critical
+    final isCritical = release.critical;
 
     if (!mounted) return;
     final shouldUpdate = await UpdateDialog.show(
@@ -109,15 +119,28 @@ class _AutoUpdateCheckerState extends State<AutoUpdateChecker> {
       return;
     }
 
-    await _downloadAndInstall(release);
+    await _downloadAndInstall(release, source);
   }
 
-  Future<void> _downloadAndInstall(ReleaseInfo release) async {
+  Future<void> _downloadAndInstall(
+    ReleaseInfo release,
+    UpdateSource source,
+  ) async {
     final l = AppLocalizations.of(context);
-    final platform = Platform.isAndroid ? 'android' : 'windows';
-    final url = release.downloadUrlFor(platform);
+    final platform = currentPlatformName();
+    // Закрытый канал: только сборка своей платформы и только с суммой.
+    final url = release.downloadUrlFor(
+      platform,
+      anyAsLast: !source.isOwn,
+      strict: source.isOwn,
+    );
     if (url == null) {
       _notify(l.updateNoLink);
+      return;
+    }
+    final sum = release.sha256For(platform);
+    if (source.isOwn && sum == null) {
+      _notify(l.updateNoChecksum);
       return;
     }
 
@@ -128,8 +151,9 @@ class _AutoUpdateCheckerState extends State<AutoUpdateChecker> {
 
     final download = await UpdateService.instance.downloadPackage(
       url: url,
-      expectedSha256: release.sha256,
+      expectedSha256: sum,
       checksumUrl: release.checksumUrlFor(url),
+      requireChecksum: source.isOwn,
       onProgress: (progress) {
         if (mounted) {
           DownloadProgressDialog.update(context, progress,
@@ -142,9 +166,11 @@ class _AutoUpdateCheckerState extends State<AutoUpdateChecker> {
     DownloadProgressDialog.hide(context);
 
     if (!download.success) {
-      _notify(download.failure == DownloadFailure.hashMismatch
-          ? l.updateHashMismatch
-          : l.updateDownloadFailed);
+      _notify(switch (download.failure) {
+        DownloadFailure.hashMismatch => l.updateHashMismatch,
+        DownloadFailure.noChecksum => l.updateNoChecksum,
+        _ => l.updateDownloadFailed,
+      });
       return;
     }
 

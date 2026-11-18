@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
-import '../../about_screen.dart' show clientVersion;
+import '../../app_metadata.dart';
 import '../../app_state.dart';
 import '../../l10n/app_localizations.dart';
 import '../../services/device_id.dart';
@@ -102,7 +102,7 @@ class _KeyClaimScreenState extends State<KeyClaimScreen> {
       final device = DeviceData(
         deviceId: await (widget._deviceId ?? DeviceId()).get(),
         platform: Platform.operatingSystem,
-        appVersion: clientVersion,
+        appVersion: (AppMetadata.cached ?? await AppMetadata.load()).versionName,
       );
       final keys = await _resolveApi().claim(code: code, device: device);
       // Истёкшие в списке не показываем (§4): сервер обязан их отсекать,

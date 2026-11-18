@@ -209,28 +209,19 @@ def check_dependencies(root):
     return findings
 
 
-VERSION_CONST = re.compile(r"const String clientVersion = '([^']+)'")
-
-
-def read_version(path, prefix=None, pattern=None):
-    with io.open(path, encoding='utf-8') as handle:
-        for line in handle:
-            if prefix and line.startswith(prefix):
-                return line.split(':', 1)[1].strip().split('+')[0]
-            if pattern:
-                found = pattern.match(line.strip())
-                if found:
-                    return found.group(1)
-    return None
+VERSION_CONST = re.compile(
+    r"""String\s+\w*[Vv]ersion\w*\s*=\s*['"]\d+\.\d+""")
+VERSION_LINE = re.compile(r'^\d+\.\d+\.\d+\+\d+$')
 
 
 def check_version(root, tag):
-    """Версия сборки и имя тега — одно и то же число.
+    """Версия сборки живёт в pubspec.yaml и в метаданных платформы, не в коде.
 
-    Тег v0.4.0 был собран с `version: 0.3.0` в pubspec.yaml и `clientVersion =
-    '0.3.0'` на экране «О программе», из-за чего каждая установленная 0.4.0
-    считала себя 0.3.0 и предлагала обновиться до самой себя. Сверка clientVersion
-    с pubspec есть в test/about_test.dart, но тег не проверял никто.
+    Тег v0.4.0 был собран с `version: 0.3.0` в pubspec.yaml и зашитой строкой
+    `0.3.0` на экране «О программе»: каждая установленная 0.4.0 считала себя
+    0.3.0 и предлагала обновиться до самой себя. Закрытое дерево 0.4.5 повторило
+    тот же дефект — строка в коде называла 0.4.4. Поэтому гейт теперь запрещает
+    зашитую версию в lib/ и требует, чтобы экран читал метаданные сборки.
     """
     findings = []
     pubspec = os.path.join(root, 'pubspec.yaml')
@@ -238,14 +229,28 @@ def check_version(root, tag):
     for path in (pubspec, about):
         if not os.path.exists(path):
             return [f'{os.path.relpath(path, root)}: файла нет, версию сверить нечем']
-    version = read_version(pubspec, prefix='version:')
-    if not version:
-        return ['pubspec.yaml: строка version: не найдена']
-    const = read_version(about, pattern=VERSION_CONST)
-    if const is None:
-        findings.append('lib/about_screen.dart: clientVersion не найден')
-    elif const != version:
-        findings.append(f'clientVersion {const} != версия в pubspec.yaml {version}')
+    with io.open(pubspec, encoding='utf-8') as handle:
+        line = next((l for l in handle if l.startswith('version:')), '')
+    raw = line.split(':', 1)[1].strip() if line else ''
+    if not VERSION_LINE.match(raw):
+        return [f'pubspec.yaml: version: должен быть вида 0.4.6+4, найдено «{raw}»']
+    version = raw.split('+')[0]
+    with io.open(about, encoding='utf-8') as handle:
+        text = handle.read()
+    if 'AppMetadata' not in text:
+        findings.append('lib/about_screen.dart: версия не читается из метаданных сборки')
+    lib = os.path.join(root, 'lib')
+    for base, _dirs, names in os.walk(lib):
+        for name in names:
+            if not name.endswith('.dart'):
+                continue
+            path = os.path.join(base, name)
+            rel = os.path.relpath(path, root).replace(os.sep, '/')
+            with io.open(path, encoding='utf-8') as handle:
+                for num, source in enumerate(handle, 1):
+                    if VERSION_CONST.search(source):
+                        findings.append(
+                            f'{rel}:{num}: версия зашита в коде: {source.strip()}')
     if tag:
         expected = tag[1:] if tag.startswith('v') else tag
         if expected != version:

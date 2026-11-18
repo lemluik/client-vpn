@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:client_vpn/app_metadata.dart';
 import 'package:client_vpn/app_state.dart';
 import 'package:client_vpn/autostart.dart';
 import 'package:client_vpn/l10n/app_localizations.dart';
@@ -124,6 +125,8 @@ Future<AppState> makeState({
   VpnCore? core,
 }) async {
   SharedPreferences.setMockInitialValues({});
+  // Версия устройства читается из метаданных сборки: в тесте они заданы явно.
+  AppMetadata.remember(const AppMetadata(versionName: '0.4.6', versionCode: 4));
   return AppState(
     await ProfileStore.open(),
     core ?? _FakeCore(),

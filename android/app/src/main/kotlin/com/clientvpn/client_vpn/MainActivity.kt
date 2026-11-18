@@ -5,6 +5,7 @@ import android.app.StatusBarManager
 import android.graphics.drawable.Icon
 import android.content.ComponentName
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.net.VpnService
 import android.os.Build
@@ -16,6 +17,7 @@ import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
+import java.security.MessageDigest
 import java.util.concurrent.Executor
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -113,6 +115,7 @@ class MainActivity : FlutterActivity() {
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, APP_CHANNEL)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
+                    "metadata" -> result.success(appMetadata())
                     "isAutoStart" -> result.success(AutoStart.isOn(this))
                     "setAutoStart" -> {
                         val value = call.arguments as? Boolean
@@ -302,6 +305,52 @@ class MainActivity : FlutterActivity() {
             result.success(true)
         } catch (e: Exception) {
             result.success(false)
+        }
+    }
+
+    /** Метаданные установленного приложения: версия, код сборки и подпись.
+     *  Клиент сравнивает с манифестом именно их, а не строку в своём коде.
+     *  Сертификат подписи — SHA-256 от DER-байтов, как у apksigner. */
+    private fun appMetadata(): Map<String, Any?> {
+        val info = packageManager.getPackageInfo(packageName, 0)
+        val code = if (Build.VERSION.SDK_INT >= 28) {
+            info.longVersionCode
+        } else {
+            @Suppress("DEPRECATION")
+            info.versionCode.toLong()
+        }
+        return mapOf(
+            "versionName" to (info.versionName ?: ""),
+            "versionCode" to code,
+            "packageName" to packageName,
+            "signerSha256" to signerSha256()
+        )
+    }
+
+    /** Подпись APK. Несколько подписантов — null: сверять не с чем, клиент
+     *  откажет в обновлении закрытого канала, а не угадает сертификат. */
+    private fun signerSha256(): String? {
+        return try {
+            val der: ByteArray? = if (Build.VERSION.SDK_INT >= 28) {
+                val si = packageManager.getPackageInfo(
+                    packageName, PackageManager.GET_SIGNING_CERTIFICATES
+                ).signingInfo ?: return null
+                if (si.hasMultipleSigners()) return null
+                si.apkContentsSigners.firstOrNull()?.toByteArray()
+            } else {
+                @Suppress("DEPRECATION")
+                val signatures = packageManager.getPackageInfo(
+                    packageName, PackageManager.GET_SIGNATURES
+                ).signatures
+                if (signatures == null || signatures.size != 1) return null
+                @Suppress("DEPRECATION")
+                signatures[0].toByteArray()
+            }
+            if (der == null) return null
+            MessageDigest.getInstance("SHA-256").digest(der)
+                .joinToString("") { "%02x".format(it) }
+        } catch (e: Exception) {
+            null
         }
     }
 

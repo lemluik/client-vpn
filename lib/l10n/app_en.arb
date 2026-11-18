@@ -106,6 +106,7 @@
     }
   },
   "aboutRepository": "Source code and releases: github.com/lemluik/client-vpn",
+  "aboutVersionUnknown": "Version unknown",
   "aboutLicense": "License",
   "aboutLicenseSubtitle": "Mozilla Public License 2.0",
   "aboutNotices": "Third-party notices",
@@ -116,6 +117,7 @@
   "updateTitle": "Update",
   "updateSourceSubtitle": "Address of the release manifest. Checking is a single request without any device or profile identifier",
   "updateSourceSaved": "Update source saved",
+  "updateChannelClosed": "The build fixes the channel: only its own distribution point is checked, the public repository is not used",
   "updateCheck": "Check for update",
   "updateChecking": "Checking…",
   "updateFound": "Version {version} is available",
@@ -138,6 +140,7 @@
   "updateDownloading": "Downloading update…",
   "updateInstallFailed": "Failed to launch installation",
   "updateHashMismatch": "Checksum mismatch",
+  "updateNoChecksum": "The source published no checksum — the update will not be installed",
   "updateDownloadFailed": "Failed to download update",
   "updateApplying": "Preparing installation…",
   "updateWillRestart": "The app will close and update itself — the new version opens in a few seconds",
