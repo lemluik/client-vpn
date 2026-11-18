@@ -68,6 +68,7 @@
   "statusProtected": "Protected",
   "statusLinking": "Verifying connection…",
   "statusUnreachable": "Server unreachable",
+  "routeUnknown": "Route unknown",
   "statusConnected": "Connected",
   "statusConnecting": "Connecting…",
   "statusFailed": "Failure",

@@ -13,6 +13,18 @@ import 'log_mask.dart';
 /// ни подтверждённая авария.
 enum DiagVerdict { works, failureConfirmed, unknown }
 
+/// Причина прерывания проверки. «Соединение отключено» само по себе не говорит,
+/// кто его отключил: пользователь, остановка ядра или автоматическое
+/// переподключение — разные события, и отчёт обязан их различать.
+enum DiagCancelReason { user, coreStopped, recovery }
+
+/// Пояснение причины прерывания для отчёта.
+String cancelReasonName(DiagCancelReason reason) => switch (reason) {
+  DiagCancelReason.user => 'пользователь отключил соединение',
+  DiagCancelReason.coreStopped => 'ядро остановилось во время проверки',
+  DiagCancelReason.recovery => 'шло автоматическое переподключение',
+};
+
 /// Этап, на котором остановилась проверка. Порядок — от устройства к пути.
 enum DiagStage { network, subscription, core, path, switchEntry }
 
@@ -238,6 +250,7 @@ class DiagnosticsReport {
     this.totalElapsed = Duration.zero,
     this.switchTested = false,
     this.cancelled = false,
+    this.cancelReason,
   });
 
   final DiagFacts facts;
@@ -250,12 +263,23 @@ class DiagnosticsReport {
   /// Проверялось ли переключение входа (активный тест, только по нажатию).
   final bool switchTested;
 
-  /// Пользователь отключился во время проверки: отчёт неполный.
+  /// Проверка прервана: отчёт неполный. Причина — в [cancelReason].
   final bool cancelled;
+
+  /// Кто прервал проверку: пользователь, остановка ядра или автоматическое
+  /// переподключение. null — проверка не прерывалась (или причина не передана).
+  final DiagCancelReason? cancelReason;
 
   /// Короткий понятный результат для экрана.
   String summary() {
-    if (cancelled) return 'Проверка прервана: соединение отключено';
+    if (cancelled) {
+      return switch (cancelReason) {
+        DiagCancelReason.coreStopped => 'Проверка прервана: ядро остановилось',
+        DiagCancelReason.recovery =>
+          'Проверка прервана: шло автоматическое переподключение',
+        _ => 'Проверка прервана: соединение отключено пользователем',
+      };
+    }
     return switch (verdict) {
       DiagVerdict.works => 'Соединение работает',
       DiagVerdict.failureConfirmed => 'Отказ подтверждён: трафик через туннель не идёт',
@@ -277,6 +301,12 @@ class DiagnosticsReport {
       ..writeln('Начало: ${startedAt.toIso8601String()}')
       ..writeln('Длительность: ${totalElapsed.inMilliseconds} мс')
       ..writeln('Переключение входа: ${switchTested ? 'да' : 'нет'}');
+    if (cancelled) {
+      buffer.writeln(
+        'Причина прерывания: '
+        '${cancelReason == null ? 'соединение отключено' : cancelReasonName(cancelReason!)}',
+      );
+    }
     for (final stage in stages) {
       buffer.writeln(
         'Этап ${stageName(stage.stage)}: ${stage.ok ? 'ок' : 'отказ'} '
@@ -337,6 +367,7 @@ class DiagnosticsEnv {
     required this.switchTo,
     required this.restore,
     required this.cancelled,
+    this.cancelReason,
     this.clock = DateTime.now,
     this.controlEndpoints,
   });
@@ -356,8 +387,14 @@ class DiagnosticsEnv {
   /// Возвращает исходный вход после активного теста переключения.
   final Future<void> Function() restore;
 
-  /// Пользователь отключился: поздний результат не должен ничего менять.
+  /// Проверка больше не имеет смысла: пользователь отключился, ядро
+  /// остановилось или идёт автоматическое переподключение. Поздний результат
+  /// не должен ничего менять.
   final bool Function() cancelled;
+
+  /// Классификация прерывания для отчёта. Если не задана, прерванная проверка
+  /// считается отключением пользователя (прежнее поведение).
+  final DiagCancelReason? Function()? cancelReason;
   final DateTime Function() clock;
   final List<ControlEndpoint>? controlEndpoints;
 }
@@ -377,6 +414,12 @@ class ConnectionDiagnostics {
   List<ControlEndpoint> get _controls =>
       env.controlEndpoints ?? defaultControlEndpoints;
 
+  /// Причина прерывания на момент отчёта; без классификатора — отключение
+  /// пользователя (прежнее поведение окружений, не задающих причину).
+  DiagCancelReason? _reason() =>
+      env.cancelReason?.call() ??
+      (env.cancelled() ? DiagCancelReason.user : null);
+
   /// Проверка текущего входа: сеть, подписка, ядро, путь через реальный туннель.
   /// Без переключения входа — годится для фона и для кнопки «Проверить соединение».
   Future<DiagnosticsReport> checkCurrent() async {
@@ -386,17 +429,27 @@ class ConnectionDiagnostics {
     final entries = <EntryResult>[];
 
     stages.add(await env.checkNetwork());
-    if (env.cancelled()) return _report(started, watch, stages, entries, cancelled: true);
+    if (env.cancelled()) {
+      return _report(started, watch, stages, entries,
+          cancelled: true, cancelReason: _reason());
+    }
     stages.add(await env.checkSubscription());
-    if (env.cancelled()) return _report(started, watch, stages, entries, cancelled: true);
+    if (env.cancelled()) {
+      return _report(started, watch, stages, entries,
+          cancelled: true, cancelReason: _reason());
+    }
     stages.add(await env.checkCore());
-    if (env.cancelled()) return _report(started, watch, stages, entries, cancelled: true);
+    if (env.cancelled()) {
+      return _report(started, watch, stages, entries,
+          cancelled: true, cancelReason: _reason());
+    }
 
     final current = env.currentEntry();
     if (current != null && stages.every((s) => s.ok)) {
       entries.add(await _probeEntry(current, watch));
     }
-    return _report(started, watch, stages, entries, cancelled: env.cancelled());
+    return _report(started, watch, stages, entries,
+        cancelled: env.cancelled(), cancelReason: _reason());
   }
 
   /// Активный тест переключения: каждый вход отдельно через реальный туннель,
@@ -414,7 +467,9 @@ class ConnectionDiagnostics {
     stages.add(await env.checkCore());
     if (env.cancelled() || !stages.every((s) => s.ok)) {
       return _report(started, watch, stages, entries,
-          switchTested: true, cancelled: env.cancelled());
+          switchTested: true,
+          cancelled: env.cancelled(),
+          cancelReason: _reason());
     }
 
     final candidates = env.entries().take(budget.maxEntries).toList();
@@ -448,7 +503,9 @@ class ConnectionDiagnostics {
       await env.restore();
     }
     return _report(started, watch, stages, entries,
-        switchTested: true, cancelled: env.cancelled());
+        switchTested: true,
+        cancelled: env.cancelled(),
+        cancelReason: _reason());
   }
 
   /// Путь одного входа через реальный туннель по двум контрольным адресам.
@@ -482,13 +539,16 @@ class ConnectionDiagnostics {
     }
 
     if (env.cancelled()) {
+      final reason = _reason();
       return EntryResult(
         entry: entry,
         verdict: DiagVerdict.unknown,
         stage: DiagStage.path,
         controls: controls,
         elapsed: entryWatch.elapsed,
-        note: 'проверка прервана',
+        note: reason == null
+            ? 'проверка прервана'
+            : 'проверка прервана: ${cancelReasonName(reason)}',
       );
     }
 
@@ -549,6 +609,7 @@ class ConnectionDiagnostics {
     List<EntryResult> entries, {
     bool switchTested = false,
     bool cancelled = false,
+    DiagCancelReason? cancelReason,
   }) {
     watch.stop();
     return DiagnosticsReport(
@@ -560,6 +621,7 @@ class ConnectionDiagnostics {
       totalElapsed: watch.elapsed,
       switchTested: switchTested,
       cancelled: cancelled,
+      cancelReason: cancelled ? cancelReason : null,
     );
   }
 

@@ -37,6 +37,7 @@ class FakeEnv {
     EntryCandidate? current,
     ProbeOutcome Function(Uri uri, bool viaTunnel, String key)? probe,
     this.budget = const DiagnosticsBudget(),
+    this.cancelReasonFn,
   }) : entries = entries ?? [const EntryCandidate('alpha', 'Alpha')],
        current = current ?? const EntryCandidate('alpha', 'Alpha'),
        activeKey = (current ?? const EntryCandidate('alpha', 'Alpha')).key,
@@ -51,6 +52,7 @@ class FakeEnv {
   String activeKey;
   final ProbeOutcome Function(Uri, bool, String) probeFn;
   final DiagnosticsBudget budget;
+  final DiagCancelReason? Function()? cancelReasonFn;
 
   final List<String> switches = [];
   bool restoreCalled = false;
@@ -87,6 +89,7 @@ class FakeEnv {
     },
     restore: () async => restoreCalled = true,
     cancelled: () => cancelledFlag,
+    cancelReason: cancelReasonFn,
   );
 
   ConnectionDiagnostics runner() =>
@@ -422,6 +425,94 @@ void main() {
     });
   });
 
+  group('причина прерывания проверки', () {
+    test('остановка ядра во время замера — названа ядром, не пользователем',
+        () async {
+      late final FakeEnv fake;
+      fake = FakeEnv(
+        probe: (uri, viaTunnel, key) {
+          fake.cancelledFlag = true;
+          return const ProbeOutcome(statusCode: 204);
+        },
+        cancelReasonFn: () =>
+            fake.cancelledFlag ? DiagCancelReason.coreStopped : null,
+      );
+      final report = await fake.runner().checkCurrent();
+
+      expect(report.cancelled, isTrue);
+      expect(report.cancelReason, DiagCancelReason.coreStopped);
+      expect(report.summary(), 'Проверка прервана: ядро остановилось');
+      expect(
+        report.toShareText(),
+        contains('Причина прерывания: ядро остановилось во время проверки'),
+      );
+    });
+
+    test('автоматическое переподключение — названо восстановлением', () async {
+      late final FakeEnv fake;
+      fake = FakeEnv(
+        probe: (uri, viaTunnel, key) {
+          fake.cancelledFlag = true;
+          return const ProbeOutcome(statusCode: 204);
+        },
+        cancelReasonFn: () =>
+            fake.cancelledFlag ? DiagCancelReason.recovery : null,
+      );
+      final report = await fake.runner().checkCurrent();
+
+      expect(report.cancelled, isTrue);
+      expect(report.cancelReason, DiagCancelReason.recovery);
+      expect(
+        report.summary(),
+        'Проверка прервана: шло автоматическое переподключение',
+      );
+      expect(
+        report.toShareText(),
+        contains('Причина прерывания: шло автоматическое переподключение'),
+      );
+    });
+
+    test('окружение без классификатора — отмена считается отключением',
+        () async {
+      late final FakeEnv fake;
+      fake = FakeEnv(
+        probe: (uri, viaTunnel, key) {
+          fake.cancelledFlag = true;
+          return const ProbeOutcome(statusCode: 204);
+        },
+      );
+      final report = await fake.runner().checkCurrent();
+
+      expect(report.cancelled, isTrue);
+      expect(report.cancelReason, DiagCancelReason.user);
+      expect(
+        report.summary(),
+        'Проверка прервана: соединение отключено пользователем',
+      );
+    });
+
+    test('активный тест входов: причина доходит до отчёта', () async {
+      late final FakeEnv fake;
+      fake = FakeEnv(
+        entries: const [
+          EntryCandidate('alpha', 'Alpha'),
+          EntryCandidate('beta', 'Beta'),
+        ],
+        probe: (uri, viaTunnel, key) {
+          fake.cancelledFlag = true;
+          return const ProbeOutcome(statusCode: 204);
+        },
+        cancelReasonFn: () =>
+            fake.cancelledFlag ? DiagCancelReason.coreStopped : null,
+      );
+      final report = await fake.runner().checkAllEntries();
+
+      expect(report.cancelled, isTrue);
+      expect(report.cancelReason, DiagCancelReason.coreStopped);
+      expect(report.summary(), contains('ядро остановилось'));
+    });
+  });
+
   group('AppState: смена сети и отключение пользователем', () {
     test('смена сети: диагностика видит отсутствие сети, затем восстановление',
         () async {
@@ -477,6 +568,11 @@ void main() {
       final report = h.state.diagnostics!;
       expect(report.cancelled, isTrue);
       expect(report.summary(), contains('прервана'));
+      expect(report.cancelReason, DiagCancelReason.user);
+      expect(
+        report.toShareText(),
+        contains('Причина прерывания: пользователь отключил соединение'),
+      );
       expect(h.state.state, TunnelState.off);
       expect(h.core.startCalls, 1, reason: 'туннель не поднялся обратно');
     });
@@ -512,6 +608,119 @@ void main() {
       // Повторные события мёртвого пути не запускают диагностику снова.
       await _settle(120);
       expect(probeCalls, callsAfterEpisode);
+    });
+
+    test('выключенный VPN: проверка не запускается, пустой отчёт не появляется',
+        () async {
+      final h = await _harness(
+        probe: (uri, {required viaTunnel, timeout = const Duration(seconds: 6)}) async =>
+            const ProbeOutcome(statusCode: 204),
+      );
+      addTearDown(h.state.dispose);
+
+      await h.state.runDiagnostics();
+
+      expect(h.state.diagnostics, isNull);
+      expect(h.state.isDiagnosticsRunning, isFalse);
+    });
+
+    test('ядро остановилось во время замера — причина «ядро», не пользователь',
+        () async {
+      final gate = Completer<ProbeOutcome>();
+      final h = await _harness(
+        probe: (uri, {required viaTunnel, timeout = const Duration(seconds: 6)}) =>
+            gate.future,
+      );
+      addTearDown(h.state.dispose);
+      AppProxy.attach((protocol: 'http', port: 10809));
+      addTearDown(() => AppProxy.attach(null));
+      h.networks.add([ConnectivityResult.wifi]);
+      await h.state.connect();
+
+      final run = h.state.runDiagnostics();
+      await _settle(60);
+      expect(h.state.isDiagnosticsRunning, isTrue);
+
+      // Обрыв со стороны ядра: приложение остановки не просило.
+      await h.core.stop();
+      gate.complete(const ProbeOutcome(statusCode: 204));
+      await run;
+
+      final report = h.state.diagnostics!;
+      expect(report.cancelled, isTrue);
+      expect(report.cancelReason, DiagCancelReason.coreStopped);
+      expect(report.summary(), contains('ядро остановилось'));
+      expect(
+        report.toShareText(),
+        contains('Причина прерывания: ядро остановилось во время проверки'),
+      );
+    });
+
+    test('смена сети во время замера — причина «переподключение», туннель поднят',
+        () async {
+      final gate = Completer<ProbeOutcome>();
+      final h = await _harness(
+        probe: (uri, {required viaTunnel, timeout = const Duration(seconds: 6)}) =>
+            gate.future,
+      );
+      addTearDown(h.state.dispose);
+      AppProxy.attach((protocol: 'http', port: 10809));
+      addTearDown(() => AppProxy.attach(null));
+      h.networks.add([ConnectivityResult.wifi]);
+      await h.state.connect();
+
+      final run = h.state.runDiagnostics();
+      await _settle(60);
+      expect(h.state.isDiagnosticsRunning, isTrue);
+
+      // Автоматика меняет сеть: отключение не пользовательское.
+      h.networks.add([ConnectivityResult.mobile]);
+      await _settle(2300);
+      gate.complete(const ProbeOutcome(statusCode: 204));
+      await run;
+
+      final report = h.state.diagnostics!;
+      expect(report.cancelled, isTrue);
+      expect(report.cancelReason, DiagCancelReason.recovery);
+      expect(report.summary(), contains('автоматическое переподключение'));
+      expect(h.state.state, TunnelState.on);
+    });
+
+    test('переподключение ждёт конца замера: ядро не останавливается посреди пробы',
+        () async {
+      final gate = Completer<ProbeOutcome>();
+      final h = await _harness(
+        probe: (uri, {required viaTunnel, timeout = const Duration(seconds: 6)}) =>
+            viaTunnel
+            ? gate.future
+            : Future.value(const ProbeOutcome(statusCode: 204)),
+        pathAlive: false,
+      );
+      addTearDown(h.state.dispose);
+      AppProxy.attach((protocol: 'http', port: 10809));
+      addTearDown(() => AppProxy.attach(null));
+      h.networks.add([ConnectivityResult.wifi]);
+      await h.state.connect();
+      // Замер начинается до объявления мёртвого пути: автодиагностика
+      // не перехватывает пробу, очередь переподключения встаёт при замере.
+      final run = h.state.runDiagnostics();
+
+      // Пауза перечитывания подписки (150 мс) срабатывает во время замера.
+      await _settle(300);
+      expect(h.state.isDiagnosticsRunning, isTrue);
+      expect(
+        h.core.stopCalls,
+        0,
+        reason: 'перечитывание подписки отложено до конца замера',
+      );
+
+      gate.complete(const ProbeOutcome(failure: ProbeFailure.timeout));
+      await run;
+
+      final report = h.state.diagnostics!;
+      expect(report.cancelled, isFalse);
+      expect(report.verdict, DiagVerdict.failureConfirmed);
+      expect(h.core.stopCalls, 0);
     });
   });
 }

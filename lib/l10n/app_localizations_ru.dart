@@ -215,6 +215,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get statusUnreachable => 'Нет доступа к узлу';
 
   @override
+  String get routeUnknown => 'Маршрут неизвестен';
+
+  @override
   String get statusConnected => 'Подключено';
 
   @override

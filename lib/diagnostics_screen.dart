@@ -47,6 +47,10 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
   Widget build(BuildContext context) {
     final report = _state.diagnostics;
     final running = _state.isDiagnosticsRunning;
+    // Выключенный VPN: проверка измеряет путь через туннель, без туннеля
+    // получился бы пустой отчёт за 0 мс. Вместо кнопок проверки — понятное
+    // предложение подключиться.
+    final off = _state.state == TunnelState.off && !running;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Проверить соединение')),
@@ -64,17 +68,46 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
               _VerdictCard(report: report),
               const SizedBox(height: 16),
             ],
-            FilledButton.icon(
-              onPressed: running ? null : _runCurrent,
-              icon: const Icon(Icons.network_check),
-              label: const Text('Проверить соединение'),
-            ),
-            const SizedBox(height: 8),
-            OutlinedButton.icon(
-              onPressed: running ? null : _runAllEntries,
-              icon: const Icon(Icons.swap_horiz),
-              label: const Text('Проверить все входы'),
-            ),
+            if (off) ...[
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.power_settings_new,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Text(
+                          'VPN выключен. Проверка измеряет соединение через '
+                          'туннель — сначала подключитесь.',
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              FilledButton.icon(
+                onPressed: _connectAndCheck,
+                icon: const Icon(Icons.power_settings_new),
+                label: const Text('Подключить и проверить'),
+              ),
+            ] else ...[
+              FilledButton.icon(
+                onPressed: running ? null : _runCurrent,
+                icon: const Icon(Icons.network_check),
+                label: const Text('Проверить соединение'),
+              ),
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: running ? null : _runAllEntries,
+                icon: const Icon(Icons.swap_horiz),
+                label: const Text('Проверить все входы'),
+              ),
+            ],
             const SizedBox(height: 8),
             TextButton.icon(
               onPressed: (report == null || running) ? null : _share,
@@ -82,12 +115,13 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
               label: const Text('Поделиться диагностикой'),
             ),
             const SizedBox(height: 8),
-            Text(
-              'Проверка всех входов по очереди переключает туннель — соединение '
-              'кратко прервётся. Исходный вход вернётся автоматически.',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            const SizedBox(height: 4),
+            if (!off)
+              Text(
+                'Проверка всех входов по очереди переключает туннель — соединение '
+                'кратко прервётся. Исходный вход вернётся автоматически.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            if (!off) const SizedBox(height: 4),
             Text(
               'В отчёте нет адресов узлов, ключей и ссылок подписки. '
               'Автоматическая отправка выключена.',
@@ -101,6 +135,13 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
         ),
       ),
     );
+  }
+
+  /// Предложение при выключенном VPN: одно нажатие поднимает туннель и сразу
+  /// запускает проверку — пользователю не нужно помнить порядок действий.
+  Future<void> _connectAndCheck() async {
+    await _state.connect();
+    await _state.runDiagnostics();
   }
 
   Future<void> _runCurrent() => _state.runDiagnostics();

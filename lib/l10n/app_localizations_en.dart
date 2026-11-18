@@ -216,6 +216,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get statusUnreachable => 'Server unreachable';
 
   @override
+  String get routeUnknown => 'Route unknown';
+
+  @override
   String get statusConnected => 'Connected';
 
   @override

@@ -81,7 +81,11 @@ class AndroidCore implements VpnCore {
     await _channel.invokeMethod<void>('validate', tunConfigForTest(tunJson));
   }
 
-  /// Адрес дальней стороны из первого прокси-outbound — для строки статуса.
+  /// Адрес дальней стороны для строки статуса — только когда он достоверен.
+  /// Ровно один прокси-outbound: адрес именно тот, через который пойдёт
+  /// трафик. Несколько (балансировщик выбирает сам) или ноль: маршрут
+  /// неизвестен, и показывать адрес первого outbound было бы ложью
+  /// (Д-202610-22) — возвращаем null, экран напишет «маршрут неизвестен».
   String? _describeOutbound(String json) {
     try {
       final decoded = jsonDecode(json);
@@ -89,18 +93,27 @@ class AndroidCore implements VpnCore {
       final outbounds = decoded['outbounds'];
       if (outbounds is! List) return null;
 
+      String? label;
+      var count = 0;
       for (final outbound in outbounds) {
         if (outbound is! Map) continue;
         final protocol = outbound['protocol'];
         if (protocol is! String || !proxyProtocols.contains(protocol)) continue;
+        count++;
 
         final vnext = (outbound['settings'] as Map?)?['vnext'];
-        if (vnext is! List || vnext.isEmpty) return protocol;
+        if (vnext is! List || vnext.isEmpty) {
+          label = protocol;
+          continue;
+        }
         final server = vnext.first;
-        if (server is! Map) return protocol;
-        return '${server['address']}:${server['port']}';
+        if (server is! Map) {
+          label = protocol;
+          continue;
+        }
+        label = '${server['address']}:${server['port']}';
       }
-      return null;
+      return count == 1 ? label : null;
     } on FormatException {
       return null;
     }

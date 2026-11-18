@@ -117,6 +117,7 @@
   "statusProtected": "Защищено",
   "statusLinking": "Проверка соединения…",
   "statusUnreachable": "Нет доступа к узлу",
+  "routeUnknown": "Маршрут неизвестен",
   "statusConnected": "Подключено",
   "statusConnecting": "Подключение…",
   "statusFailed": "Сбой",

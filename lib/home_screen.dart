@@ -979,11 +979,14 @@ class _StatusLine extends StatelessWidget {
               text,
               style: TextStyle(color: color, fontWeight: FontWeight.w600),
             ),
-            if (state.endpoint != null && state.isConnected) ...[
+            // Адрес показываем только когда он достоверен (один выход).
+            // Балансировщик выбирает маршрут сам — так и пишем, адрес
+            // первого профиля не подставляем (Д-202610-22).
+            if (state.isConnected) ...[
               const Spacer(),
               Flexible(
                 child: Text(
-                  state.endpoint!,
+                  state.endpoint ?? l.routeUnknown,
                   style: Theme.of(context).textTheme.bodySmall,
                   overflow: TextOverflow.ellipsis,
                 ),

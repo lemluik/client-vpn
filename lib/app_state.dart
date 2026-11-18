@@ -212,6 +212,11 @@ class AppState extends ChangeNotifier {
   /// операции (fetch, перезапуск) уже не имеет права включать туннель.
   int _recoveryGen = 0;
 
+  /// Кто повысил поколение восстановления последним: пользователь (кнопка,
+  /// шторка) или автоматика (смена сети). Диагностика по этому различает
+  /// «пользователь отключил» и «шло переподключение» в причине отмены.
+  bool _genBumpByUser = true;
+
   /// Идёт ли перезапуск туннеля при мёртвом пути: параллельные попытки
   /// восстановления исключены.
   bool _recoveryRestarting = false;
@@ -443,6 +448,9 @@ class AppState extends ChangeNotifier {
   /// Отчёт никуда не отправляется: он сохраняется для экрана и кнопки «Поделиться».
   Future<void> runDiagnostics({bool switchEntries = false}) async {
     if (_diagnosticsRunning) return;
+    // Выключенный VPN: замерять нечего — отчёт за 0 мс бесполезен. Экран
+    // вместо проверки показывает предложение подключиться.
+    if (_state == TunnelState.off && !_core.isRunning) return;
     _diagnosticsRunning = true;
     notifyListeners();
     final gen = _recoveryGen;
@@ -527,7 +535,26 @@ class AppState extends ChangeNotifier {
     },
     switchTo: (target) => _diagSwitchTo(target.key, gen),
     restore: () async => notifyListeners(),
-    cancelled: () => gen != _recoveryGen || !_userWantsTunnel,
+    // Отмена — не только отключение пользователя: остановка ядра и
+    // автоматическое переподключение тоже прерывают замер, и причина обязана
+    // быть названа. Подъём (connecting) остановкой не считается.
+    cancelled: () =>
+        gen != _recoveryGen ||
+        !_userWantsTunnel ||
+        (!_core.isRunning && _state != TunnelState.connecting),
+    cancelReason: () {
+      if (gen != _recoveryGen) {
+        return _genBumpByUser
+            ? DiagCancelReason.user
+            : DiagCancelReason.recovery;
+      }
+      if (!_userWantsTunnel) return DiagCancelReason.user;
+      if (_recoveryRestarting || _state == TunnelState.connecting) {
+        return DiagCancelReason.recovery;
+      }
+      if (!_core.isRunning) return DiagCancelReason.coreStopped;
+      return null;
+    },
   );
 
   /// Переключение входа для активного теста: меняет регион и перезапускает
@@ -738,10 +765,13 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> disconnect() async {
+  /// [byUser] — false, когда отключение выполняет автоматика (смена сети):
+  /// причина отмены диагностики тогда «переподключение», а не «пользователь».
+  Future<void> disconnect({bool byUser = true}) async {
     _userWantsTunnel = false;
     // Явное отключение отменяет все ожидающие восстановления: идущий fetch
     // или перезапуск по возврате уже не должны включать туннель обратно.
+    _genBumpByUser = byUser;
     _recoveryGen++;
     _reconnect.reset();
     _stopReconnectTimers();
@@ -953,14 +983,14 @@ class AppState extends ChangeNotifier {
       return;
     }
     _addLog('Сеть появилась — туннель поднимается заново');
-    await disconnect();
+    await disconnect(byUser: false);
     await connect();
   }
 
   Future<void> _raiseTunnelOnNewNetwork() async {
     if (_state != TunnelState.on || _busy || _stopping) return;
     _addLog('Сеть сменилась — туннель поднимается заново');
-    await disconnect();
+    await disconnect(byUser: false);
     await connect();
   }
 
@@ -994,6 +1024,12 @@ class AppState extends ChangeNotifier {
 
   Future<void> _probeLink() async {
     if (!_userWantsTunnel || _busy || _stopping) return;
+    // Идёт замер диагностики: переподключение сейчас сорвало бы его пробы.
+    // Проба переносится на следующий интервал, шаг лестницы не тратится.
+    if (_diagnosticsRunning) {
+      _armReconnect();
+      return;
+    }
     if (_state == TunnelState.noLink) {
       // Сети нет совсем: туннель поднимает возврат связи, а не проба.
       // Очередь держим на случай, если поток сети смолчит.
@@ -1019,6 +1055,14 @@ class AppState extends ChangeNotifier {
   /// диске, а не в работе.
   Future<void> _rereadSubscription() async {
     if (!_userWantsTunnel || _busy || _stopping) return;
+    // Идёт замер диагностики: остановка ядра для перезапуска убила бы пробы
+    // и дала ложный отказ. Перечитывание ждёт конца замера; шаг лестницы
+    // не тратится, пауза не съедается.
+    if (_diagnosticsRunning) {
+      _subscriptionTimer?.cancel();
+      _subscriptionTimer = Timer(const Duration(seconds: 2), _rereadSubscription);
+      return;
+    }
     if (_state == TunnelState.noLink) return;
     final deadPath = _state == TunnelState.on && _path == PathState.dead;
     if (_state == TunnelState.on && !deadPath) {
@@ -1131,6 +1175,7 @@ class AppState extends ChangeNotifier {
       // Снято плиткой: пользователь отключился сам, это не сбой, и лестница
       // переподключения не должна поднимать туннель обратно.
       _stopping = true;
+      _genBumpByUser = true;
       _recoveryGen++;
       _reconnect.reset();
       _stopReconnectTimers();
@@ -1240,6 +1285,7 @@ class AppState extends ChangeNotifier {
   void dispose() {
     // Идущее аварийное восстановление гасится вместе с окном: его поздний
     // результат не должен трогать освобождённое состояние.
+    _genBumpByUser = false;
     _recoveryGen++;
     _userWantsTunnel = false;
     _logSubscription?.cancel();

@@ -464,6 +464,12 @@ abstract class AppLocalizations {
   /// **'Нет доступа к узлу'**
   String get statusUnreachable;
 
+  /// No description provided for @routeUnknown.
+  ///
+  /// In ru, this message translates to:
+  /// **'Маршрут неизвестен'**
+  String get routeUnknown;
+
   /// No description provided for @statusConnected.
   ///
   /// In ru, this message translates to:

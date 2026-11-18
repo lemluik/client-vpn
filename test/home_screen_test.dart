@@ -97,6 +97,13 @@ class FakeCore implements VpnCore {
   }
 }
 
+/// Ядро без достоверного адреса выхода: балансировщик выбирает маршрут сам,
+/// адрес первого профиля подставлять нельзя (Д-202610-22).
+class _NoLabelCore extends FakeCore {
+  @override
+  String? get endpointLabel => null;
+}
+
 /// Хранилище токенов без содержимого: тест проверяет путь до формы входа,
 /// а не шифрование — оно разобрано в chat_store_test.
 class _NullVault implements TokenVault {
@@ -380,6 +387,51 @@ void main() {
 
       expect(find.text('Отключено'), findsOneWidget);
       expect(core.startCalls, 1);
+    });
+
+    testWidgets('достоверный адрес выхода показан в строке статуса', (
+      tester,
+    ) async {
+      final state = await makeState(pathProbe: liveProbe());
+      addTearDown(state.dispose);
+      await state.addFromText(linkOne);
+
+      await pumpApp(tester, state);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Подключить'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Защищено'), findsOneWidget);
+      expect(find.text('http 127.0.0.1:10808'), findsOneWidget);
+      expect(find.text('Маршрут неизвестен'), findsNothing);
+
+      await tester.tap(find.text('Отключить'));
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('неизвестный маршрут назван неизвестным, не первым профилем', (
+      tester,
+    ) async {
+      // Балансировщик выбирает вход сам: адрес первого профиля был бы ложью
+      // (Д-202610-22). Экран пишет «Маршрут неизвестен».
+      final state = await makeState(
+        core: _NoLabelCore(),
+        pathProbe: liveProbe(),
+      );
+      addTearDown(state.dispose);
+      await state.addFromText('$linkOne\n$linkTwo');
+
+      await pumpApp(tester, state);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Подключить'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Защищено'), findsOneWidget);
+      expect(find.text('Маршрут неизвестен'), findsOneWidget);
+      expect(find.textContaining('example.org'), findsNothing);
+
+      await tester.tap(find.text('Отключить'));
+      await tester.pumpAndSettle();
     });
 
     testWidgets('поднятый туннель без ответа узла защитой не называется', (
